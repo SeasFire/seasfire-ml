@@ -1,0 +1,7 @@
+tqdm
+xarray
+dask
+black
+zarr
+pandas
+matplotlib
