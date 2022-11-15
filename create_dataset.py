@@ -59,22 +59,37 @@ class DatasetBuilder:
 
         pass
 
-    def create_sample(self, lon, lat, time):
+    def create_sample(self, lon, lat, time, radius=2, past_weeks=46, time_aggregation='3M'):
         logger.info("Creating samples")
         #region = self.cube.sel(
         #    latitude=lat, longitude=lon
         #).isel(time=35)
 
         #print (self.cube.coords["latitude"].to_numpy())
-        print (self.cube.coords["longitude"].to_numpy())
+        #print (self.cube.coords["longitude"].to_numpy())
 
+        lat_slice=slice(lat+radius*self.sp_res, lat-radius*self.sp_res)
+        lon_slice=slice(lon-radius*self.sp_res, lon+radius*self.sp_res)
 
-        dataset = self.cube[self.input_vars].sel(latitude=lat, longitude=lon).isel(time=time)
+        cur_point_input_vars = self.cube[self.input_vars].sel(latitude=lat_slice, longitude=lon_slice).isel(time=time)
+        cur_point_target_var = self.cube[self.target_var].sel(latitude=lat_slice, longitude=lon_slice).isel(time=time)
+
+        time_slice=slice(time-past_weeks, time)
+        past_points_input_vars = self.cube[self.input_vars].sel(latitude=lat_slice, longitude=lon_slice).isel(time=time_slice)
+        past_points_target_vars = self.cube[self.input_vars].sel(latitude=lat_slice, longitude=lon_slice).isel(time=time_slice)
+
+        past_points_input_vars = past_points_input_vars.resample(time=time_aggregation).mean(skipna=True)
+        past_points_target_vars = past_points_target_vars.resample(time=time_aggregation).mean(skipna=True)
+        past_points_count = past_points_input_vars.time.shape[0]
+
+        # TODO: figure out a way to define by std and mean 
+
+        # TODO: build a graph
 
         #data = self.cube.sel(
         #    latitude=lat, longitude=lon
         #)#.isel(time=time)
-        print(dataset)
+        #print(dataset)
         #print(data["drought_code_max"].to_numpy())
         
         #print(region["area"])
