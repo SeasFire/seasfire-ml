@@ -14,13 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatasetBuilder:
-    def __init__(
-        self,
-        cube_path,
-        output_folder,
-        split,
-        positive_samples_threshold
-    ):
+    def __init__(self, cube_path, output_folder, split, positive_samples_threshold):
         self.cube_path = cube_path
         self.input_vars = [
             "ndvi",
@@ -34,10 +28,12 @@ class DatasetBuilder:
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self.target_var = "gwis_ba"
 
-        if split not in ["train", "test", "val"]: 
+        # validate split
+        if split not in ["train", "test", "val"]:
             raise ValueError("Wrong split type")
         self.split = split
 
+        # positive example threshold
         self.positive_samples_threshold = positive_samples_threshold
 
         # split time periods
@@ -45,45 +41,60 @@ class DatasetBuilder:
         self.time_test = (874, 920)  # 2020
         self.time_eval = (920, 966)  # 2021
 
-        self.sp_res = 0.25  # Spatial resolution
+        # Spatial resolution
+        self._sp_res = 0.25
+        self._lat_min = -89.875
+        self._lat_max = 89.875
+        self._lon_min = -179.875
+        self._lon_max = 179.875
+
+        # mean and std dictionary
         self.mean_std_dict = {}
 
+        # create output split folder
         self.output_folder = os.path.join(output_folder, self.split)
         for folder in [self.output_folder]:
             logger.info("Creating output folder {}".format(folder))
             if not os.path.exists(folder):
                 os.makedirs(folder)
 
+        # open zarr and display basic info
         logger.info("Opening zarr file {}".format(self.cube_path))
         self.cube = xr.open_zarr(self.cube_path, consolidated=False)
         logger.info("Cube: {}".format(self.cube))
         logger.info("Vars: {}".format(self.cube.data_vars))
+        # print(self.cube.longitude.to_numpy())
 
-    def compute_mean_std_dict(): 
-        # compute mean_std_dict
+    def compute_mean_std_dict():
+        # TODO: compute mean_std_dict
         pass
 
     def create_samples(self, min_lon, min_lat, max_lon, max_lat):
-        logger.info("Creating samples")
-        region = self.cube.sel(
-            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
-        )  # .isel(time=35)
-
-        print(region)
-
+        # TODO
         pass
 
-    def create_sample(self, lat, lon, time, radius=2, weeks=58, time_aggregation="3M"):
+    def create_sample(
+        self,
+        center_lat,
+        center_lon,
+        center_time,
+        radius=2,
+        weeks=58,
+        time_aggregation="3M",
+    ):
         logger.info(
-            "Creating sample for lat={}, lon={}, time={}, radius={}, weeks={}, time_aggregation={}".format(
-                lat, lon, time, radius, weeks, time_aggregation
+            "Creating sample for center_lat={}, center_lon={}, center_time={}, radius={}, weeks={}, time_aggregation={}".format(
+                center_lat, center_lon, center_time, radius, weeks, time_aggregation
             )
         )
 
-        lat_slice = slice(lat + radius * self.sp_res, lat - radius * self.sp_res)
-        lon_slice = slice(lon - radius * self.sp_res, lon + radius * self.sp_res)
-
-        time_slice = slice(time - weeks, time)
+        lat_slice = slice(
+            center_lat + radius * self._sp_res, center_lat - radius * self._sp_res
+        )
+        lon_slice = slice(
+            center_lon - radius * self._sp_res, center_lon + radius * self._sp_res
+        )
+        time_slice = slice(center_time - weeks, center_time)
         points_input_vars = (
             self.cube[self.input_vars]
             .sel(latitude=lat_slice, longitude=lon_slice)
@@ -111,30 +122,65 @@ class DatasetBuilder:
             )
         )
 
+        # Compute time coordinates from present to past
         time_coords = np.flip(points_input_vars.time.to_numpy())
-        logger.info("Coordinates in (reverse) time {}".format(time_coords))
+        logger.info("Time coordinates in reverse: {}".format(time_coords))
 
-        vertices_index = []
-        for time_index in time_coords: 
-            for lat_index in np.linspace(lat + radius * self.sp_res, lat - radius * self.sp_res, 2*radius+1):
-                for lon_index in np.linspace(lon - radius * self.sp_res, lon + radius * self.sp_res, 2*radius+1): 
-                    vertices_index.append((lat_index, lon_index,time_index))
-        #print(vertices_index)
+        # Create list of vertices and mapping from vertices to integer indices
+        vertices = []
+        vertices_idx = {}
+        grid = list(
+            map(
+                self._normalize_lat_lon,
+                self._create_neighbors((center_lat, center_lon), radius=radius)
+                + [(center_lat, center_lon)],
+            )
+        )
+        for _, time_val in enumerate(time_coords):
+            for cur in grid:
+                cur_vertex = (cur[0], cur[1], time_val)
+                cur_vertex_index = len(vertices)
+                vertices_idx[cur_vertex] = cur_vertex_index
+                vertices.append(cur_vertex)
+        #print(vertices)
 
-        #print("TODO")
-        vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude", "time"))
-        #print(vertices_input_vars)
-        vertices_target_vars = points_target_vars.stack(vertex=("latitude", "longitude", "time"))
-        vertices_dim = vertices_input_vars.vertex.shape[0]
-        #print(vertices_input_vars.vertex)
-        logger.info("Graph will have {} vertices".format(vertices_dim))
+        # print("TODO")
+        vertices_input_vars = points_input_vars.stack(
+            vertex=("latitude", "longitude", "time")
+        )
+        # print(vertices_input_vars)
+        vertices_target_vars = points_target_vars.stack(
+            vertex=("latitude", "longitude", "time")
+        )
+        # print(vertices_input_vars.vertex)
+        logger.info("Graph will have {} vertices".format(len(vertices)))
 
-        #print(vertices_input_vars.vertex)
-        #print(vertices_input_vars)
-        #tmp  = vertices_input_vars.sel(vertex=(-23.875, 19.875, pd.Timestamp('2010-08-31 00:00:00')))
-        #print(tmp["ndvi"].to_numpy())
-        
-        #print(x)
+        # Create graph
+        # for _, time_val in enumerate(time_coords):
+        #    for lat in np.linspace(
+        #        center_lat + radius * self._sp_res,
+        #        center_lat - radius * self._sp_res,
+        #        2 * radius + 1,
+        #    ):
+        #        for lon in np.linspace(
+        #            center_lon - radius * self._sp_res,
+        #            center_lon + radius * self._sp_res,
+        #            2 * radius + 1,
+        #        ):
+        #            cur_vertex = (lat, lon, time_val)
+        #            cur_vertex_idx = vertices_idx[cur_vertex]
+        #            pass
+
+        # for layer in range(time_dim):
+        #    logger.info("Adding edges for layer {}".format(layer))
+        #    print(layer)
+
+        # print(vertices_input_vars.vertex)
+        # print(vertices_input_vars)
+        # tmp  = vertices_input_vars.sel(vertex=(-23.875, 19.875, pd.Timestamp('2010-08-31 00:00:00')))
+        # print(tmp["ndvi"].to_numpy())
+
+        # print(x)
 
         # TODO: figure out a way to define by std and mean
 
@@ -151,7 +197,7 @@ class DatasetBuilder:
         pass
 
     def run(self):
-        # Depending on split 
+        # Depending on split
 
         # compute mean and std
 
@@ -164,18 +210,51 @@ class DatasetBuilder:
         # self.create_samples(
         #    min_lon=20.375, min_lat=-24.375, max_lon=24.625, max_lat=-17.875
         # )
-        self.create_sample(lat=-24.375, lon=20.375, time=500)
+        self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500)
         pass
+
+    def _in_bounding_box(self, lat_lon, center_lat_lon, radius=2):
+        lat, lon = lat_lon
+        center_lat, center_lon = center_lat_lon
+        return (
+            lat <= center_lat + radius * self._sp_res
+            and lat >= center_lat - radius * self._sp_res
+            and lon >= center_lon - radius * self._sp_res
+            and lon <= center_lon + radius * self._sp_res
+        )
+
+    def _create_neighbors(self, lat_lon, radius=1, include_self=False, normalize=False):
+        lat, lon = lat_lon
+        neighbors = []
+        for lat_inc in range(-radius, radius+1):
+            for lon_inc in range(-radius, radius+1):
+                if not include_self and lat_inc == 0 and lon_inc == 0:
+                    continue
+                neighbors.append(
+                    (lat + lat_inc * self._sp_res, lon + lon_inc * self._sp_res)
+                )
+        if normalize:
+            neighbors = list(map(self._normalize_lat_lon, neighbors))
+        return neighbors
+
+    def _normalize_lat_lon(self, lat_lon):
+        lat, lon = lat_lon
+        while lat > self._lat_max:
+            lat -= 180.0
+        while lat < self._lat_min:
+            lat += 180.0
+        while lon < self._lon_min:
+            lon += 360.0
+        while lon > self._lon_max:
+            lon -= 360.0
+        return lat, lon
 
 
 def main(args):
     logging.basicConfig(level=logging.DEBUG)
 
     builder = DatasetBuilder(
-        args.cube_path,
-        args.output_folder,
-        args.split,
-        args.positive_samples_threshold
+        args.cube_path, args.output_folder, args.split, args.positive_samples_threshold
     )
     builder.run()
 
@@ -218,7 +297,7 @@ if __name__ == "__main__":
         dest="positive_samples_threshold",
         default=0.1,
         help="Positive sample threshold",
-    )        
+    )
     parser.add_argument(
         "--todo",
         metavar="FLAG",
