@@ -147,19 +147,19 @@ class DatasetBuilder:
         #
         # DEBUG for debug print grid
         #
-        for _, time_val in enumerate(time_coords):        
-            for lat_inc in range(-radius, radius + 1):
-                for lon_inc in range(-radius, radius + 1):
-                    # vertex that we care about
-                    cur = (
-                        center_lat + lat_inc * self._sp_res,
-                        center_lon + lon_inc * self._sp_res,
-                    )
-                    #print(*cur, end=" ")
-                    #print((*cur, time_val), end=" ")
-                    print(vertices_idx[(*cur, time_val)], end=" ")
-                print("")
-            print("")    
+        # for _, time_val in enumerate(time_coords):        
+        #     for lat_inc in range(-radius, radius + 1):
+        #         for lon_inc in range(-radius, radius + 1):
+        #             # vertex that we care about
+        #             cur = (
+        #                 center_lat + lat_inc * self._sp_res,
+        #                 center_lon + lon_inc * self._sp_res,
+        #             )
+        #             #print(*cur, end=" ")
+        #             #print((*cur, time_val), end=" ")
+        #             print(vertices_idx[(*cur, time_val)], end=" ")
+        #         print("")
+        #     print("")    
 
         # Create edges
         edges = []
@@ -172,7 +172,7 @@ class DatasetBuilder:
                         center_lon + lon_inc * self._sp_res,
                     )
                     cur_idx = vertices_idx[(cur[0], cur[1], time_val)]
-                    logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+                    #logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
 
                     # 1-hop neighbors
                     cur_neighbors = self._create_neighbors(
@@ -191,22 +191,25 @@ class DatasetBuilder:
                     cur_neighbors_bb  = list(map(self._normalize_lat_lon, cur_neighbors_bb))
                     cur_neighbors_bb_idx = [vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb]
                     #logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
-                    logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
+                    #logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
 
-                    for neighbor_idx in cur_neighbors_bb_idx: 
+                    for neighbor_idx in cur_neighbors_bb_idx:
+                        # add only on direction, the other will be added by the other vertex 
                         edges.append((cur_idx, neighbor_idx))
 
-                    #if time_idx < len(time_coords)-1: 
-                    #    past_time_val = time_coords[time_idx+1]
-                    #    logger.info("Adding edges to the past {}".format(past_time_val))
-                    #    pass
+                    if time_idx < len(time_coords)-1: 
+                        past_time_val = time_coords[time_idx+1]
+                        cur_past_neighbors_bb_idx = [vertices_idx[(x[0], x[1], past_time_val)] for x in cur_neighbors_bb]
+                        #logger.info("past cur_idx 1-neighbors in bb = {}".format(cur_past_neighbors_bb_idx))
+
+                        for neighbor_idx in cur_past_neighbors_bb_idx: 
+                            # add both directions to and from the past
+                            edges.append((cur_idx, neighbor_idx))
+                            edges.append((neighbor_idx, cur_idx))
                     
 
-                    #cur_past_neighbors_bb_idx = [vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb]
 
-                    # 
-
-        logger.info("Edges = {}".format(edges))
+        #logger.info("Edges = {}".format(edges))
         logger.info("Total edges added in graph = {}".format(len(edges)))
 
         # Now that we have our graph, compute variables per vertex
