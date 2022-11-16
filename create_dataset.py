@@ -145,6 +145,23 @@ class DatasetBuilder:
         # logger.debug("All vertices: {}".format(vertices))
         logger.info("Final graph will have {} vertices".format(len(vertices)))
 
+        #
+        # DEBUG for debug print grid
+        #
+        # for _, time_val in enumerate(time_coords):        
+        #     for lat_inc in range(-radius, radius + 1):
+        #         for lon_inc in range(-radius, radius + 1):
+        #             # vertex that we care about
+        #             cur = (
+        #                 center_lat + lat_inc * self._sp_res,
+        #                 center_lon + lon_inc * self._sp_res,
+        #             )
+        #             print(*cur, end=" ")
+        #             #print((*cur, time_val), end=" ")
+        #             #print(vertices_idx[(*cur, time_val)], end=" ")
+        #         print("")
+        #     print("")    
+
         # Create edges
         edges = []
         for time_idx, time_val in enumerate(time_coords):
@@ -162,19 +179,19 @@ class DatasetBuilder:
                     cur_neighbors = self._create_neighbors(
                         cur, radius=1, include_self=False
                     )
-                    logger.info("cur 1-neighbors = {}".format(cur_neighbors))
+                    #logger.info("cur 1-neighbors = {}".format(cur_neighbors))
 
                     # 1-hop neighbors inside our bounding box from the center vertex
                     cur_neighbors_bb = [
                         neighbor
                         for neighbor in cur_neighbors
                         if self._in_bounding_box(
-                            neighbor, center_lat_lon=(center_lat, center_lon), radius=1
+                            neighbor, center_lat_lon=(center_lat, center_lon), radius=radius
                         )
                     ]
                     cur_neighbors_bb  = list(map(self._normalize_lat_lon, cur_neighbors_bb))
                     cur_neighbors_bb_idx = [vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb]
-                    logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
+                    #logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
                     logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
 
                     for neighbor_idx in cur_neighbors_bb_idx: 
@@ -191,6 +208,7 @@ class DatasetBuilder:
                     # 
 
         logger.info("Edges = {}".format(edges))
+        logger.info("Total edges added in graph = {}".format(len(edges)))
 
         # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
