@@ -22,7 +22,6 @@ class DatasetBuilder:
         positive_samples_threshold
     ):
         self.cube_path = cube_path
-        self.output_folder = output_folder
         self.input_vars = [
             "ndvi",
             "t2m_min",
@@ -49,6 +48,7 @@ class DatasetBuilder:
         self.sp_res = 0.25  # Spatial resolution
         self.mean_std_dict = {}
 
+        self.output_folder = os.path.join(output_folder, self.split)
         for folder in [self.output_folder]:
             logger.info("Creating output folder {}".format(folder))
             if not os.path.exists(folder):
@@ -121,12 +121,12 @@ class DatasetBuilder:
                     vertices_index.append((lat_index, lon_index,time_index))
         #print(vertices_index)
 
-        print("TODO")
+        #print("TODO")
         vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude", "time"))
-        print(vertices_input_vars)
+        #print(vertices_input_vars)
         vertices_target_vars = points_target_vars.stack(vertex=("latitude", "longitude", "time"))
         vertices_dim = vertices_input_vars.vertex.shape[0]
-        print(vertices_input_vars.vertex)
+        #print(vertices_input_vars.vertex)
         logger.info("Graph will have {} vertices".format(vertices_dim))
 
         #print(vertices_input_vars.vertex)
