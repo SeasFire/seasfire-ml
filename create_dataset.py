@@ -132,8 +132,7 @@ class DatasetBuilder:
         grid = list(
             map(
                 self._normalize_lat_lon,
-                self._create_neighbors((center_lat, center_lon), radius=radius)
-                + [(center_lat, center_lon)],
+                self._create_neighbors((center_lat, center_lon), include_self=True, radius=radius)
             )
         )
         for _, time_val in enumerate(time_coords):
@@ -148,19 +147,19 @@ class DatasetBuilder:
         #
         # DEBUG for debug print grid
         #
-        # for _, time_val in enumerate(time_coords):        
-        #     for lat_inc in range(-radius, radius + 1):
-        #         for lon_inc in range(-radius, radius + 1):
-        #             # vertex that we care about
-        #             cur = (
-        #                 center_lat + lat_inc * self._sp_res,
-        #                 center_lon + lon_inc * self._sp_res,
-        #             )
-        #             print(*cur, end=" ")
-        #             #print((*cur, time_val), end=" ")
-        #             #print(vertices_idx[(*cur, time_val)], end=" ")
-        #         print("")
-        #     print("")    
+        for _, time_val in enumerate(time_coords):        
+            for lat_inc in range(-radius, radius + 1):
+                for lon_inc in range(-radius, radius + 1):
+                    # vertex that we care about
+                    cur = (
+                        center_lat + lat_inc * self._sp_res,
+                        center_lon + lon_inc * self._sp_res,
+                    )
+                    #print(*cur, end=" ")
+                    #print((*cur, time_val), end=" ")
+                    print(vertices_idx[(*cur, time_val)], end=" ")
+                print("")
+            print("")    
 
         # Create edges
         edges = []
