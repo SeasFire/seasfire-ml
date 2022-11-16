@@ -142,9 +142,57 @@ class DatasetBuilder:
                 cur_vertex_index = len(vertices)
                 vertices_idx[cur_vertex] = cur_vertex_index
                 vertices.append(cur_vertex)
-        #print(vertices)
+        # logger.debug("All vertices: {}".format(vertices))
+        logger.info("Final graph will have {} vertices".format(len(vertices)))
 
-        # print("TODO")
+        # Create edges
+        edges = []
+        for time_idx, time_val in enumerate(time_coords):
+            for lat_inc in range(-radius, radius + 1):
+                for lon_inc in range(-radius, radius + 1):
+                    # vertex that we care about
+                    cur = (
+                        center_lat + lat_inc * self._sp_res,
+                        center_lon + lon_inc * self._sp_res,
+                    )
+                    cur_idx = vertices_idx[(cur[0], cur[1], time_val)]
+                    logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+
+                    # 1-hop neighbors
+                    cur_neighbors = self._create_neighbors(
+                        cur, radius=1, include_self=False
+                    )
+                    logger.info("cur 1-neighbors = {}".format(cur_neighbors))
+
+                    # 1-hop neighbors inside our bounding box from the center vertex
+                    cur_neighbors_bb = [
+                        neighbor
+                        for neighbor in cur_neighbors
+                        if self._in_bounding_box(
+                            neighbor, center_lat_lon=(center_lat, center_lon), radius=1
+                        )
+                    ]
+                    cur_neighbors_bb  = list(map(self._normalize_lat_lon, cur_neighbors_bb))
+                    cur_neighbors_bb_idx = [vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb]
+                    logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
+                    logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
+
+                    for neighbor_idx in cur_neighbors_bb_idx: 
+                        edges.append((cur_idx, neighbor_idx))
+
+                    #if time_idx < len(time_coords)-1: 
+                    #    past_time_val = time_coords[time_idx+1]
+                    #    logger.info("Adding edges to the past {}".format(past_time_val))
+                    #    pass
+                    
+
+                    #cur_past_neighbors_bb_idx = [vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb]
+
+                    # 
+
+        logger.info("Edges = {}".format(edges))
+
+        # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
             vertex=("latitude", "longitude", "time")
         )
@@ -152,47 +200,15 @@ class DatasetBuilder:
         vertices_target_vars = points_target_vars.stack(
             vertex=("latitude", "longitude", "time")
         )
-        # print(vertices_input_vars.vertex)
-        logger.info("Graph will have {} vertices".format(len(vertices)))
-
-        # Create graph
-        # for _, time_val in enumerate(time_coords):
-        #    for lat in np.linspace(
-        #        center_lat + radius * self._sp_res,
-        #        center_lat - radius * self._sp_res,
-        #        2 * radius + 1,
-        #    ):
-        #        for lon in np.linspace(
-        #            center_lon - radius * self._sp_res,
-        #            center_lon + radius * self._sp_res,
-        #            2 * radius + 1,
-        #        ):
-        #            cur_vertex = (lat, lon, time_val)
-        #            cur_vertex_idx = vertices_idx[cur_vertex]
-        #            pass
-
-        # for layer in range(time_dim):
-        #    logger.info("Adding edges for layer {}".format(layer))
-        #    print(layer)
+        # TODO
 
         # print(vertices_input_vars.vertex)
         # print(vertices_input_vars)
         # tmp  = vertices_input_vars.sel(vertex=(-23.875, 19.875, pd.Timestamp('2010-08-31 00:00:00')))
         # print(tmp["ndvi"].to_numpy())
 
-        # print(x)
-
-        # TODO: figure out a way to define by std and mean
-
-        # TODO: build a graph
-
-        # data = self.cube.sel(
-        #    latitude=lat, longitude=lon
-        # )#.isel(time=time)
-        # print(dataset)
-        # print(data["drought_code_max"].to_numpy())
-
-        # print(region["area"])
+        # TODO: at the end wrap all these into a pytorch Data()
+        # TODO: pass target variable or label as an input to this function
 
         pass
 
@@ -213,7 +229,7 @@ class DatasetBuilder:
         self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500)
         pass
 
-    def _in_bounding_box(self, lat_lon, center_lat_lon, radius=2):
+    def _in_bounding_box(self, lat_lon, center_lat_lon, radius):
         lat, lon = lat_lon
         center_lat, center_lon = center_lat_lon
         return (
@@ -226,8 +242,8 @@ class DatasetBuilder:
     def _create_neighbors(self, lat_lon, radius=1, include_self=False, normalize=False):
         lat, lon = lat_lon
         neighbors = []
-        for lat_inc in range(-radius, radius+1):
-            for lon_inc in range(-radius, radius+1):
+        for lat_inc in range(-radius, radius + 1):
+            for lon_inc in range(-radius, radius + 1):
                 if not include_self and lat_inc == 0 and lon_inc == 0:
                     continue
                 neighbors.append(
