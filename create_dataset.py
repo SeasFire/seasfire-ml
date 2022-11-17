@@ -82,6 +82,7 @@ class DatasetBuilder:
         center_lat,
         center_lon,
         center_time,
+        ground_truth,
         radius=2,
         weeks=58,
         time_aggregation="3M",
@@ -127,7 +128,9 @@ class DatasetBuilder:
         grid = list(
             map(
                 self._normalize_lat_lon,
-                self._create_neighbors((center_lat, center_lon), include_self=True, radius=radius)
+                self._create_neighbors(
+                    (center_lat, center_lon), include_self=True, radius=radius
+                ),
             )
         )
         for _, time_val in enumerate(time_coords):
@@ -142,7 +145,7 @@ class DatasetBuilder:
         #
         # DEBUG for debug print grid
         #
-        # for _, time_val in enumerate(time_coords):        
+        # for _, time_val in enumerate(time_coords):
         #     for lat_inc in range(-radius, radius + 1):
         #         for lon_inc in range(-radius, radius + 1):
         #             # vertex that we care about
@@ -154,7 +157,7 @@ class DatasetBuilder:
         #             #print((*cur, time_val), end=" ")
         #             print(vertices_idx[(*cur, time_val)], end=" ")
         #         print("")
-        #     print("")    
+        #     print("")
 
         # Create edges
         edges = []
@@ -167,66 +170,86 @@ class DatasetBuilder:
                         center_lon + lon_inc * self._sp_res,
                     )
                     cur_idx = vertices_idx[(cur[0], cur[1], time_val)]
-                    #logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+                    # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
 
                     # 1-hop neighbors
                     cur_neighbors = self._create_neighbors(
                         cur, radius=1, include_self=False
                     )
-                    #logger.info("cur 1-neighbors = {}".format(cur_neighbors))
+                    # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
 
                     # 1-hop neighbors inside our bounding box from the center vertex
                     cur_neighbors_bb = [
                         neighbor
                         for neighbor in cur_neighbors
                         if self._in_bounding_box(
-                            neighbor, center_lat_lon=(center_lat, center_lon), radius=radius
+                            neighbor,
+                            center_lat_lon=(center_lat, center_lon),
+                            radius=radius,
                         )
                     ]
-                    cur_neighbors_bb  = list(map(self._normalize_lat_lon, cur_neighbors_bb))
-                    cur_neighbors_bb_idx = [vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb]
-                    #logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
-                    #logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
+                    cur_neighbors_bb = list(
+                        map(self._normalize_lat_lon, cur_neighbors_bb)
+                    )
+                    cur_neighbors_bb_idx = [
+                        vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb
+                    ]
+                    # logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
+                    # logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
 
                     for neighbor_idx in cur_neighbors_bb_idx:
-                        # add only on direction, the other will be added by the other vertex 
+                        # add only on direction, the other will be added by the other vertex
                         edges.append((cur_idx, neighbor_idx))
 
-                    if time_idx < len(time_coords)-1: 
-                        past_time_val = time_coords[time_idx+1]
-                        cur_past_neighbors_bb_idx = [vertices_idx[(x[0], x[1], past_time_val)] for x in cur_neighbors_bb]
-                        #logger.info("past cur_idx 1-neighbors in bb = {}".format(cur_past_neighbors_bb_idx))
+                    if time_idx < len(time_coords) - 1:
+                        past_time_val = time_coords[time_idx + 1]
+                        cur_past_neighbors_bb_idx = [
+                            vertices_idx[(x[0], x[1], past_time_val)]
+                            for x in cur_neighbors_bb
+                        ]
+                        # logger.info("past cur_idx 1-neighbors in bb = {}".format(cur_past_neighbors_bb_idx))
 
-                        for neighbor_idx in cur_past_neighbors_bb_idx: 
+                        for neighbor_idx in cur_past_neighbors_bb_idx:
                             # add both directions to and from the past
                             edges.append((cur_idx, neighbor_idx))
                             edges.append((neighbor_idx, cur_idx))
-                    
+
         # Create edge index tensor
         logger.info("Total edges added in graph = {}".format(len(edges)))
-        #logger.info("Edges = {}".format(edges))
+        # logger.info("Edges = {}".format(edges))
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.info("Computed edge tensor= {}".format(edge_index))
 
         # Create vertex feature tensors
-
         # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
             vertex=("latitude", "longitude", "time")
         )
-        # print(vertices_input_vars)
-        # TODO
+        vertex_features = []
+        vertex_positions = []
+        for vertex in vertices:
+            # get all input vars and append lat-lon
+            v_features = (
+                vertices_input_vars.sel(vertex=vertex)
+                .to_array(dim="variable", name=None)
+                .values
+            )
+            v_position = [vertex[0], vertex[1], self._datetime64_to_ts(vertex[2])]
+            vertex_features.append(v_features)
+            vertex_positions.append(v_position)
 
-        # print(vertices_input_vars.vertex)
-        print(vertices_input_vars)
-        # tmp  = vertices_input_vars.sel(vertex=(-23.875, 19.875, pd.Timestamp('2010-08-31 00:00:00')))
-        # print(tmp["ndvi"].to_numpy())
+        vertex_features = np.array(vertex_features)
+        vertex_features = torch.from_numpy(vertex_features).type(torch.float32)
+        vertex_positions = np.array(vertex_positions)
+        vertex_positions = torch.from_numpy(vertex_positions).type(torch.float32)
 
-        # TODO: at the end wrap all these into a pytorch Data()
-        # TODO: pass target variable or label as an input to this function
+        graph_level_ground_truth = torch.from_numpy(np.array([ground_truth])).type(
+            torch.float32
+        )
 
-        return Data(edge_index=edge_index)
+        return Data(x=vertex_features, y=graph_level_ground_truth, edge_index=edge_index, pos=vertex_positions)
+
 
     def run(self):
         # Depending on split
@@ -242,7 +265,7 @@ class DatasetBuilder:
         # self.create_samples(
         #    min_lon=20.375, min_lat=-24.375, max_lon=24.625, max_lat=-17.875
         # )
-        self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500)
+        self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500, ground_truth=500)
         pass
 
     def _in_bounding_box(self, lat_lon, center_lat_lon, radius):
@@ -280,6 +303,9 @@ class DatasetBuilder:
         while lon > self._lon_max:
             lon -= 360.0
         return lat, lon
+
+    def _datetime64_to_ts(self, dt64):
+        return (dt64 - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
 
 
 def main(args):
