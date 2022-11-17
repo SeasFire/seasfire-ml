@@ -265,8 +265,13 @@ class DatasetBuilder:
         # self.create_samples(
         #    min_lon=20.375, min_lat=-24.375, max_lon=24.625, max_lat=-17.875
         # )
-        self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500, ground_truth=500)
+        sample = self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500, ground_truth=500)
+        self._write_sample_to_disk(sample, 0)
         pass
+
+    def _write_sample_to_disk(self, data, index): 
+        output_path = os.path.join(self.output_folder, "graph_{}.pt".format(index))
+        torch.save(data, output_path)
 
     def _in_bounding_box(self, lat_lon, center_lat_lon, radius):
         lat, lon = lat_lon
