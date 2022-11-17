@@ -5,10 +5,14 @@ import json
 import time
 import logging
 import os
+from tqdm import tqdm
 import xarray as xr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import torch
+import torch_geometric
+from torch_geometric.data import Dataset, Data
 
 logger = logging.getLogger(__name__)
 
@@ -207,10 +211,12 @@ class DatasetBuilder:
                             edges.append((cur_idx, neighbor_idx))
                             edges.append((neighbor_idx, cur_idx))
                     
-
-
         #logger.info("Edges = {}".format(edges))
         logger.info("Total edges added in graph = {}".format(len(edges)))
+        sources, targets = zip(*edges)
+        edge_index = torch.tensor([sources, targets], dtype=torch.long)
+        logger.info("Computed edge tensor= {}".format(edge_index))
+
 
         # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
@@ -230,7 +236,7 @@ class DatasetBuilder:
         # TODO: at the end wrap all these into a pytorch Data()
         # TODO: pass target variable or label as an input to this function
 
-        pass
+        return Data(edge_index=edge_index)
 
     def run(self):
         # Depending on split
@@ -288,6 +294,11 @@ class DatasetBuilder:
 
 def main(args):
     logging.basicConfig(level=logging.DEBUG)
+
+    logger.debug("Torch version: {}".format(torch.__version__))
+    logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
+    if torch.cuda.is_available():
+        logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
     builder = DatasetBuilder(
         args.cube_path, args.output_folder, args.split, args.positive_samples_threshold
