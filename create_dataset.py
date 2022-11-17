@@ -39,29 +39,6 @@ class DatasetBuilder:
             raise ValueError("Wrong split type")
         self.split = split
 
-        # positive example threshold
-        self.positive_samples_threshold = positive_samples_threshold
-        self.number_of_positive_samples = 0
-
-        self.number_of_train_years = 17
-        self.weeks = 58
-        self.target_shift = target_shift
-
-        # split time periods
-        self.time_train = (0+self.weeks, 46*self.number_of_train_years+target_shift)  # 2003-2017
-        self.time_val = (self.number_of_train_years+self.target_shift, 920)  # -202
-        self.time_test = (920+self.weeks, 920)  # 2021
-
-        # Spatial resolution
-        self._sp_res = 0.25
-        self._lat_min = -89.875
-        self._lat_max = 89.875
-        self._lon_min = -179.875
-        self._lon_max = 179.875
-
-        # mean and std dictionary
-        self.mean_std_dict = {}
-
         # create output split folder
         self.output_folder = os.path.join(output_folder, self.split)
         for folder in [self.output_folder]:
@@ -75,6 +52,33 @@ class DatasetBuilder:
         logger.info("Cube: {}".format(self.cube))
         logger.info("Vars: {}".format(self.cube.data_vars))
         # print(self.cube.longitude.to_numpy())
+
+        # positive example threshold
+        self.positive_samples_threshold = positive_samples_threshold
+        self.number_of_positive_samples = 0
+
+        self.number_of_train_years = 13
+        self.weeks = 58
+        self.target_shift = target_shift
+        self.year_in_weeks = 46
+        self.valid_mask = np.count_nonzero((self.cube.gwis_ba_valid_mask.values)==1)
+
+        # split time periods
+        self.time_train = (0, self.year_in_weeks*self.number_of_train_years+target_shift)  # 2003-2017
+        self.time_val = (self.year_in_weeks*self.number_of_train_years, 
+                         self.year_in_weeks*self.number_of_train_years+2*self.weeks+target_shift)  # -202
+        self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, self.valid_mask)  # 2021
+
+        # Spatial resolution
+        self._sp_res = 0.25
+        self._lat_min = -89.875
+        self._lat_max = 89.875
+        self._lon_min = -179.875
+        self._lon_max = 179.875
+
+        # mean and std dictionary
+        self.mean_std_dict = {}
+        
 
     def compute_mean_std_dict(self):
         # TODO: compute mean_std_dict
@@ -94,22 +98,22 @@ class DatasetBuilder:
 
         pass
 
-    def create_samples(self, min_lon, min_lat, max_lon, max_lat):
-        logger.info("Creating samples")
+    # def create_samples(self, min_lon, min_lat, max_lon, max_lat):
+    #     logger.info("Creating samples")
 
-        # if(region == 'Africa'):
-        #     min_lon = -18
-        #     min_lat = -35
-        #     max_lon = 51
-        #     max_lat = 37
+    #     # if(region == 'Africa'):
+    #     #     min_lon = -18
+    #     #     min_lat = -35
+    #     #     max_lon = 51
+    #     #     max_lat = 37
 
-        region = self.cube.sel(
-            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
-        )  
+    #     region = self.cube.sel(
+    #         latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+    #     )  
 
-        print(region)
-        return(region)
-        pass
+    #     print(region)
+    #     return(region)
+    #     pass
 
     def create_sample(
         self,
@@ -296,27 +300,35 @@ class DatasetBuilder:
         max_lon = 24.375
         max_lat = -18
         
-        sample_region = self.create_samples(min_lon, min_lat, max_lon, max_lat)
-
         # time depending on split
         start_time = 0
         end_time = 0
 
         if self.split == 'train':    
             start_time, end_time = self.time_train
+            start_time += self.weeks
+            end_time = end_time - self.target_shift
         if self.split == 'val':    
             start_time, end_time = self.time_val
+            start_time += self.weeks
+            end_time = end_time - self.target_shift
         if self.split == 'test':    
             start_time, end_time = self.time_test
-        
-        print("start")
-        print(start_time)
+            end_time = self.valid_mask - 1 # last week does not have ground_trouth
 
-        print("end")
-        print(end_time)
+
+        logger.info("Creating sample region")
+
+        # define sample region
+        sample_region = self.cube.sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=slice(start_time, end_time))  
+
+        print(sample_region)
+
+        
+
         # Sample nodes above threshold
         # for each node call create_sample() to build the graph
-        for time_index in range (start_time, end_time-self.target_shift):
+        for time_index in range (start_time+self.weeks, end_time-self.target_shift):
             for lat_inc in sample_region.latitude.values:
                 for lon_inc in sample_region.longitude.values:
 
@@ -420,7 +432,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="output_folder",
-        default="dataset",
+        default="data",
         help="Output folder",
     )
     parser.add_argument(
