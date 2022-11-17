@@ -10,15 +10,17 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import pickle as pkl
 import torch
 import torch_geometric
 from torch_geometric.data import Dataset, Data
+
 
 logger = logging.getLogger(__name__)
 
 
 class DatasetBuilder:
-    def __init__(self, cube_path, output_folder, split, positive_samples_threshold):
+    def __init__(self, cube_path, output_folder, split, positive_samples_threshold, target_shift):
         self.cube_path = cube_path
         self.input_vars = [
             "ndvi",
@@ -39,11 +41,16 @@ class DatasetBuilder:
 
         # positive example threshold
         self.positive_samples_threshold = positive_samples_threshold
+        self.number_of_positive_samples = 0
+
+        self.number_of_train_years = 17
+        self.weeks = 58
+        self.target_shift = target_shift
 
         # split time periods
-        self.time_train = (0, 874)  # 2001-2019
-        self.time_test = (874, 920)  # 2020
-        self.time_eval = (920, 966)  # 2021
+        self.time_train = (0+self.weeks, 46*self.number_of_train_years+target_shift)  # 2003-2017
+        self.time_val = (self.number_of_train_years+self.target_shift, 920)  # -202
+        self.time_test = (920+self.weeks, 920)  # 2021
 
         # Spatial resolution
         self._sp_res = 0.25
@@ -69,12 +76,39 @@ class DatasetBuilder:
         logger.info("Vars: {}".format(self.cube.data_vars))
         # print(self.cube.longitude.to_numpy())
 
-    def compute_mean_std_dict():
+    def compute_mean_std_dict(self):
         # TODO: compute mean_std_dict
+        # first_time, last_time = self.time_train
+
+        # for var in self.input_vars + [self.target_var]:
+        #     self.mean_std_dict[var + '_mean'] = self.cube[var].isel(time=slice(first_time, last_time)).mean()
+        #     self.mean_std_dict[var + '_std'] = self.cube[var].isel(time=slice(first_time, last_time)).std()
+    
+        # # Store data
+        # with open('mean_std_dict.pickle', 'wb') as handle:
+        #     pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
+        # # # Load data 
+        # # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
+        # # print(data['ndvi_mean'].values)
+
         pass
 
     def create_samples(self, min_lon, min_lat, max_lon, max_lat):
-        # TODO
+        logger.info("Creating samples")
+
+        # if(region == 'Africa'):
+        #     min_lon = -18
+        #     min_lat = -35
+        #     max_lon = 51
+        #     max_lat = 37
+
+        region = self.cube.sel(
+            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+        )  
+
+        print(region)
+        return(region)
         pass
 
     def create_sample(
@@ -84,12 +118,11 @@ class DatasetBuilder:
         center_time,
         ground_truth,
         radius=2,
-        weeks=58,
         time_aggregation="3M",
     ):
         logger.info(
-            "Creating sample for center_lat={}, center_lon={}, center_time={}, radius={}, weeks={}, time_aggregation={}".format(
-                center_lat, center_lon, center_time, radius, weeks, time_aggregation
+            "Creating sample for center_lat={}, center_lon={}, center_time={}, radius={}, time_aggregation={}".format(
+                center_lat, center_lon, center_time, radius, time_aggregation
             )
         )
 
@@ -99,7 +132,7 @@ class DatasetBuilder:
         lon_slice = slice(
             center_lon - radius * self._sp_res, center_lon + radius * self._sp_res
         )
-        time_slice = slice(center_time - weeks, center_time)
+        time_slice = slice(center_time - self.weeks, center_time)
         points_input_vars = (
             self.cube[self.input_vars]
             .sel(latitude=lat_slice, longitude=lon_slice)
@@ -251,22 +284,64 @@ class DatasetBuilder:
         return Data(x=vertex_features, y=graph_level_ground_truth, edge_index=edge_index, pos=vertex_positions)
 
 
-    def run(self):
-        # Depending on split
-
+    def run(self, target_shift=4):
+        
+        
         # compute mean and std
+        self.compute_mean_std_dict()
 
+        #Africa
+        min_lon = 20
+        min_lat = -24.625
+        max_lon = 24.375
+        max_lat = -18
+        
+        sample_region = self.create_samples(min_lon, min_lat, max_lon, max_lat)
+
+        # time depending on split
+        start_time = 0
+        end_time = 0
+
+        if self.split == 'train':    
+            start_time, end_time = self.time_train
+        if self.split == 'val':    
+            start_time, end_time = self.time_val
+        if self.split == 'test':    
+            start_time, end_time = self.time_test
+        
+        print("start")
+        print(start_time)
+
+        print("end")
+        print(end_time)
         # Sample nodes above threshold
+        # for each node call create_sample() to build the graph
+        for time_index in range (start_time, end_time-self.target_shift):
+            for lat_inc in sample_region.latitude.values:
+                for lon_inc in sample_region.longitude.values:
 
-        # call create sample
+                    burnt_grid_area = sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=time_index).values
+                    grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
+                    burnt_grid_area_percentage = burnt_grid_area / grid_area
+                    
+                    if burnt_grid_area_percentage >= self.positive_samples_threshold:
+                        logger.info("Positive sample found.")
+                        
+                        print(lat_inc)
+                        print(lon_inc)
+                        print(time_index)
+                        
+                        self.number_of_positive_samples += 1
 
-        # write to folder
+                        target_period = time_index + self.target_shift
+                        ground_truth = sum(sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=slice(time_index, target_period)).values)
 
-        # self.create_samples(
-        #    min_lon=20.375, min_lat=-24.375, max_lon=24.625, max_lat=-17.875
-        # )
-        sample = self.create_sample(center_lat=-24.375, center_lon=20.375, center_time=500, ground_truth=500)
-        self._write_sample_to_disk(sample, 0)
+
+                        # call create sample
+                        graph = self.create_sample(center_lat=lat_inc, center_lon=lon_inc, center_time=time_index, ground_truth=ground_truth)
+                        
+                        self._write_sample_to_disk(graph, self.number_of_positive_samples)
+
         pass
 
     def _write_sample_to_disk(self, data, index): 
@@ -322,9 +397,9 @@ def main(args):
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
     builder = DatasetBuilder(
-        args.cube_path, args.output_folder, args.split, args.positive_samples_threshold
+        args.cube_path, args.output_folder, args.split, args.positive_samples_threshold, args.target_shift
     )
-    builder.run()
+    builder.run(target_shift=4)
 
 
 if __name__ == "__main__":
@@ -367,13 +442,22 @@ if __name__ == "__main__":
         help="Positive sample threshold",
     )
     parser.add_argument(
-        "--todo",
-        metavar="FLAG",
-        type=bool,
-        action=argparse.BooleanOptionalAction,
-        dest="todo",
-        default=True,
-        help="todo",
+        "--target-shift",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="target_shift",
+        default=4,
+        help="Target shift",
     )
+    # parser.add_argument(
+    #     "--todo",
+    #     metavar="FLAG",
+    #     type=bool,
+    #     action=argparse.BooleanOptionalAction,
+    #     dest="todo",
+    #     default=True,
+    #     help="todo",
+    # )
     args = parser.parse_args()
     main(args)
