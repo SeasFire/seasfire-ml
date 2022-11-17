@@ -104,16 +104,7 @@ class DatasetBuilder:
             .sel(latitude=lat_slice, longitude=lon_slice)
             .isel(time=time_slice)
         )
-        points_target_vars = (
-            self.cube[self.input_vars]
-            .sel(latitude=lat_slice, longitude=lon_slice)
-            .isel(time=time_slice)
-        )
-
         points_input_vars = points_input_vars.resample(time=time_aggregation).mean(
-            skipna=True
-        )
-        points_target_vars = points_target_vars.resample(time=time_aggregation).mean(
             skipna=True
         )
 
@@ -211,25 +202,24 @@ class DatasetBuilder:
                             edges.append((cur_idx, neighbor_idx))
                             edges.append((neighbor_idx, cur_idx))
                     
-        #logger.info("Edges = {}".format(edges))
+        # Create edge index tensor
         logger.info("Total edges added in graph = {}".format(len(edges)))
+        #logger.info("Edges = {}".format(edges))
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.info("Computed edge tensor= {}".format(edge_index))
 
+        # Create vertex feature tensors
 
         # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
             vertex=("latitude", "longitude", "time")
         )
         # print(vertices_input_vars)
-        vertices_target_vars = points_target_vars.stack(
-            vertex=("latitude", "longitude", "time")
-        )
         # TODO
 
         # print(vertices_input_vars.vertex)
-        # print(vertices_input_vars)
+        print(vertices_input_vars)
         # tmp  = vertices_input_vars.sel(vertex=(-23.875, 19.875, pd.Timestamp('2010-08-31 00:00:00')))
         # print(tmp["ndvi"].to_numpy())
 
