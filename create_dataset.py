@@ -64,10 +64,10 @@ class DatasetBuilder:
         self.valid_mask = np.count_nonzero((self.cube.gwis_ba_valid_mask.values)==1)
 
         # split time periods
-        self.time_train = (0, self.year_in_weeks*self.number_of_train_years+target_shift)  # 2003-2017
+        self.time_train = (0, self.year_in_weeks*self.number_of_train_years+target_shift)  # 0-591 week -> 13 yeaars
         self.time_val = (self.year_in_weeks*self.number_of_train_years, 
-                         self.year_in_weeks*self.number_of_train_years+2*self.weeks+target_shift)  # -202
-        self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, self.valid_mask)  # 2021
+                         self.year_in_weeks*self.number_of_train_years+2*self.weeks+target_shift)  # 598-715 week -> 2.5 years
+        self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, self.valid_mask)  # 714-920 week -> 4.5 years
 
         # Spatial resolution
         self._sp_res = 0.25
@@ -98,22 +98,6 @@ class DatasetBuilder:
 
         pass
 
-    # def create_samples(self, min_lon, min_lat, max_lon, max_lat):
-    #     logger.info("Creating samples")
-
-    #     # if(region == 'Africa'):
-    #     #     min_lon = -18
-    #     #     min_lat = -35
-    #     #     max_lon = 51
-    #     #     max_lat = 37
-
-    #     region = self.cube.sel(
-    #         latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
-    #     )  
-
-    #     print(region)
-    #     return(region)
-    #     pass
 
     def create_sample(
         self,
