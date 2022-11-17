@@ -27,7 +27,7 @@ class LoadData(Dataset):
         return len([entry for entry in os.listdir(self.root_dir)])
 
     def __getitem__(self, idx):
-        graph = torch.load(self.root_dir + f'/data_{idx}.pt')
+        graph = torch.load(self.root_dir + f'/graph_{idx+1}.pt')
 
         return graph
 
