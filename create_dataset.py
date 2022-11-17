@@ -82,19 +82,20 @@ class DatasetBuilder:
 
     def compute_mean_std_dict(self):
         # TODO: compute mean_std_dict
-        # first_time, last_time = self.time_train
+        first_time, last_time = self.time_train
 
-        # for var in self.input_vars + [self.target_var]:
-        #     self.mean_std_dict[var + '_mean'] = self.cube[var].isel(time=slice(first_time, last_time)).mean()
-        #     self.mean_std_dict[var + '_std'] = self.cube[var].isel(time=slice(first_time, last_time)).std()
-    
-        # # Store data
-        # with open('mean_std_dict.pickle', 'wb') as handle:
-        #     pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
+        for var in self.input_vars + [self.target_var]:
+            self.mean_std_dict[var + '_mean'] = self.cube[var].isel(time=slice(first_time, last_time)).mean()
+            self.mean_std_dict[var + '_std'] = self.cube[var].isel(time=slice(first_time, last_time)).std()
+
+        # Store data
+        with open('mean_std_dict.pickle', 'wb') as handle:
+            pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
 
         # # # Load data 
-        # # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
-        # # print(data['ndvi_mean'].values)
+        # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
+        # print(data['ndvi_mean'].values)
+        # print(data['ndvi_std'].values)
 
         pass
 
@@ -184,7 +185,7 @@ class DatasetBuilder:
         edges = []
         for time_idx, time_val in enumerate(time_coords):
             for lat_inc in range(-radius, radius + 1):
-                for lon_inc in range(-radius, radius + 1):
+                for lon_inc in tqdm(range(-radius, radius + 1)):
                     # vertex that we care about
                     cur = (
                         center_lat + lat_inc * self._sp_res,
@@ -306,13 +307,9 @@ class DatasetBuilder:
         # define sample region
         sample_region = self.cube.sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=slice(start_time, end_time))  
 
-        print(sample_region)
-
-        
-
         # Sample nodes above threshold
         # for each node call create_sample() to build the graph
-        for time_index in range (start_time+self.weeks, end_time-self.target_shift):
+        for time_index in tqdm(range (start_time+self.weeks, end_time-self.target_shift)):
             for lat_inc in sample_region.latitude.values:
                 for lon_inc in sample_region.longitude.values:
 
@@ -322,10 +319,6 @@ class DatasetBuilder:
                     
                     if burnt_grid_area_percentage >= self.positive_samples_threshold:
                         logger.info("Positive sample found.")
-                        
-                        print(lat_inc)
-                        print(lon_inc)
-                        print(time_index)
                         
                         self.number_of_positive_samples += 1
 
