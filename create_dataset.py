@@ -80,24 +80,24 @@ class DatasetBuilder:
         self.mean_std_dict = {}
         
 
-    def compute_mean_std_dict(self):
-        # TODO: compute mean_std_dict
-        first_time, last_time = self.time_train
+    # def compute_mean_std_dict(self):
+    #     # TODO: compute mean_std_dict
+    #     first_time, last_time = self.time_train
 
-        for var in self.input_vars + [self.target_var]:
-            self.mean_std_dict[var + '_mean'] = self.cube[var].isel(time=slice(first_time, last_time)).mean()
-            self.mean_std_dict[var + '_std'] = self.cube[var].isel(time=slice(first_time, last_time)).std()
+    #     for var in self.input_vars + [self.target_var]:
+    #         self.mean_std_dict[var + '_mean'] = self.cube[var].isel(time=slice(first_time, last_time)).mean()
+    #         self.mean_std_dict[var + '_std'] = self.cube[var].isel(time=slice(first_time, last_time)).std()
 
-        # Store data
-        with open('mean_std_dict.pickle', 'wb') as handle:
-            pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
+    #     # Store data
+    #     with open('mean_std_dict.pickle', 'wb') as handle:
+    #         pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
 
-        # # # Load data 
-        # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
-        # print(data['ndvi_mean'].values)
-        # print(data['ndvi_std'].values)
+    #     # # # Load data 
+    #     # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
+    #     # print(data['ndvi_mean'].values)
+    #     # print(data['ndvi_std'].values)
 
-        pass
+    #     pass
 
 
     def create_sample(
