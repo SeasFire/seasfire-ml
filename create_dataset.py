@@ -289,8 +289,10 @@ class DatasetBuilder:
             end_time = end_time - self.target_shift
         if self.split == 'test':    
             start_time, end_time = self.time_test
-            end_time = self.valid_mask - self.target_shift # last week does not have ground_truth
-
+            end_time = end_time - self.target_shift # last week does not have ground_truth
+        
+        total_time = end_time-start_time
+        
         logger.info("Creating sample region")
 
         # define sample region
@@ -299,7 +301,7 @@ class DatasetBuilder:
 
         # Sample nodes above threshold
         # for each node call create_sample() to build the graph
-        for time_index in range(start_time+self.weeks, end_time-self.target_shift):
+        for time_index in range(0, total_time):
             for lat_inc in sample_region.latitude.values:
                 for lon_inc in sample_region.longitude.values:
                     burnt_grid_area = sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=time_index).values
@@ -324,9 +326,9 @@ class DatasetBuilder:
                             target_period = time_index + self.target_shift
                             ground_truth = sum(sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=slice(time_index, target_period)).values)
 
-                            center_lat=lat_inc
-                            center_lon=lon_inc
-                            center_time=time_index
+                            center_lat = lat_inc
+                            center_lon = lon_inc
+                            center_time = start_time + time_index
 
                             samples_list.append((center_lat, center_lon, center_time, ground_truth))
                 
