@@ -334,7 +334,7 @@ class DatasetBuilder:
 
     def run(self):
         # compute mean and std
-        self.compute_mean_std_dict()
+#         self.compute_mean_std_dict()
 
         ##Africa
         min_lon = -18
