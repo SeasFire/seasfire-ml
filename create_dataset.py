@@ -59,15 +59,15 @@ class DatasetBuilder:
 
         self.number_of_train_years = 13
         self.weeks = 58
-        self.target_shift = target_shift
+        self.target_shift = target_shift #in weeks
         self.year_in_weeks = 46
-        self.valid_mask = np.count_nonzero((self.cube.gwis_ba_valid_mask.values)==1)
+        # self.valid_mask = np.count_nonzero((self.cube.gwis_ba_valid_mask.values)==1)
 
         # split time periods
         self.time_train = (0, self.year_in_weeks*self.number_of_train_years+target_shift)  # 0-591 week -> 13 yeaars
         self.time_val = (self.year_in_weeks*self.number_of_train_years, 
                          self.year_in_weeks*self.number_of_train_years+2*self.weeks+target_shift)  # 598-715 week -> 2.5 years
-        self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, self.valid_mask)  # 714-920 week -> 4.5 years
+        self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, 916)  # 714-916 week -> 4.5 years
 
         # Spatial resolution
         self._sp_res = 0.25
@@ -109,6 +109,7 @@ class DatasetBuilder:
         radius=2,
         time_aggregation="3M",
     ):
+        print("\n")
         logger.info(
             "Creating sample for center_lat={}, center_lon={}, center_time={}, radius={}, time_aggregation={}".format(
                 center_lat, center_lon, center_time, radius, time_aggregation
@@ -185,7 +186,7 @@ class DatasetBuilder:
         edges = []
         for time_idx, time_val in enumerate(time_coords):
             for lat_inc in range(-radius, radius + 1):
-                for lon_inc in tqdm(range(-radius, radius + 1)):
+                for lon_inc in range(-radius, radius + 1):
                     # vertex that we care about
                     cur = (
                         center_lat + lat_inc * self._sp_res,
@@ -273,18 +274,7 @@ class DatasetBuilder:
         return Data(x=vertex_features, y=graph_level_ground_truth, edge_index=edge_index, pos=vertex_positions)
 
 
-    def run(self, target_shift=4):
-        
-        
-        # compute mean and std
-        self.compute_mean_std_dict()
-
-        #Africa
-        min_lon = 20
-        min_lat = -24.625
-        max_lon = 24.375
-        max_lat = -18
-        
+    def generate_samples(self, min_lon, min_lat, max_lon, max_lat):
         # time depending on split
         start_time = 0
         end_time = 0
@@ -299,39 +289,75 @@ class DatasetBuilder:
             end_time = end_time - self.target_shift
         if self.split == 'test':    
             start_time, end_time = self.time_test
-            end_time = self.valid_mask - 1 # last week does not have ground_trouth
-
+            end_time = self.valid_mask - self.target_shift # last week does not have ground_truth
 
         logger.info("Creating sample region")
 
         # define sample region
         sample_region = self.cube.sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=slice(start_time, end_time))  
+        samples_list = []
 
         # Sample nodes above threshold
         # for each node call create_sample() to build the graph
-        for time_index in tqdm(range (start_time+self.weeks, end_time-self.target_shift)):
+        for time_index in range(start_time+self.weeks, end_time-self.target_shift):
             for lat_inc in sample_region.latitude.values:
                 for lon_inc in sample_region.longitude.values:
-
                     burnt_grid_area = sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=time_index).values
-                    grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
-                    burnt_grid_area_percentage = burnt_grid_area / grid_area
-                    
-                    if burnt_grid_area_percentage >= self.positive_samples_threshold:
-                        logger.info("Positive sample found.")
+                    if burnt_grid_area > 0.0:
+
+                        # Percentage of burnt area to all grid area 
+                        grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
+                        burnt_grid_area_percentage = burnt_grid_area / grid_area
+                        print(grid_area)
+
+                        # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
+                        # grid_area_land = (self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values 
+                        #                   -(self.cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
+                        #                   -(self.cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
+                        #                   -(self.cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
+                        # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
+                        # print(grid_area_land)
+
+                        if burnt_grid_area_percentage >= self.positive_samples_threshold:
+                            logger.info("Positive sample found.")
+
+                            target_period = time_index + self.target_shift
+                            ground_truth = sum(sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=slice(time_index, target_period)).values)
+
+                            center_lat=lat_inc
+                            center_lon=lon_inc
+                            center_time=time_index
+
+                            samples_list.append((center_lat, center_lon, center_time, ground_truth))
+                
+        return samples_list      
+
+    def run(self):
+        # compute mean and std
+        self.compute_mean_std_dict()
+
+        ##Africa
+        min_lon = -18
+        min_lat = -35
+        max_lon = 51
+        max_lat = 30
+
+        # Europe
+        # min_lon = -25
+        # min_lat = 36
+        # max_lon = 50
+        # max_lat = 72
+
+        # call generate samples
+        samples = self.generate_samples(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
                         
-                        self.number_of_positive_samples += 1
-
-                        target_period = time_index + self.target_shift
-                        ground_truth = sum(sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=slice(time_index, target_period)).values)
-
-
-                        # call create sample
-                        graph = self.create_sample(center_lat=lat_inc, center_lon=lon_inc, center_time=time_index, ground_truth=ground_truth)
-                        
-                        self._write_sample_to_disk(graph, self.number_of_positive_samples)
-
-        pass
+        # call create sample
+        for idx in tqdm(range(0, len(samples[:]))):
+            center_lat, center_lon, center_time, ground_truth = samples[idx]
+            graph = self.create_sample(center_lat=center_lat, center_lon=center_lon, center_time=center_time, ground_truth=ground_truth)
+        
+            self._write_sample_to_disk(graph, self.number_of_positive_samples)
+            self.number_of_positive_samples += 1
 
     def _write_sample_to_disk(self, data, index): 
         output_path = os.path.join(self.output_folder, "graph_{}.pt".format(index))
@@ -388,7 +414,7 @@ def main(args):
     builder = DatasetBuilder(
         args.cube_path, args.output_folder, args.split, args.positive_samples_threshold, args.target_shift
     )
-    builder.run(target_shift=4)
+    builder.run()
 
 
 if __name__ == "__main__":
@@ -427,7 +453,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.1,
+        default=0.00001,
         help="Positive sample threshold",
     )
     parser.add_argument(
