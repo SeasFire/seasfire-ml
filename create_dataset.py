@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
-import time
 import logging
 import os
 from tqdm import tqdm
@@ -12,15 +10,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle as pkl
 import torch
-import torch_geometric
-from torch_geometric.data import Dataset, Data
+from torch_geometric.data import Data
 
 
 logger = logging.getLogger(__name__)
 
 
 class DatasetBuilder:
-    def __init__(self, cube_path, output_folder, split, positive_samples_threshold, target_shift):
+    def __init__(
+        self, cube_path, output_folder, split, positive_samples_threshold, target_shift
+    ):
         self.cube_path = cube_path
         self.input_vars = [
             "ndvi",
@@ -59,15 +58,31 @@ class DatasetBuilder:
 
         self.number_of_train_years = 13
         self.weeks = 58
-        self.target_shift = target_shift #in weeks
+        self.target_shift = target_shift  # in weeks, e.g. 4
         self.year_in_weeks = 46
-        # self.valid_mask = np.count_nonzero((self.cube.gwis_ba_valid_mask.values)==1)
 
         # split time periods
-        self.time_train = (0, self.year_in_weeks*self.number_of_train_years+target_shift)  # 0-591 week -> 13 yeaars
-        self.time_val = (self.year_in_weeks*self.number_of_train_years, 
-                         self.year_in_weeks*self.number_of_train_years+2*self.weeks+target_shift)  # 598-715 week -> 2.5 years
-        self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, 916)  # 714-916 week -> 4.5 years
+        self.time_train = (
+            0,
+            self.year_in_weeks * self.number_of_train_years - self.target_shift,
+        )  # 0-591 week -> 13 years
+        logger.info(
+            "Train time in weeks ({},{})".format(self.time_train[0], self.time_train[1])
+        )
+        self.time_val = (
+            self.year_in_weeks * self.number_of_train_years,
+            self.year_in_weeks * self.number_of_train_years + 2 * self.weeks,
+        )  # 598-715 week -> 2.5 years
+        logger.info(
+            "Val time in weeks ({},{})".format(self.time_val[0], self.time_val[1])
+        )
+        self.time_test = (
+            self.year_in_weeks * self.number_of_train_years + 2 * self.weeks,
+            916,
+        )  # 714-916 week -> 4.5 years
+        logger.info(
+            "Test time in weeks ({},{})".format(self.time_test[0], self.time_test[1])
+        )
 
         # Spatial resolution
         self._sp_res = 0.25
@@ -78,7 +93,6 @@ class DatasetBuilder:
 
         # mean and std dictionary
         self.mean_std_dict = {}
-        
 
     # def compute_mean_std_dict(self):
     #     # TODO: compute mean_std_dict
@@ -92,13 +106,12 @@ class DatasetBuilder:
     #     with open('mean_std_dict.pickle', 'wb') as handle:
     #         pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
 
-    #     # # # Load data 
+    #     # # # Load data
     #     # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
     #     # print(data['ndvi_mean'].values)
     #     # print(data['ndvi_std'].values)
 
     #     pass
-
 
     def create_sample(
         self,
@@ -109,7 +122,6 @@ class DatasetBuilder:
         radius=2,
         time_aggregation="3M",
     ):
-        print("\n")
         logger.info(
             "Creating sample for center_lat={}, center_lon={}, center_time={}, radius={}, time_aggregation={}".format(
                 center_lat, center_lon, center_time, radius, time_aggregation
@@ -122,11 +134,12 @@ class DatasetBuilder:
         lon_slice = slice(
             center_lon - radius * self._sp_res, center_lon + radius * self._sp_res
         )
-        time_slice = slice(center_time - self.weeks, center_time)
+
+        backwards_in_weeks = np.timedelta64(self.weeks, "W")
+        time_slice = slice(center_time - backwards_in_weeks, center_time)
         points_input_vars = (
             self.cube[self.input_vars]
-            .sel(latitude=lat_slice, longitude=lon_slice)
-            .isel(time=time_slice)
+            .sel(latitude=lat_slice, longitude=lon_slice, time=time_slice)
         )
         points_input_vars = points_input_vars.resample(time=time_aggregation).mean(
             skipna=True
@@ -162,25 +175,7 @@ class DatasetBuilder:
                 cur_vertex_index = len(vertices)
                 vertices_idx[cur_vertex] = cur_vertex_index
                 vertices.append(cur_vertex)
-        # logger.debug("All vertices: {}".format(vertices))
         logger.info("Final graph will have {} vertices".format(len(vertices)))
-
-        #
-        # DEBUG for debug print grid
-        #
-        # for _, time_val in enumerate(time_coords):
-        #     for lat_inc in range(-radius, radius + 1):
-        #         for lon_inc in range(-radius, radius + 1):
-        #             # vertex that we care about
-        #             cur = (
-        #                 center_lat + lat_inc * self._sp_res,
-        #                 center_lon + lon_inc * self._sp_res,
-        #             )
-        #             #print(*cur, end=" ")
-        #             #print((*cur, time_val), end=" ")
-        #             print(vertices_idx[(*cur, time_val)], end=" ")
-        #         print("")
-        #     print("")
 
         # Create edges
         edges = []
@@ -239,7 +234,6 @@ class DatasetBuilder:
 
         # Create edge index tensor
         logger.info("Total edges added in graph = {}".format(len(edges)))
-        # logger.info("Edges = {}".format(edges))
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.info("Computed edge tensor= {}".format(edge_index))
@@ -271,70 +265,123 @@ class DatasetBuilder:
             torch.float32
         )
 
-        return Data(x=vertex_features, y=graph_level_ground_truth, edge_index=edge_index, pos=vertex_positions)
-
+        return Data(
+            x=vertex_features,
+            y=graph_level_ground_truth,
+            edge_index=edge_index,
+            pos=vertex_positions,
+        )
 
     def generate_samples(self, min_lon, min_lat, max_lon, max_lat):
-        # time depending on split
-        start_time = 0
-        end_time = 0
-
-        if self.split == 'train':    
+        if self.split == "train":
             start_time, end_time = self.time_train
             start_time += self.weeks
-            end_time = end_time - self.target_shift
-        if self.split == 'val':    
+        if self.split == "val":
             start_time, end_time = self.time_val
             start_time += self.weeks
-            end_time = end_time - self.target_shift
-        if self.split == 'test':    
+        if self.split == "test":
             start_time, end_time = self.time_test
-            end_time = self.valid_mask - self.target_shift # last week does not have ground_truth
 
-        logger.info("Creating sample region")
+        logger.info("Generating sample list for split={}".format(self.split))
+        logger.info("Generating from week={} to week={}".format(start_time, end_time))
 
         # define sample region
-        sample_region = self.cube.sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=slice(start_time, end_time))  
+        sample_region = self.cube.sel(
+            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+        ).isel(time=slice(start_time, end_time))
+
+        sample_region_area = self.cube["area"].sel(
+            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+        )
+        sample_region_area = sample_region_area.expand_dims(
+            dim={"time": sample_region.time}, axis=0
+        )
+
+        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
+        sample_region_area_values = sample_region_area.values
+        sample_region_gwsi_ba_per_area = (
+            sample_region_gwsi_ba_values / sample_region_area_values
+        )
+        sample_region_gwsi_ba_per_area_above_threshold = (
+            sample_region_gwsi_ba_per_area > self.positive_samples_threshold
+        )
+        logger.info(
+            "Samples above threshold={}".format(
+                np.sum(sample_region_gwsi_ba_per_area_above_threshold)
+            )
+        )
+
         samples_list = []
+        samples_index = np.argwhere(sample_region_gwsi_ba_per_area_above_threshold)
+        for index in samples_index:
+            samples_list.append(
+                (
+                    sample_region.time.values[index[0]],
+                    sample_region.latitude.values[index[1]],
+                    sample_region.longitude.values[index[2]],
+                ),
+            )
 
-        # Sample nodes above threshold
-        # for each node call create_sample() to build the graph
-        for time_index in range(start_time+self.weeks, end_time-self.target_shift):
-            for lat_inc in sample_region.latitude.values:
-                for lon_inc in sample_region.longitude.values:
-                    burnt_grid_area = sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=time_index).values
-                    if burnt_grid_area > 0.0:
+        return samples_list
 
-                        # Percentage of burnt area to all grid area 
-                        grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
-                        burnt_grid_area_percentage = burnt_grid_area / grid_area
-                        print(grid_area)
+        # with tqdm(total=total_iterations) as progress:
 
-                        # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
-                        # grid_area_land = (self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values 
-                        #                   -(self.cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
-                        #                   -(self.cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
-                        #                   -(self.cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
-                        # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
-                        # print(grid_area_land)
+        #     # Sample nodes above threshold
+        #     # for each node call create_sample() to build the graph
+        #     for time_index in range(start_time+self.weeks, end_time-self.target_shift):
+        #         for lat_inc in sample_region.latitude.values:
+        #             for lon_inc in sample_region.longitude.values:
+        #                 burnt_grid_area = sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=time_index).values
+        #                 if burnt_grid_area > 0.0:
 
-                        if burnt_grid_area_percentage >= self.positive_samples_threshold:
-                            logger.info("Positive sample found.")
+        #                     # Percentage of burnt area to all grid area
+        #                     grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
+        #                     burnt_grid_area_percentage = burnt_grid_area / grid_area
+        #                     #print(grid_area)
 
-                            target_period = time_index + self.target_shift
-                            ground_truth = sum(sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=slice(time_index, target_period)).values)
+        #                     # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
+        #                     # grid_area_land = (self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
+        #                     #                   -(self.cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
+        #                     #                   -(self.cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
+        #                     #                   -(self.cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
+        #                     # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
+        #                     # print(grid_area_land)
 
-                            center_lat=lat_inc
-                            center_lon=lon_inc
-                            center_time=time_index
+        #                     if burnt_grid_area_percentage >= self.positive_samples_threshold:
+        #                         logger.info("Positive sample found.")
 
-                            samples_list.append((center_lat, center_lon, center_time, ground_truth))
-                
-        return samples_list      
+        #                         target_period = time_index + self.target_shift
+        #                         ground_truth = sum(sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=slice(time_index, target_period)).values)
+
+        #                         center_lat=lat_inc
+        #                         center_lon=lon_inc
+        #                         center_time=time_index
+
+        #                         samples_list.append((center_lat, center_lon, center_time, ground_truth))
+
+        #                 progress.update()
+
+        # with open("samples_list_cache.pickle", "wb") as handle:
+        #     pkl.dump(samples_list, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
+    def compute_ground_truth(self, lat, lon, time):
+        logger.debug(
+            "Computing ground truth for lat={}, lon={}, time={}".format(lat, lon, time)
+        )
+        shift_in_time = np.timedelta64(self.target_shift, "W")
+
+        values = (
+            self.cube["gwis_ba"]
+            .sel(latitude=lat, longitude=lon, time=slice(time, time + shift_in_time))
+            .values
+        )
+        ground_truth = sum(values)
+
+        return ground_truth
 
     def run(self):
         # compute mean and std
-#         self.compute_mean_std_dict()
+        #         self.compute_mean_std_dict()
 
         ##Africa
         min_lon = -18
@@ -349,17 +396,29 @@ class DatasetBuilder:
         # max_lat = 72
 
         # call generate samples
-        samples = self.generate_samples(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
-                        
+        samples = self.generate_samples(
+            min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
+        )
+
+        logger.info("About to create {} samples".format(len(samples)))
+
         # call create sample
         for idx in tqdm(range(0, len(samples[:]))):
-            center_lat, center_lon, center_time, ground_truth = samples[idx]
-            graph = self.create_sample(center_lat=center_lat, center_lon=center_lon, center_time=center_time, ground_truth=ground_truth)
-        
+            center_time, center_lat, center_lon = samples[idx]
+            ground_truth = self.compute_ground_truth(
+                center_lat, center_lon, center_time
+            )
+            graph = self.create_sample(
+                center_lat=center_lat,
+                center_lon=center_lon,
+                center_time=center_time,
+                ground_truth=ground_truth,
+            )
+
             self._write_sample_to_disk(graph, self.number_of_positive_samples)
             self.number_of_positive_samples += 1
 
-    def _write_sample_to_disk(self, data, index): 
+    def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self.output_folder, "graph_{}.pt".format(index))
         torch.save(data, output_path)
 
@@ -404,7 +463,7 @@ class DatasetBuilder:
 
 
 def main(args):
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     logger.debug("Torch version: {}".format(torch.__version__))
     logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
@@ -412,7 +471,11 @@ def main(args):
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
     builder = DatasetBuilder(
-        args.cube_path, args.output_folder, args.split, args.positive_samples_threshold, args.target_shift
+        args.cube_path,
+        args.output_folder,
+        args.split,
+        args.positive_samples_threshold,
+        args.target_shift,
     )
     builder.run()
 
@@ -465,14 +528,5 @@ if __name__ == "__main__":
         default=4,
         help="Target shift",
     )
-    # parser.add_argument(
-    #     "--todo",
-    #     metavar="FLAG",
-    #     type=bool,
-    #     action=argparse.BooleanOptionalAction,
-    #     dest="todo",
-    #     default=True,
-    #     help="todo",
-    # )
     args = parser.parse_args()
     main(args)
