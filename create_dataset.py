@@ -68,7 +68,6 @@ class DatasetBuilder:
         self.time_val = (self.year_in_weeks*self.number_of_train_years, 
                          self.year_in_weeks*self.number_of_train_years+2*self.weeks+target_shift)  # 598-715 week -> 2.5 years
         self.time_test = (self.year_in_weeks*self.number_of_train_years+2*self.weeks, 916)  # 714-916 week -> 4.5 years
-
         # Spatial resolution
         self._sp_res = 0.25
         self._lat_min = -89.875
@@ -289,7 +288,9 @@ class DatasetBuilder:
             end_time = end_time - self.target_shift
         if self.split == 'test':    
             start_time, end_time = self.time_test
-            end_time = self.valid_mask - self.target_shift # last week does not have ground_truth
+            end_time = end_time - self.target_shift # last week does not have ground_truth
+
+        total_time = end_time-start_time #in weeks
 
         logger.info("Creating sample region")
 
@@ -299,24 +300,25 @@ class DatasetBuilder:
 
         # Sample nodes above threshold
         # for each node call create_sample() to build the graph
-        for time_index in range(start_time+self.weeks, end_time-self.target_shift):
+        for time_index in range(0, total_time):
             for lat_inc in sample_region.latitude.values:
                 for lon_inc in sample_region.longitude.values:
                     burnt_grid_area = sample_region.gwis_ba.sel(latitude=lat_inc, longitude=lon_inc).isel(time=time_index).values
+
                     if burnt_grid_area > 0.0:
 
                         # Percentage of burnt area to all grid area 
-                        grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
-                        burnt_grid_area_percentage = burnt_grid_area / grid_area
-                        print(grid_area)
+                        # grid_area = self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
+                        # burnt_grid_area_percentage = burnt_grid_area / grid_area
+                        # print(grid_area)
 
                         # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
-                        # grid_area_land = (self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values 
-                        #                   -(self.cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
-                        #                   -(self.cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
-                        #                   -(self.cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
-                        # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
-                        # print(grid_area_land)
+                        grid_area_land = (self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values 
+                                          -(self.cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
+                                          -(self.cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0) 
+                                          -(self.cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
+                        burnt_grid_area_percentage = burnt_grid_area / grid_area_land
+                        print(grid_area_land)
 
                         if burnt_grid_area_percentage >= self.positive_samples_threshold:
                             logger.info("Positive sample found.")
@@ -326,7 +328,7 @@ class DatasetBuilder:
 
                             center_lat=lat_inc
                             center_lon=lon_inc
-                            center_time=time_index
+                            center_time=start_time+time_index
 
                             samples_list.append((center_lat, center_lon, center_time, ground_truth))
                 
@@ -334,19 +336,19 @@ class DatasetBuilder:
 
     def run(self):
         # compute mean and std
-        self.compute_mean_std_dict()
+        # self.compute_mean_std_dict()
 
         ##Africa
-        min_lon = -18
-        min_lat = -35
-        max_lon = 51
-        max_lat = 30
+        # min_lon = -18
+        # min_lat = -35
+        # max_lon = 51
+        # max_lat = 30
 
         # Europe
-        # min_lon = -25
-        # min_lat = 36
-        # max_lon = 50
-        # max_lat = 72
+        min_lon = -25
+        min_lat = 36
+        max_lon = 50
+        max_lat = 72
 
         # call generate samples
         samples = self.generate_samples(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
