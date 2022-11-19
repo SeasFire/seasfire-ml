@@ -1,5 +1,6 @@
 ## First draft for GCN model
 ## Needs standardization 
+## Needs evaluation metrics
 ## Until now: loss=nan
 
 
@@ -18,9 +19,6 @@ def train(model, data_loader, epochs, val_loader, batch_size):
 
     val_predictions = []
     val_labels = []
-
-    
-
 
     for epoch in range(epochs+1):
         model.train()
