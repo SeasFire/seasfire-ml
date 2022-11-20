@@ -1,7 +1,4 @@
 ## First draft for GCN model
-## Needs standardization 
-## Needs evaluation metrics
-## Until now: loss=nan
 
 
 from models import *
