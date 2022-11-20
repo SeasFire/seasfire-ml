@@ -6,13 +6,14 @@
 
 from models import *
 from load_dataset import *
-
+from scale_dataset import *
 
 logger = logging.getLogger(__name__)
 
 def train(model, data_loader, epochs, val_loader, batch_size):
     optimizer = model.optimizer
-    criterion = torch.nn.MSELoss()
+    criterion = torch.nn.L1Loss()
+    # criterion = torch.nn.MSELoss()
     
     train_predictions = []
     train_labels = []
@@ -24,7 +25,6 @@ def train(model, data_loader, epochs, val_loader, batch_size):
         model.train()
 
         for data in data_loader:
-            
             data = data.to(device)
             optimizer.zero_grad()
 
@@ -52,19 +52,11 @@ def train(model, data_loader, epochs, val_loader, batch_size):
                 val_predictions.append(preds)
                 val_labels.append(y)
 
-                
-                # val_acc = accuracy(out[data.val_mask].argmax(dim=1), 
-                #                     data.y)
-
-
         train_loss = criterion(torch.stack(train_labels), torch.stack(train_predictions))
         val_loss = criterion(torch.stack(val_labels), torch.stack(val_predictions))
 
-
         print(f'Epoch {epoch} | Train Loss: {train_loss}'
-                # f'| Train Acc: {acc/len(train_loader)*100:>6.2f}% 
-                f' | Val Loss: {val_loss}') 
-                # f'| Val Acc: {val_acc/len(train_loader)*100:.2f}%')
+              f' | Val Loss: {val_loss}') 
 
 def main(args):
     logging.basicConfig(level=logging.DEBUG)
@@ -74,11 +66,22 @@ def main(args):
     if torch.cuda.is_available():
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
-    train_dataset = LoadData(root_dir=args.train_path)
-    train_loader = torch_geometric.loader.DataLoader(train_dataset, batch_size=args.batch_size)
-    input_size = train_dataset.num_features
+    scaler = StandardScaling()
 
-    val_dataset = LoadData(root_dir=args.val_path)
+    graphs = []
+    number_of_train_samples = len(os.listdir(args.train_path))
+    for idx in range(0, number_of_train_samples):
+        graph = torch.load(args.train_path + f'/graph_{idx}.pt')
+        graph = torch.cat((graph.x[:,:4], graph.x[:,5:]), axis = 1)
+        graphs.append(graph)
+    
+    mean_std_tuples = scaler.fit(graphs)
+
+    train_dataset = LoadData(root_dir=args.train_path, transforms=scaler)
+    train_loader = torch_geometric.loader.DataLoader(train_dataset, batch_size=args.batch_size)
+    input_size = train_dataset.num_node_features
+
+    val_dataset = LoadData(root_dir=args.val_path, transforms=scaler)
     val_loader = torch_geometric.loader.DataLoader(val_dataset, batch_size=args.batch_size)
 
     model = None
@@ -93,7 +96,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-p"
+        "-t"
         "--train_path",
         metavar="PATH",
         type=str,
@@ -103,7 +106,7 @@ if __name__ == "__main__":
         help="Train set path",
     )
     parser.add_argument(
-        "-p"
+        "-v"
         "--val_path",
         metavar="PATH",
         type=str,
