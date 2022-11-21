@@ -75,11 +75,11 @@ def main(args):
     
     mean_std_tuples = scaler.fit(graphs)
 
-    train_dataset = LoadData(root_dir=args.train_path, transforms=scaler)
+    train_dataset = GraphLoader(root_dir=args.train_path, transforms=scaler)
     train_loader = torch_geometric.loader.DataLoader(train_dataset, batch_size=args.batch_size)
     input_size = train_dataset.num_node_features
 
-    val_dataset = LoadData(root_dir=args.val_path, transforms=scaler)
+    val_dataset = GraphLoader(root_dir=args.val_path, transforms=scaler)
     val_loader = torch_geometric.loader.DataLoader(val_dataset, batch_size=args.batch_size)
 
     model = None
