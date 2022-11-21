@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 def train(model, data_loader, epochs, val_loader, batch_size):
     optimizer = model.optimizer
-    criterion = torch.nn.L1Loss()
-    # criterion = torch.nn.MSELoss()
+    # criterion = torch.nn.L1Loss()
+    criterion = torch.nn.MSELoss()
     
     train_predictions = []
     train_labels = []
@@ -49,8 +49,8 @@ def train(model, data_loader, epochs, val_loader, batch_size):
                 val_predictions.append(preds)
                 val_labels.append(y)
 
-        train_loss = criterion(torch.stack(train_labels), torch.stack(train_predictions))
-        val_loss = criterion(torch.stack(val_labels), torch.stack(val_predictions))
+        train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
+        val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
         print(f'Epoch {epoch} | Train Loss: {train_loss}'
               f' | Val Loss: {val_loss}') 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=3,
+        default=32,
         help="Batch size",
     )
     parser.add_argument(
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="hidden_channels",
-        default=8,
+        default=4,
         help="Hidden channels",
     )
     parser.add_argument(
@@ -159,7 +159,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-4,
+        default=1e-7,
         help="Learning rate",
     )
     parser.add_argument(
