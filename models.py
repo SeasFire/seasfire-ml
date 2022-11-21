@@ -30,7 +30,7 @@ class GCN(torch.nn.Module):
             input_size, hidden_channels)
         
         self.conv2 = GCNConv(
-            hidden_channels, hidden_channels)
+            hidden_channels, out_channels = hidden_channels)
         
         self.lin = Linear(hidden_channels, 1)
 
