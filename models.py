@@ -34,7 +34,7 @@ class GCN(torch.nn.Module):
         
         self.lin = Linear(hidden_channels, 1)
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=5e-4)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
     def forward(self, x, edge_index, batch = None):
         
@@ -43,12 +43,15 @@ class GCN(torch.nn.Module):
         x = x.relu()
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.conv2(x, edge_index)
-        
+        x = x.relu()
+
         # Readout layer
         batch = torch.zeros(x.shape[0],dtype=int) if batch is None else batch
         batch = batch.to(device)
         x = global_mean_pool(x, batch)
         
+        print(x.shape)
+
         # Final classifier
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin(x)
