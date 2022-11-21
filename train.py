@@ -20,10 +20,11 @@ def train(model, data_loader, epochs, val_loader, batch_size):
 
     for epoch in range(epochs+1):
         model.train()
+        optimizer.zero_grad()
 
         for data in data_loader:
             data = data.to(device)
-            optimizer.zero_grad()
+            
 
             preds = model(data.x, data.edge_index, data.batch)
             y = data.y.unsqueeze(1)
@@ -139,7 +140,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="hidden_channels",
-        default=4,
+        default=64,
         help="Hidden channels",
     )
     parser.add_argument(
@@ -149,7 +150,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=50,
+        default=400,
         help="Epochs",
     )
     parser.add_argument(
@@ -159,7 +160,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-7,
+        default=1e-3,
         help="Learning rate",
     )
     parser.add_argument(
