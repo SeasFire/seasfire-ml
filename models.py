@@ -50,7 +50,6 @@ class GCN(torch.nn.Module):
         batch = batch.to(device)
         x = global_mean_pool(x, batch)
         
-        print(x.shape)
 
         # Final classifier
         x = F.dropout(x, p=0.5, training=self.training)
