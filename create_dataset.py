@@ -369,9 +369,9 @@ class DatasetBuilder:
         )
 
         logger.info("About to create {} samples".format(len(samples)))
-        # self.number_of_positive_samples = 95
+
         # call create sample
-        for idx in tqdm(range(0, len(samples))):
+        for idx in tqdm(range(0, len(samples[:]))):
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
