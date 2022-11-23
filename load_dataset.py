@@ -30,6 +30,7 @@ class GraphLoader(Dataset):
     def __getitem__(self, idx):
         graph = torch.load(self.root_dir + f'graph_{idx}.pt')
         graph.x = torch.cat((graph.x[:,:4], graph.x[:,5:]), axis = 1)
+        #graph.y = graph.y / 73000.0
 
         number_of_nodes = graph.x.shape[0]
 

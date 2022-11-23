@@ -24,7 +24,6 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class GCN(torch.nn.Module):
     def __init__(self, input_size, hidden_channels, learning_rate, weight_decay):
         super(GCN, self).__init__()
-        torch.manual_seed(42)
         
         self.conv1 = GCNConv(
             input_size, hidden_channels)

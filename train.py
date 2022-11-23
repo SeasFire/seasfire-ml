@@ -1,5 +1,4 @@
-## First draft for GCN model
-
+#!/usr/bin/env python3
 
 from models import *
 from load_dataset import *
@@ -9,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 def train(model, data_loader, epochs, val_loader, batch_size):
     optimizer = model.optimizer
-    # criterion = torch.nn.L1Loss()
-    criterion = torch.nn.MSELoss()
+    criterion = torch.nn.L1Loss()
+    #criterion = torch.nn.MSELoss()
     
     train_predictions = []
     train_labels = []
@@ -64,6 +63,8 @@ def main(args):
     if torch.cuda.is_available():
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
+    torch.manual_seed(42)
+
     scaler = StandardScaling()
 
     graphs = []
@@ -100,7 +101,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="/home/lefki/data/train/",
+        default="../data/train/",
         help="Train set path",
     )
     parser.add_argument(
@@ -110,7 +111,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="/home/lefki/data/val/",
+        default="../data/val/",
         help="Validation set path",
     )
     parser.add_argument(
