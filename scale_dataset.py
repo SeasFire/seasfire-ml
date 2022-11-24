@@ -2,7 +2,6 @@ import torch
 import numpy as np
 
 
-
 class StandardScaling():
     def __init__(self):
         pass
@@ -19,17 +18,15 @@ class StandardScaling():
 
         return self.mean_std_tuples
 
-    def transform(self, node):
-        self.node = node
+    def transform(self, graph):
+        self.graph = graph
 
         tmp = list(zip(*self.mean_std_tuples))
         mu = torch.Tensor(list(tmp[0]))
+        # print(mu)
         std = torch.Tensor(list(tmp[1]))
+        # print(std)
 
-        self.node = (self.node - mu) /std
-        return self.node
-
-    # def fit_transform(self, X):
-    #     self.fit(X)
-    #     self.transform(self.X)
-    #     return self.X_scaled
+        self.graph.x = (self.graph.x - mu) /std
+       
+        return self.graph
