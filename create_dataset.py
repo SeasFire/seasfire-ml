@@ -21,13 +21,28 @@ class DatasetBuilder:
     ):
         self.cube_path = cube_path
         self.input_vars = [
-            "ndvi",
-            "t2m_min",
-            "tp",
-            "drought_code_max",
-            "sst",
-            "rel_hum",
             "lst_day",
+            "mslp",
+            "ndvi",
+            "pop_dens",
+            "rel_hum",
+            "ssrd",
+            "sst",
+            "t2m_mean",
+            "tp",
+            "vpd",
+        ]
+        self.oci_input_vars = [
+            "oci_censo",
+            "oci_ea",
+            "oci_epo",
+            "oci_gmsst",
+            "oci_nao",
+            "oci_nina34_anom",
+            "oci_pdo",
+            "oci_pna",
+            "oci_soi",
+            "oci_wp",
         ]
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self.target_var = "gwis_ba"
@@ -116,6 +131,24 @@ class DatasetBuilder:
     #     # print(data['ndvi_mean'].values)
     #     # print(data['ndvi_std'].values)
 
+    def _get_oci_features(
+        self,
+        center_time,
+    ):
+        """Get the OCI features for a certail timerange"""
+        first_week = center_time - np.timedelta64(self.weeks * self.days_per_week, "D")
+        aggregation_in_days = "{}D".format(
+            self.aggregation_in_weeks * self.days_per_week
+        )
+        points_oci_vars = self.cube[self.oci_input_vars].sel(
+            time=slice(first_week, center_time)
+        )
+        points_oci_vars = points_oci_vars.resample(
+            time=aggregation_in_days, closed="left"
+        ).mean(skipna=True)
+        logger.info("oci vars = {}".format(points_oci_vars.values))
+        return points_oci_vars
+
     def create_sample(
         self,
         center_lat,
@@ -130,9 +163,13 @@ class DatasetBuilder:
             )
         )
         first_week = center_time - np.timedelta64(self.weeks * self.days_per_week, "D")
-        logger.debug("Sampling from time period: [{}, {}]".format(first_week, center_time))
+        logger.debug(
+            "Sampling from time period: [{}, {}]".format(first_week, center_time)
+        )
 
-        aggregation_in_days = "{}D".format(self.aggregation_in_weeks * self.days_per_week)
+        aggregation_in_days = "{}D".format(
+            self.aggregation_in_weeks * self.days_per_week
+        )
         logger.debug("Using aggregation period: {}".format(aggregation_in_days))
 
         lat_slice = slice(
@@ -145,9 +182,9 @@ class DatasetBuilder:
         points_input_vars = self.cube[self.input_vars].sel(
             latitude=lat_slice, longitude=lon_slice, time=slice(first_week, center_time)
         )
-        points_input_vars = points_input_vars.resample(time=aggregation_in_days, closed='left').mean(
-            skipna=True
-        )
+        points_input_vars = points_input_vars.resample(
+            time=aggregation_in_days, closed="left"
+        ).mean(skipna=True)
 
         time_dim = points_input_vars.time.shape[0]
         latitude_dim = points_input_vars.latitude.shape[0]
@@ -242,6 +279,9 @@ class DatasetBuilder:
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.info("Computed edge tensor= {}".format(edge_index))
 
+        # Compute OCI features
+        # self._get_oci_features(center_time=center_time)
+
         # Create vertex feature tensors
         # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
@@ -333,6 +373,12 @@ class DatasetBuilder:
                 ),
             )
 
+        # sample_region_gwsi_ba_per_area_below_threshold = (
+        #     sample_region_gwsi_ba_per_area <= self.positive_samples_threshold
+        # )
+        # total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
+        # logger.info("Samples below threshold = {}".format(total_below_threshold))
+
         return samples_list
 
     def compute_ground_truth(self, lat, lon, time):
@@ -369,9 +415,9 @@ class DatasetBuilder:
         )
 
         logger.info("About to create {} samples".format(len(samples)))
-        # self.number_of_positive_samples = 95
+
         # call create sample
-        for idx in tqdm(range(0, len(samples))):
+        for idx in tqdm(range(0, len(samples[:]))):
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
