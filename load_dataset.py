@@ -28,16 +28,18 @@ class GraphLoader(Dataset):
         return len([entry for entry in os.listdir(self.root_dir)])
 
     def __getitem__(self, idx):
+        
         graph = torch.load(self.root_dir + f'graph_{idx}.pt')
+        graph.y = graph.y/1000.0
         graph.x = torch.cat((graph.x[:,:4], graph.x[:,5:]), axis = 1)
 
-        number_of_nodes = graph.x.shape[0]
+        graph.pos[:,:2] = torch.cos(graph.pos[:,:2])
+        # print(graph.pos)
 
         if self.transforms is not None:
-            graph.x[0] = self.transforms.transform(graph.x[0])
-            for node_idx in range(0, number_of_nodes):
-                graph.x[node_idx] = self.transforms.transform(graph.x[node_idx])
-                graph.x[node_idx] = torch.nan_to_num(graph.x[node_idx], nan=-1.0)
-
+            graph = self.transforms.transform(graph)
+            graph.x = torch.nan_to_num(graph.x, nan=-1.0)
+        
+        graph.x = torch.cat((graph.x[:,:], graph.pos[:,:2]), axis = 1)
+        
         return graph
-    
