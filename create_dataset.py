@@ -98,8 +98,8 @@ class DatasetBuilder:
         logger.info("Vars: {}".format(self._cube.data_vars))
 
         # positive example threshold
-        self.positive_samples_threshold = positive_samples_threshold
-        self.number_of_positive_samples = 0
+        self._positive_samples_threshold = positive_samples_threshold
+        self._number_of_positive_samples = 0
 
         self._number_of_train_years = 13
         self._days_per_week = 8
@@ -116,31 +116,31 @@ class DatasetBuilder:
         )
 
         # split time periods
-        self.time_train = (
+        self._time_train = (
             self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
             - (self._target_shift + self._target_length),
         )  # 58-594 week -> 13 years
-        logger.info("Train time in weeks: {}".format(self.time_train))
-        self.time_val = (
+        logger.info("Train time in weeks: {}".format(self._time_train))
+        self._time_val = (
             self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
         )  # 598-715 week -> 2.5 years
-        logger.info("Val time in weeks: {}".format(self.time_val))
-        self.time_test = (
+        logger.info("Val time in weeks: {}".format(self._time_val))
+        self._time_test = (
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
             916,
         )  # 714-916 week -> 4.5 years
-        logger.info("Test time in weeks: {}".format(self.time_test))
+        logger.info("Test time in weeks: {}".format(self._time_test))
 
         if self._split == "train":
-            self._start_time, self._end_time = self.time_train
+            self._start_time, self._end_time = self._time_train
         elif self._split == "val":
-            self._start_time, self._end_time = self.time_val
+            self._start_time, self._end_time = self._time_val
         elif self._split == "test":
-            self._start_time, self._end_time = self.time_test
+            self._start_time, self._end_time = self._time_test
         else:
             raise ValueError("Invalid split type")
 
@@ -342,7 +342,7 @@ class DatasetBuilder:
         )
         # print(sample_region_gwsi_ba_per_area.shape)
         sample_region_gwsi_ba_per_area_above_threshold = (
-            sample_region_gwsi_ba_per_area > self.positive_samples_threshold
+            sample_region_gwsi_ba_per_area > self._positive_samples_threshold
         )
         sample_len_above_threshold = np.sum(
             sample_region_gwsi_ba_per_area_above_threshold
@@ -371,7 +371,7 @@ class DatasetBuilder:
 
         # now generate samples below threshold
         # sample_region_gwsi_ba_per_area_below_threshold = (
-        #     sample_region_gwsi_ba_per_area <= self.positive_samples_threshold
+        #     sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
         # )
         # print(sample_region_gwsi_ba_per_area_below_threshold.shape)
         # total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
@@ -428,14 +428,14 @@ class DatasetBuilder:
         max_lon = 50
         max_lat = 72
 
-        # call generate samples
+        # create list of samples to generate
         samples = self.generate_samples(
             min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
         )
 
         logger.info("About to create {} samples".format(len(samples)))
 
-        # call create sample
+        # now generate them and write to disk
         for idx in tqdm(range(0, len(samples[:]))):
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
@@ -448,8 +448,8 @@ class DatasetBuilder:
                 ground_truth=ground_truth,
             )
 
-            self._write_sample_to_disk(graph, self.number_of_positive_samples)
-            self.number_of_positive_samples += 1
+            self._write_sample_to_disk(graph, self._number_of_positive_samples)
+            self._number_of_positive_samples += 1
 
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
