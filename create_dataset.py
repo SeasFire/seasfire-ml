@@ -17,10 +17,16 @@ logger = logging.getLogger(__name__)
 
 class DatasetBuilder:
     def __init__(
-        self, cube_path, output_folder, split, positive_samples_threshold, target_shift
+        self,
+        cube_path,
+        cube_resolution,
+        output_folder,
+        split,
+        positive_samples_threshold,
+        target_shift,
     ):
-        self.cube_path = cube_path
-        self.input_vars = [
+        self._cube_path = cube_path
+        self._input_vars = [
             "lst_day",
             "mslp",
             "ndvi",
@@ -32,7 +38,7 @@ class DatasetBuilder:
             "tp",
             "vpd",
         ]
-        self.oci_input_vars = [
+        self._oci_input_vars = [
             "oci_censo",
             "oci_ea",
             "oci_epo",
@@ -45,27 +51,45 @@ class DatasetBuilder:
             "oci_wp",
         ]
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
-        self.target_var = "gwis_ba"
-        logger.info("Using target variable: {}".format(self.target_var))
+        self._target_var = "gwis_ba"
+        logger.info("Using target variable: {}".format(self._target_var))
+
+        if cube_resolution not in ["100km", "25km"]: 
+            raise ValueError("Wrong cube resolution")
+        self._cube_resolution = cube_resolution
+        logger.info("Using cube resolution: {}".format(self._cube_resolution))
+
+        if cube_resolution == "25km":
+            self._sp_res = 0.25
+            self._lat_min = -89.875
+            self._lat_max = 89.875
+            self._lon_min = -179.875
+            self._lon_max = 179.875
+        else: 
+            self._sp_res = 1
+            self._lat_min = -89.5
+            self._lat_max = 89.5
+            self._lon_min = -179.5
+            self._lon_max = 179.5
 
         # validate split
         if split not in ["train", "test", "val"]:
             raise ValueError("Wrong split type")
-        self.split = split
-        logger.info("Using split: {}".format(self.split))
+        self._split = split
+        logger.info("Using split: {}".format(self._split))
 
         # create output split folder
-        self.output_folder = os.path.join(output_folder, self.split)
-        for folder in [self.output_folder]:
+        self._output_folder = os.path.join(output_folder, self._split)
+        for folder in [self._output_folder]:
             logger.info("Creating output folder {}".format(folder))
             if not os.path.exists(folder):
                 os.makedirs(folder)
 
         # open zarr and display basic info
-        logger.info("Opening zarr file: {}".format(self.cube_path))
-        self.cube = xr.open_zarr(self.cube_path, consolidated=False)
-        logger.info("Cube: {}".format(self.cube))
-        logger.info("Vars: {}".format(self.cube.data_vars))
+        logger.info("Opening zarr file: {}".format(self._cube_path))
+        self._cube = xr.open_zarr(self._cube_path, consolidated=False)
+        logger.info("Cube: {}".format(self._cube))
+        logger.info("Vars: {}".format(self._cube.data_vars))
 
         # positive example threshold
         self.positive_samples_threshold = positive_samples_threshold
@@ -73,74 +97,47 @@ class DatasetBuilder:
 
         self.number_of_train_years = 13
         self.days_per_week = 8
-        self.weeks = 48
-        self.aggregation_in_weeks = 12
+        self.timeseries_weeks = 48
+        self.aggregation_in_weeks = 4 # aggregate per month
         self.target_shift = target_shift  # in weeks, e.g. 4
-        self.year_in_weeks = 46
-
-        # Spatial resolution
-        self._sp_res = 0.25
-        self._lat_min = -89.875
-        self._lat_max = 89.875
-        self._lon_min = -179.875
-        self._lon_max = 179.875
-
-        # mean and std dictionary
-        self.mean_std_dict = {}
+        self.year_in_weeks = 48
 
         # split time periods
         self.time_train = (
-            self.weeks,
+            self.timeseries_weeks,
             self.year_in_weeks * self.number_of_train_years - self.target_shift,
         )  # 58-594 week -> 13 years
         logger.info("Train time in weeks: {}".format(self.time_train))
         self.time_val = (
-            self.year_in_weeks * self.number_of_train_years + self.weeks,
-            self.year_in_weeks * self.number_of_train_years + 2 * self.weeks,
+            self.year_in_weeks * self.number_of_train_years + self.timeseries_weeks,
+            self.year_in_weeks * self.number_of_train_years + 2 * self.timeseries_weeks,
         )  # 598-715 week -> 2.5 years
         logger.info("Val time in weeks: {}".format(self.time_val))
         self.time_test = (
-            self.year_in_weeks * self.number_of_train_years + 2 * self.weeks,
+            self.year_in_weeks * self.number_of_train_years + 2 * self.timeseries_weeks,
             916,
         )  # 714-916 week -> 4.5 years
         logger.info("Test time in weeks: {}".format(self.time_test))
 
-        if self.split == "train":
+        if self._split == "train":
             self._start_time, self._end_time = self.time_train
-        elif self.split == "val":
+        elif self._split == "val":
             self._start_time, self._end_time = self.time_val
-        elif self.split == "test":
+        elif self._split == "test":
             self._start_time, self._end_time = self.time_test
         else:
             raise ValueError("Invalid split type")
-
-    # def compute_mean_std_dict(self):
-    #     # TODO: compute mean_std_dict
-    #     first_time, last_time = self.time_train
-
-    #     for var in self.input_vars + [self.target_var]:
-    #         self.mean_std_dict[var + '_mean'] = self.cube[var].isel(time=slice(first_time, last_time)).mean()
-    #         self.mean_std_dict[var + '_std'] = self.cube[var].isel(time=slice(first_time, last_time)).std()
-
-    #     # Store data
-    #     with open('mean_std_dict.pickle', 'wb') as handle:
-    #         pkl.dump(self.mean_std_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
-
-    #     # # # Load data
-    #     # data = pkl.load(open('mean_std_dict.pickle', 'rb'))
-    #     # print(data['ndvi_mean'].values)
-    #     # print(data['ndvi_std'].values)
 
     def _get_oci_features(
         self,
         center_time,
     ):
         """Get the OCI features for a certail timerange"""
-        first_week = center_time - np.timedelta64(self.weeks * self.days_per_week, "D")
+        first_week = center_time - np.timedelta64(self.timeseries_weeks * self.days_per_week, "D")
         aggregation_in_days = "{}D".format(
             self.aggregation_in_weeks * self.days_per_week
         )
-        points_oci_vars = self.cube[self.oci_input_vars].sel(
+        points_oci_vars = self._cube[self.oci_input_vars].sel(
             time=slice(first_week, center_time)
         )
         points_oci_vars = points_oci_vars.resample(
@@ -162,7 +159,7 @@ class DatasetBuilder:
                 center_lat, center_lon, center_time, radius
             )
         )
-        first_week = center_time - np.timedelta64(self.weeks * self.days_per_week, "D")
+        first_week = center_time - np.timedelta64(self.timeseries_weeks * self.days_per_week, "D")
         logger.debug(
             "Sampling from time period: [{}, {}]".format(first_week, center_time)
         )
@@ -179,7 +176,7 @@ class DatasetBuilder:
             center_lon - radius * self._sp_res, center_lon + radius * self._sp_res
         )
 
-        points_input_vars = self.cube[self.input_vars].sel(
+        points_input_vars = self._cube[self._input_vars].sel(
             latitude=lat_slice, longitude=lon_slice, time=slice(first_week, center_time)
         )
         points_input_vars = points_input_vars.resample(
@@ -317,7 +314,7 @@ class DatasetBuilder:
         )
 
     def generate_samples(self, min_lon, min_lat, max_lon, max_lat):
-        logger.info("Generating sample list for split={}".format(self.split))
+        logger.info("Generating sample list for split={}".format(self._split))
         logger.info(
             "Generating from week={} to week={}".format(
                 self._start_time, self._end_time
@@ -325,7 +322,7 @@ class DatasetBuilder:
         )
 
         # define sample region
-        sample_region = self.cube.sel(
+        sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
         ).isel(time=slice(self._start_time, self._end_time))
 
@@ -334,7 +331,7 @@ class DatasetBuilder:
 
         # compute area in sample region and add time dimension
         sample_region_area = (
-            self.cube["area"]
+            self._cube["area"]
             .sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon))
             .expand_dims(dim={"time": sample_region.time}, axis=0)
         )
@@ -354,10 +351,10 @@ class DatasetBuilder:
         )
 
         # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
-        # grid_area_land = (self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
-        #                   -(self.cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
-        #                   -(self.cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
-        #                   -(self.cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self.cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
+        # grid_area_land = (self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
+        #                   -(self._cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
+        #                   -(self._cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
+        #                   -(self._cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
         # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
         # print(grid_area_land)
 
@@ -388,7 +385,7 @@ class DatasetBuilder:
         time_slice = slice(time, time + np.timedelta64(self.target_shift, "W"))
 
         values = (
-            self.cube["gwis_ba"]
+            self._cube["gwis_ba"]
             .sel(latitude=lat, longitude=lon, time=time_slice)
             .values
         )
@@ -433,7 +430,7 @@ class DatasetBuilder:
             self.number_of_positive_samples += 1
 
     def _write_sample_to_disk(self, data, index):
-        output_path = os.path.join(self.output_folder, "graph_{}.pt".format(index))
+        output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
         torch.save(data, output_path)
 
     def _in_bounding_box(self, lat_lon, center_lat_lon, radius):
@@ -486,6 +483,7 @@ def main(args):
 
     builder = DatasetBuilder(
         args.cube_path,
+        args.cube_resolution,
         args.output_folder,
         args.split,
         args.positive_samples_threshold,
@@ -503,8 +501,17 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../seasfire.zarr",
+        default="../1d_SeasFireCube.zarr",
         help="Cube path",
+    )
+    parser.add_argument(
+        "--cube-resolution",
+        metavar="RESOLUTION",
+        type=str,
+        action="store",
+        dest="cube_resolution",
+        default="100km",
+        help="Cube resolution. Can be 100km or 25km.",
     )
     parser.add_argument(
         "--output-folder",
@@ -522,7 +529,7 @@ if __name__ == "__main__":
         action="store",
         dest="split",
         default="train",
-        help="Split type",
+        help="Split type. Can be train, test, val.",
     )
     parser.add_argument(
         "--positive-samples-threshold",
@@ -530,7 +537,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.00001,
+        default=0.0000005,
         help="Positive sample threshold",
     )
     parser.add_argument(
