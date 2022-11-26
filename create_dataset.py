@@ -23,6 +23,7 @@ class DatasetBuilder:
         output_folder,
         split,
         positive_samples_threshold,
+        seed,
         target_shift,
     ):
         self._cube_path = cube_path
@@ -54,7 +55,11 @@ class DatasetBuilder:
         self._target_var = "gwis_ba"
         logger.info("Using target variable: {}".format(self._target_var))
 
-        if cube_resolution not in ["100km", "25km"]: 
+        logger.info("Using seed: {}".format(seed))
+        self._seed = seed
+        self._rng = np.random.default_rng(self._seed)
+
+        if cube_resolution not in ["100km", "25km"]:
             raise ValueError("Wrong cube resolution")
         self._cube_resolution = cube_resolution
         logger.info("Using cube resolution: {}".format(self._cube_resolution))
@@ -65,7 +70,7 @@ class DatasetBuilder:
             self._lat_max = 89.875
             self._lon_min = -179.875
             self._lon_max = 179.875
-        else: 
+        else:
             self._sp_res = 1
             self._lat_min = -89.5
             self._lat_max = 89.5
@@ -98,7 +103,7 @@ class DatasetBuilder:
         self.number_of_train_years = 13
         self.days_per_week = 8
         self.timeseries_weeks = 48
-        self.aggregation_in_weeks = 4 # aggregate per month
+        self.aggregation_in_weeks = 4  # aggregate per month
         self.target_shift = target_shift  # in weeks, e.g. 4
         self.year_in_weeks = 48
 
@@ -133,7 +138,9 @@ class DatasetBuilder:
         center_time,
     ):
         """Get the OCI features for a certail timerange"""
-        first_week = center_time - np.timedelta64(self.timeseries_weeks * self.days_per_week, "D")
+        first_week = center_time - np.timedelta64(
+            self.timeseries_weeks * self.days_per_week, "D"
+        )
         aggregation_in_days = "{}D".format(
             self.aggregation_in_weeks * self.days_per_week
         )
@@ -159,15 +166,17 @@ class DatasetBuilder:
                 center_lat, center_lon, center_time, radius
             )
         )
-        first_week = center_time - np.timedelta64(self.timeseries_weeks * self.days_per_week, "D")
+        first_week = center_time - np.timedelta64(
+            self.timeseries_weeks * self.days_per_week, "D"
+        )
         logger.debug(
-            "Sampling from time period: [{}, {}]".format(first_week, center_time)
+            "Sampling from time period in weeks: [{}, {}]".format(first_week, center_time)
         )
 
         aggregation_in_days = "{}D".format(
             self.aggregation_in_weeks * self.days_per_week
         )
-        logger.debug("Using aggregation period: {}".format(aggregation_in_days))
+        logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
 
         lat_slice = slice(
             center_lat + radius * self._sp_res, center_lat - radius * self._sp_res
@@ -192,10 +201,6 @@ class DatasetBuilder:
             )
         )
 
-        # Compute time coordinates from present to past
-        time_coords = np.flip(points_input_vars.time.to_numpy())
-        logger.info("Time coordinates in reverse: {}".format(time_coords))
-
         # Create list of vertices and mapping from vertices to integer indices
         vertices = []
         vertices_idx = {}
@@ -207,74 +212,59 @@ class DatasetBuilder:
                 ),
             )
         )
-        for _, time_val in enumerate(time_coords):
-            for cur in grid:
-                cur_vertex = (cur[0], cur[1], time_val)
-                cur_vertex_index = len(vertices)
-                vertices_idx[cur_vertex] = cur_vertex_index
-                vertices.append(cur_vertex)
+        for cur in grid:
+            cur_vertex = (cur[0], cur[1])
+            cur_vertex_index = len(vertices)
+            vertices_idx[cur_vertex] = cur_vertex_index
+            vertices.append(cur_vertex)        
         logger.info("Final graph will have {} vertices".format(len(vertices)))
 
         # Create edges
         edges = []
-        for time_idx, time_val in enumerate(time_coords):
-            for lat_inc in range(-radius, radius + 1):
-                for lon_inc in range(-radius, radius + 1):
-                    # vertex that we care about
-                    cur = (
-                        center_lat + lat_inc * self._sp_res,
-                        center_lon + lon_inc * self._sp_res,
+        for lat_inc in range(-radius, radius + 1):
+            for lon_inc in range(-radius, radius + 1):
+                # vertex that we care about
+                cur = (
+                    center_lat + lat_inc * self._sp_res,
+                    center_lon + lon_inc * self._sp_res,
+                )
+                cur_idx = vertices_idx[(cur[0], cur[1])]
+                # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+
+                # 1-hop neighbors
+                cur_neighbors = self._create_neighbors(
+                    cur, radius=1, include_self=False
+                )
+                # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
+
+                # 1-hop neighbors inside our bounding box from the center vertex
+                cur_neighbors_bb = [
+                    neighbor
+                    for neighbor in cur_neighbors
+                    if self._in_bounding_box(
+                        neighbor,
+                        center_lat_lon=(center_lat, center_lon),
+                        radius=radius,
                     )
-                    cur_idx = vertices_idx[(cur[0], cur[1], time_val)]
-                    # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+                ]
+                cur_neighbors_bb = list(
+                    map(self._normalize_lat_lon, cur_neighbors_bb)
+                )
+                cur_neighbors_bb_idx = [
+                    vertices_idx[(x[0], x[1])] for x in cur_neighbors_bb
+                ]
+                # logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
+                # logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
 
-                    # 1-hop neighbors
-                    cur_neighbors = self._create_neighbors(
-                        cur, radius=1, include_self=False
-                    )
-                    # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
-
-                    # 1-hop neighbors inside our bounding box from the center vertex
-                    cur_neighbors_bb = [
-                        neighbor
-                        for neighbor in cur_neighbors
-                        if self._in_bounding_box(
-                            neighbor,
-                            center_lat_lon=(center_lat, center_lon),
-                            radius=radius,
-                        )
-                    ]
-                    cur_neighbors_bb = list(
-                        map(self._normalize_lat_lon, cur_neighbors_bb)
-                    )
-                    cur_neighbors_bb_idx = [
-                        vertices_idx[(x[0], x[1], time_val)] for x in cur_neighbors_bb
-                    ]
-                    # logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
-                    # logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
-
-                    for neighbor_idx in cur_neighbors_bb_idx:
-                        # add only on direction, the other will be added by the other vertex
-                        edges.append((cur_idx, neighbor_idx))
-
-                    if time_idx < len(time_coords) - 1:
-                        past_time_val = time_coords[time_idx + 1]
-                        cur_past_neighbors_bb_idx = [
-                            vertices_idx[(x[0], x[1], past_time_val)]
-                            for x in cur_neighbors_bb
-                        ]
-                        # logger.info("past cur_idx 1-neighbors in bb = {}".format(cur_past_neighbors_bb_idx))
-
-                        for neighbor_idx in cur_past_neighbors_bb_idx:
-                            # add both directions to and from the past
-                            edges.append((cur_idx, neighbor_idx))
-                            edges.append((neighbor_idx, cur_idx))
+                for neighbor_idx in cur_neighbors_bb_idx:
+                    # add only one direction, the other will be added by the other vertex
+                    edges.append((cur_idx, neighbor_idx))
 
         # Create edge index tensor
         logger.info("Total edges added in graph = {}".format(len(edges)))
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
-        logger.info("Computed edge tensor= {}".format(edge_index))
+        logger.debug("Computed edge tensor= {}".format(edge_index))
 
         # Compute OCI features
         # self._get_oci_features(center_time=center_time)
@@ -282,7 +272,7 @@ class DatasetBuilder:
         # Create vertex feature tensors
         # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(
-            vertex=("latitude", "longitude", "time")
+            vertex=("latitude", "longitude")
         )
         vertex_features = []
         vertex_positions = []
@@ -293,7 +283,7 @@ class DatasetBuilder:
                 .to_array(dim="variable", name=None)
                 .values
             )
-            v_position = [vertex[0], vertex[1], self._datetime64_to_ts(vertex[2])]
+            v_position = [vertex[0], vertex[1]]
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
@@ -341,14 +331,14 @@ class DatasetBuilder:
         sample_region_gwsi_ba_per_area = (
             sample_region_gwsi_ba_values / sample_region_area_values
         )
+        #print(sample_region_gwsi_ba_per_area.shape)
         sample_region_gwsi_ba_per_area_above_threshold = (
             sample_region_gwsi_ba_per_area > self.positive_samples_threshold
         )
-        logger.info(
-            "Samples above threshold={}".format(
-                np.sum(sample_region_gwsi_ba_per_area_above_threshold)
-            )
+        sample_len_above_threshold = np.sum(
+            sample_region_gwsi_ba_per_area_above_threshold
         )
+        logger.info("Samples above threshold={}".format(sample_len_above_threshold))
 
         # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
         # grid_area_land = (self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
@@ -358,7 +348,7 @@ class DatasetBuilder:
         # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
         # print(grid_area_land)
 
-        # return (lat, lon, time) of samples
+        # create (lat, lon, time) of samples for samples above threshold
         samples_list = []
         samples_index = np.argwhere(sample_region_gwsi_ba_per_area_above_threshold)
         for index in samples_index:
@@ -370,11 +360,20 @@ class DatasetBuilder:
                 ),
             )
 
+        # now generate samples below threshold
         # sample_region_gwsi_ba_per_area_below_threshold = (
         #     sample_region_gwsi_ba_per_area <= self.positive_samples_threshold
         # )
+        # print(sample_region_gwsi_ba_per_area_below_threshold.shape)
         # total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
+        # sample_len_below_threshold = sample_len_above_threshold
         # logger.info("Samples below threshold = {}".format(total_below_threshold))
+
+        #choices = np.arange(sample_len_below_threshold)
+        #choices = self._rng.choice(np.arange(sample_len_below_threshold), replace=False)
+        # choices = self._rng.choice(range(total_below_threshold), size=sample_len_below_threshold, replace=False)
+
+        # print(choices)
 
         return samples_list
 
@@ -487,6 +486,7 @@ def main(args):
         args.output_folder,
         args.split,
         args.positive_samples_threshold,
+        args.seed,
         args.target_shift,
     )
     builder.run()
@@ -540,6 +540,15 @@ if __name__ == "__main__":
         default=0.0000005,
         help="Positive sample threshold",
     )
+    parser.add_argument(
+        "--seed",
+        metavar="INT",
+        type=int,
+        action="store",
+        dest="seed",
+        default=17,
+        help="Seed for random number generation",
+    )    
     parser.add_argument(
         "--target-shift",
         metavar="KEY",
