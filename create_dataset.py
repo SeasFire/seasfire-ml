@@ -312,7 +312,7 @@ class DatasetBuilder:
             pos=vertex_positions,
         )
 
-    def generate_samples(self, min_lon, min_lat, max_lon, max_lat):
+    def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         logger.info("Generating sample list for split={}".format(self._split))
         logger.info(
             "Generating from week={} to week={}".format(
@@ -358,10 +358,12 @@ class DatasetBuilder:
         # print(grid_area_land)
 
         # create (lat, lon, time) of samples for samples above threshold
-        samples_list = []
-        samples_index = np.argwhere(sample_region_gwsi_ba_per_area_above_threshold)
-        for index in samples_index:
-            samples_list.append(
+        above_threshold_samples_list = []
+        above_threshold_samples_index = np.argwhere(
+            sample_region_gwsi_ba_per_area_above_threshold
+        )
+        for index in above_threshold_samples_index:
+            above_threshold_samples_list.append(
                 (
                     sample_region.latitude.values[index[1]],
                     sample_region.longitude.values[index[2]],
@@ -370,21 +372,32 @@ class DatasetBuilder:
             )
 
         # now generate samples below threshold
-        # sample_region_gwsi_ba_per_area_below_threshold = (
-        #     sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
-        # )
-        # print(sample_region_gwsi_ba_per_area_below_threshold.shape)
-        # total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
-        # sample_len_below_threshold = sample_len_above_threshold
-        # logger.info("Samples below threshold = {}".format(total_below_threshold))
+        sample_region_gwsi_ba_per_area_below_threshold = (
+            sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
+        )
+        total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
+        sample_len_below_threshold = sample_len_above_threshold
+        logger.info("Samples below threshold = {}".format(total_below_threshold))
 
-        # choices = np.arange(sample_len_below_threshold)
-        # choices = self._rng.choice(np.arange(sample_len_below_threshold), replace=False)
-        # choices = self._rng.choice(range(total_below_threshold), size=sample_len_below_threshold, replace=False)
+        all_below_threshold_samples_index = np.argwhere(
+            sample_region_gwsi_ba_per_area_below_threshold
+        )
+        below_threshold_samples_index = self._rng.choice(
+            all_below_threshold_samples_index,
+            size=sample_len_below_threshold,
+            replace=False,
+        )
+        below_threshold_samples_list = []
+        for index in below_threshold_samples_index:
+            below_threshold_samples_list.append(
+                (
+                    sample_region.latitude.values[index[1]],
+                    sample_region.longitude.values[index[2]],
+                    sample_region.time.values[index[0]],
+                ),
+            )
 
-        # print(choices)
-
-        return samples_list
+        return above_threshold_samples_list, below_threshold_samples_list
 
     def compute_ground_truth(self, lat, lon, time):
         start_time = time + np.timedelta64(
@@ -429,9 +442,10 @@ class DatasetBuilder:
         max_lat = 72
 
         # create list of samples to generate
-        samples = self.generate_samples(
+        above_threshold_samples, below_threshold_samples = self.generate_samples_lists(
             min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
         )
+        samples = above_threshold_samples + below_threshold_samples
 
         logger.info("About to create {} samples".format(len(samples)))
 
