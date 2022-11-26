@@ -7,19 +7,23 @@ from scale_dataset import *
 logger = logging.getLogger(__name__)
 
 def train(model, data_loader, epochs, val_loader, batch_size):
+    
+
     optimizer = model.optimizer
     criterion = torch.nn.L1Loss()
     #criterion = torch.nn.MSELoss()
     
-    train_predictions = []
-    train_labels = []
+    
 
-    val_predictions = []
-    val_labels = []
-
-    for epoch in range(epochs+1):
+    for epoch in tqdm(range(epochs+1)):
         model.train()
         optimizer.zero_grad()
+
+        train_predictions = []
+        train_labels = []
+
+        val_predictions = []
+        val_labels = []
 
         for data in data_loader:
             data = data.to(device)
@@ -36,6 +40,8 @@ def train(model, data_loader, epochs, val_loader, batch_size):
 
             optimizer.step()
 
+        print(preds, y)
+            
         # Validation
         with torch.no_grad():
             model.eval()
@@ -49,16 +55,36 @@ def train(model, data_loader, epochs, val_loader, batch_size):
                 val_predictions.append(preds)
                 val_labels.append(y)
 
+                # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
+                # acc = int(correct) / int(data.test_mask.sum())
+                # print(f'Accuracy: {acc:.4f}')
+
+
+
+        
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
+        
+
         print(f'Epoch {epoch} | Train Loss: {train_loss}'
               f' | Val Loss: {val_loss}') 
+        
+        # x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
+
+        # plt.scatter(x_axis, torch.cat(train_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
+        # plt.scatter(x_axis, torch.cat(train_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
+        # # plt.show()
+        # plt.savefig('logs/' + str(epoch)+'.png')
+
 
 def main(args):
-    logging.basicConfig(level=logging.DEBUG)
+    FileOutputHandler = logging.FileHandler('logs.log')
+    logger.addHandler(FileOutputHandler)
 
-    logger.debug("Torch version: {}".format(torch.__version__))
+    # logger.warning("Warning.")
+
+    logger.warning("Torch version: {}".format(torch.__version__))
     logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
@@ -75,7 +101,7 @@ def main(args):
         graphs.append(graph)
     
     mean_std_tuples = scaler.fit(graphs)
-
+    # print(mean_std_tuples)
     train_dataset = GraphLoader(root_dir=args.train_path, transforms=scaler)
     train_loader = torch_geometric.loader.DataLoader(train_dataset, batch_size=args.batch_size)
     input_size = train_dataset.num_node_features
@@ -161,7 +187,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-3,
+        default=5e-5,
         help="Learning rate",
     )
     parser.add_argument(
@@ -171,7 +197,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=5e-4,
+        default=5e-5,
         help="Weight decay",
     )
     # parser.add_argument(

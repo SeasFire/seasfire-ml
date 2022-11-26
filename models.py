@@ -16,7 +16,8 @@ from torch_geometric.data import Dataset, Data
 from torch.nn import Linear
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, GATConv, GATv2Conv, TransformerConv
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_mean_pool, global_max_pool
+
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -30,8 +31,12 @@ class GCN(torch.nn.Module):
         
         self.conv2 = GCNConv(
             hidden_channels, out_channels = hidden_channels)
+
+        self.conv3 = GCNConv(
+            hidden_channels-16, out_channels = hidden_channels-16)
         
-        self.lin = Linear(hidden_channels, 1)
+        self.lin1 = Linear(hidden_channels, hidden_channels)
+        self.lin2 = Linear(hidden_channels, 1)
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
@@ -40,20 +45,27 @@ class GCN(torch.nn.Module):
         # Node embedding 
         x = self.conv1(x, edge_index)
         x = x.relu()
-        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.dropout(x, p=0.3, training=self.training)
         x = self.conv2(x, edge_index)
         x = x.relu()
+        x = F.dropout(x, p=0.2, training=self.training)
+        # x = self.conv3(x, edge_index)
+        # x = x.relu()
 
         # Readout layer
         batch = torch.zeros(x.shape[0],dtype=int) if batch is None else batch
         batch = batch.to(device)
         x = global_mean_pool(x, batch)
+        # x = global_max_pool(x, batch)
         
 
         # Final classifier
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin(x)
         
+        x = self.lin1(x)
+        x = x.relu()
+        x = F.dropout(x, p=0.3, training=self.training)
+        x = self.lin2(x)
+        x = x.relu()
     
         return x
 
