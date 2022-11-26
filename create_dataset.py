@@ -25,6 +25,7 @@ class DatasetBuilder:
         positive_samples_threshold,
         seed,
         target_shift,
+        target_length,
     ):
         self._cube_path = cube_path
         self._input_vars = [
@@ -100,26 +101,36 @@ class DatasetBuilder:
         self.positive_samples_threshold = positive_samples_threshold
         self.number_of_positive_samples = 0
 
-        self.number_of_train_years = 13
-        self.days_per_week = 8
-        self.timeseries_weeks = 48
-        self.aggregation_in_weeks = 4  # aggregate per month
-        self.target_shift = target_shift  # in weeks, e.g. 4
-        self.year_in_weeks = 48
+        self._number_of_train_years = 13
+        self._days_per_week = 8
+        self._timeseries_weeks = 48
+        self._aggregation_in_weeks = 4  # aggregate per month
+        self._target_shift = target_shift  # in weeks, e.g. 0
+        self._target_length = target_length  # in weeks, e.g. 4
+        self._year_in_weeks = 48
+
+        logger.info(
+            "Target period weeks in the future: [{},{}]".format(
+                self._target_shift, self._target_shift + self._target_length
+            )
+        )
 
         # split time periods
         self.time_train = (
-            self.timeseries_weeks,
-            self.year_in_weeks * self.number_of_train_years - self.target_shift,
+            self._timeseries_weeks,
+            self._year_in_weeks * self._number_of_train_years
+            - (self._target_shift + self._target_length),
         )  # 58-594 week -> 13 years
         logger.info("Train time in weeks: {}".format(self.time_train))
         self.time_val = (
-            self.year_in_weeks * self.number_of_train_years + self.timeseries_weeks,
-            self.year_in_weeks * self.number_of_train_years + 2 * self.timeseries_weeks,
+            self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
+            self._year_in_weeks * self._number_of_train_years
+            + 2 * self._timeseries_weeks,
         )  # 598-715 week -> 2.5 years
         logger.info("Val time in weeks: {}".format(self.time_val))
         self.time_test = (
-            self.year_in_weeks * self.number_of_train_years + 2 * self.timeseries_weeks,
+            self._year_in_weeks * self._number_of_train_years
+            + 2 * self._timeseries_weeks,
             916,
         )  # 714-916 week -> 4.5 years
         logger.info("Test time in weeks: {}".format(self.time_test))
@@ -139,12 +150,12 @@ class DatasetBuilder:
     ):
         """Get the OCI features for a certail timerange"""
         first_week = center_time - np.timedelta64(
-            self.timeseries_weeks * self.days_per_week, "D"
+            self._timeseries_weeks * self._days_per_week, "D"
         )
         aggregation_in_days = "{}D".format(
-            self.aggregation_in_weeks * self.days_per_week
+            self._aggregation_in_weeks * self._days_per_week
         )
-        points_oci_vars = self._cube[self.oci_input_vars].sel(
+        points_oci_vars = self._cube[self._oci_input_vars].sel(
             time=slice(first_week, center_time)
         )
         points_oci_vars = points_oci_vars.resample(
@@ -167,14 +178,16 @@ class DatasetBuilder:
             )
         )
         first_week = center_time - np.timedelta64(
-            self.timeseries_weeks * self.days_per_week, "D"
+            self._timeseries_weeks * self._days_per_week, "D"
         )
         logger.debug(
-            "Sampling from time period in weeks: [{}, {}]".format(first_week, center_time)
+            "Sampling from time period in weeks: [{}, {}]".format(
+                first_week, center_time
+            )
         )
 
         aggregation_in_days = "{}D".format(
-            self.aggregation_in_weeks * self.days_per_week
+            self._aggregation_in_weeks * self._days_per_week
         )
         logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
 
@@ -216,7 +229,7 @@ class DatasetBuilder:
             cur_vertex = (cur[0], cur[1])
             cur_vertex_index = len(vertices)
             vertices_idx[cur_vertex] = cur_vertex_index
-            vertices.append(cur_vertex)        
+            vertices.append(cur_vertex)
         logger.info("Final graph will have {} vertices".format(len(vertices)))
 
         # Create edges
@@ -247,9 +260,7 @@ class DatasetBuilder:
                         radius=radius,
                     )
                 ]
-                cur_neighbors_bb = list(
-                    map(self._normalize_lat_lon, cur_neighbors_bb)
-                )
+                cur_neighbors_bb = list(map(self._normalize_lat_lon, cur_neighbors_bb))
                 cur_neighbors_bb_idx = [
                     vertices_idx[(x[0], x[1])] for x in cur_neighbors_bb
                 ]
@@ -271,9 +282,7 @@ class DatasetBuilder:
 
         # Create vertex feature tensors
         # Now that we have our graph, compute variables per vertex
-        vertices_input_vars = points_input_vars.stack(
-            vertex=("latitude", "longitude")
-        )
+        vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude"))
         vertex_features = []
         vertex_positions = []
         for vertex in vertices:
@@ -331,7 +340,7 @@ class DatasetBuilder:
         sample_region_gwsi_ba_per_area = (
             sample_region_gwsi_ba_values / sample_region_area_values
         )
-        #print(sample_region_gwsi_ba_per_area.shape)
+        # print(sample_region_gwsi_ba_per_area.shape)
         sample_region_gwsi_ba_per_area_above_threshold = (
             sample_region_gwsi_ba_per_area > self.positive_samples_threshold
         )
@@ -369,8 +378,8 @@ class DatasetBuilder:
         # sample_len_below_threshold = sample_len_above_threshold
         # logger.info("Samples below threshold = {}".format(total_below_threshold))
 
-        #choices = np.arange(sample_len_below_threshold)
-        #choices = self._rng.choice(np.arange(sample_len_below_threshold), replace=False)
+        # choices = np.arange(sample_len_below_threshold)
+        # choices = self._rng.choice(np.arange(sample_len_below_threshold), replace=False)
         # choices = self._rng.choice(range(total_below_threshold), size=sample_len_below_threshold, replace=False)
 
         # print(choices)
@@ -378,14 +387,28 @@ class DatasetBuilder:
         return samples_list
 
     def compute_ground_truth(self, lat, lon, time):
-        logger.debug(
-            "Computing ground truth for lat={}, lon={}, time={}".format(lat, lon, time)
+        start_time = time + np.timedelta64(
+            self._target_shift * self._days_per_week, "D"
         )
-        time_slice = slice(time, time + np.timedelta64(self.target_shift, "W"))
+        end_time = time + np.timedelta64(
+            (self._target_shift + self._target_length) * self._days_per_week, "D"
+        )
+        logger.debug(
+            "Computing ground truth for lat={}, lon={}, time=[{},{}]".format(
+                lat, lon, start_time, end_time
+            )
+        )
 
         values = (
             self._cube["gwis_ba"]
-            .sel(latitude=lat, longitude=lon, time=time_slice)
+            .sel(
+                latitude=lat,
+                longitude=lon,
+                time=slice(
+                    start_time,
+                    end_time,
+                ),
+            )
             .values
         )
         ground_truth = sum(values)
@@ -488,6 +511,7 @@ def main(args):
         args.positive_samples_threshold,
         args.seed,
         args.target_shift,
+        args.target_length,
     )
     builder.run()
 
@@ -548,15 +572,24 @@ if __name__ == "__main__":
         dest="seed",
         default=17,
         help="Seed for random number generation",
-    )    
+    )
     parser.add_argument(
         "--target-shift",
         metavar="KEY",
         type=int,
         action="store",
         dest="target_shift",
+        default=0,
+        help="Target shift. How far in the future does the target period start. Measured in weeks.",
+    )
+    parser.add_argument(
+        "--target-length",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="target_length",
         default=4,
-        help="Target shift",
+        help="Target length. How long does the target period last. Measured in weeks.",
     )
     args = parser.parse_args()
     main(args)
