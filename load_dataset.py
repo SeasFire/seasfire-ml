@@ -31,17 +31,13 @@ class GraphLoader(Dataset):
         
         graph = torch.load(self.root_dir + f'graph_{idx}.pt')
         graph.y = graph.y/1000.0
-        graph.x = torch.cat((graph.x[:,:4], graph.x[:,5:]), axis = 1)
-        #graph.y = graph.y / 73000.0
-
-        graph.pos[:,:2] = torch.cos(graph.pos[:,:2])
-        # print(graph.pos)
 
         if self.transforms is not None:
-            graph = self.transforms.transform(graph)
+            graph.x = self.transforms.transform(graph.x)
             graph.x = torch.nan_to_num(graph.x, nan=-1.0)
         
-        graph.x = torch.cat((graph.x[:,:], graph.pos[:,:2]), axis = 1)
+        # graph.pos = torch.cos(graph.pos)
+        # print(graph.pos)
+        # graph.x = torch.cat((graph.x[:,:], graph.pos[:,:2]), axis = 1)
         
         return graph
-
