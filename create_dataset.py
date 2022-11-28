@@ -52,6 +52,7 @@ class DatasetBuilder:
             "oci_soi",
             "oci_wp",
         ]
+        
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self._target_var = "gwis_ba"
         logger.info("Using target variable: {}".format(self._target_var))
@@ -101,13 +102,13 @@ class DatasetBuilder:
         self._positive_samples_threshold = positive_samples_threshold
         self._number_of_positive_samples = 0
 
-        self._number_of_train_years = 13
+        self._number_of_train_years = 17
         self._days_per_week = 8
-        self._timeseries_weeks = 48
+        self._timeseries_weeks = 46
         self._aggregation_in_weeks = 4  # aggregate per month
         self._target_shift = target_shift  # in weeks, e.g. 0
         self._target_length = target_length  # in weeks, e.g. 4
-        self._year_in_weeks = 48
+        self._year_in_weeks = 46
 
         logger.info(
             "Target period weeks in the future: [{},{}]".format(
@@ -120,19 +121,19 @@ class DatasetBuilder:
             self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
             - (self._target_shift + self._target_length),
-        )  # 58-594 week -> 13 years
+        )  # 46 - 778 (782-0-4) week -> 17 years
         logger.info("Train time in weeks: {}".format(self._time_train))
-        self._time_val = (
-            self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
-            self._year_in_weeks * self._number_of_train_years
-            + 2 * self._timeseries_weeks,
-        )  # 598-715 week -> 2.5 years
-        logger.info("Val time in weeks: {}".format(self._time_val))
+        # self._time_val = (
+        #     self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
+        #     self._year_in_weeks * self._number_of_train_years
+        #     + 2 * self._timeseries_weeks,
+        # )  # 782+46 - 782+2*46 week -> 2 years
+        # logger.info("Val time in weeks: {}".format(self._time_val))
         self._time_test = (
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
-            916,
-        )  # 714-916 week -> 4.5 years
+            918 - (self._target_shift + self._target_length),
+        )  # 828 (782+46) - 914 (918-0-4) week -> 2 years
         logger.info("Test time in weeks: {}".format(self._time_test))
 
         if self._split == "train":
@@ -324,17 +325,20 @@ class DatasetBuilder:
         sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
         ).isel(time=slice(self._start_time, self._end_time))
+        
 
         # find target variable in region
         sample_region_gwsi_ba_values = sample_region.gwis_ba.values
-
+        
         # compute area in sample region and add time dimension
         sample_region_area = (
             self._cube["area"]
             .sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon))
             .expand_dims(dim={"time": sample_region.time}, axis=0)
         )
-        sample_region_area_values = sample_region_area.values
+        
+        sample_region_area_values = sample_region_area.values / 10000.0
+        print(np.unique(sample_region_area_values))
 
         # compute target variable per area and apply threshold
         sample_region_gwsi_ba_per_area = (
@@ -448,9 +452,9 @@ class DatasetBuilder:
         samples = above_threshold_samples + below_threshold_samples
 
         logger.info("About to create {} samples".format(len(samples)))
-
+        self._number_of_positive_samples = 846
         # now generate them and write to disk
-        for idx in tqdm(range(0, len(samples[:]))):
+        for idx in tqdm(range(0, len(samples[846:]))):
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
@@ -575,7 +579,8 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.0000005,
+        default=0.0005,
+        # default=0.0000005,
         help="Positive sample threshold",
     )
     parser.add_argument(
