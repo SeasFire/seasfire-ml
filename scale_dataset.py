@@ -3,7 +3,8 @@ import numpy as np
 
 
 class StandardScaling():
-    def __init__(self):
+    def __init__(self, model):
+        self.model = model
         pass
 
     def fit(self, graphs):
@@ -11,8 +12,11 @@ class StandardScaling():
         self.mean_std_tuples = []
         
         for feature_idx in range (0, self.graphs[0].shape[1]):
-       
-            temp = np.concatenate([graph[:, feature_idx] for graph in self.graphs])
+            if model=='GConvLstm':
+                temp = np.concatenate([graph[:, feature_idx,:] for graph in self.graphs])
+            elif model=='GCN':
+                temp = np.concatenate([graph[:, feature_idx] for graph in self.graphs])
+            
             self.mean_std_tuples.append(
                 tuple((np.nanmean(temp), np.nanstd(temp))))
 
@@ -27,6 +31,10 @@ class StandardScaling():
         std = torch.Tensor(list(tmp[1]))
         # print(std)
 
-        self.graph.x = (self.graph.x - mu) /std
-       
+        if model=='GConvLstm':
+            for i in range(0, self.graph.shape[2]):
+                self.graph[:,:,i] = (self.graph[:,:,i] - mu) /std
+        elif model=='GCN':
+            self.graph = (self.graph - mu) /std
+
         return self.graph
