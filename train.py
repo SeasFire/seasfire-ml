@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+## First draft for GCN model
+
 
 from models import *
 from load_dataset import *
@@ -10,8 +11,8 @@ def train(model, data_loader, epochs, val_loader, batch_size):
     
 
     optimizer = model.optimizer
-    criterion = torch.nn.L1Loss()
-    #criterion = torch.nn.MSELoss()
+    # criterion = torch.nn.L1Loss()
+    criterion = torch.nn.MSELoss()
     
     
 
@@ -89,16 +90,13 @@ def main(args):
     if torch.cuda.is_available():
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
-    torch.manual_seed(42)
-
-    scaler = StandardScaling()
+    scaler = StandardScaling(args.model)
 
     graphs = []
     number_of_train_samples = len(os.listdir(args.train_path))
     for idx in range(0, number_of_train_samples):
         graph = torch.load(args.train_path + f'/graph_{idx}.pt')
-        graph = torch.cat((graph.x[:,:4], graph.x[:,5:]), axis = 1)
-        graphs.append(graph)
+        graphs.append(graph.x)
     
     mean_std_tuples = scaler.fit(graphs)
     # print(mean_std_tuples)
@@ -111,10 +109,12 @@ def main(args):
 
     model = None
 
-    if args.model == 'GCN':
+    if args.model == 'GConvLstm':
+        model = GCLstm(input_size, args.hidden_channels, args.learning_rate, args.weight_decay).to(device)
+    elif args.model == 'GCN':
         model = GCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay).to(device) 
     
-    train(model, train_loader, args.epochs, val_loader, args.batch_size)
+    # train(model, train_loader, args.epochs, val_loader, args.batch_size)
     
 
 if __name__ == "__main__":
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="../data/train/",
+        default="/home/lefki/seasfire-ml/data/test/",
         help="Train set path",
     )
     parser.add_argument(
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="../data/val/",
+        default="/home/lefki/seasfire-ml/data/test/",
         help="Validation set path",
     )
     parser.add_argument(
