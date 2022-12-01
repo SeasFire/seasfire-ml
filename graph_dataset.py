@@ -29,6 +29,7 @@ class GraphDataset(Dataset):
 
     def __getitem__(self, idx):
         graph = torch.load(self.root_dir + f"graph_{idx}.pt")
+
         graph.y = graph.y / 1000.0
 
         if self.transforms is not None:

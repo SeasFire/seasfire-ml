@@ -2,11 +2,20 @@
 
 ## First draft for GCN model
 
-from models import *
+import torch
+import tqdm
+import logging
+import os
+import torch_geometric
+import argparse
+
+from models import GConvLSTM, GCN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
 
 logger = logging.getLogger(__name__)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def train(model, data_loader, epochs, val_loader, batch_size):
@@ -87,9 +96,9 @@ def main(args):
     for idx in range(0, number_of_train_samples):
         graph = torch.load(args.train_path + f"/graph_{idx}.pt")
         graphs.append(graph.x)
-
     mean_std_tuples = scaler.fit(graphs)
     # print(mean_std_tuples)
+
     train_dataset = GraphDataset(root_dir=args.train_path, transforms=scaler)
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset, batch_size=args.batch_size
@@ -104,22 +113,24 @@ def main(args):
     model = None
 
     if args.model == "GConvLstm":
-        model = GConvLstm(
+        model = GConvLSTM(
             input_size, args.hidden_channels, args.learning_rate, args.weight_decay
         ).to(device)
     elif args.model == "GCN":
         model = GCN(
             input_size, args.hidden_channels, args.learning_rate, args.weight_decay
         ).to(device)
+    else:
+        raise ValueError("Invalid model")
 
-    # train(model, train_loader, args.epochs, val_loader, args.batch_size)
+    train(model, train_loader, args.epochs, val_loader, args.batch_size)
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t" "--train_path",
+        "-t" "--train-path",
         metavar="PATH",
         type=str,
         action="store",
@@ -128,12 +139,12 @@ if __name__ == "__main__":
         help="Train set path",
     )
     parser.add_argument(
-        "-v" "--val_path",
+        "-v" "--val-path",
         metavar="PATH",
         type=str,
         action="store",
         dest="val_path",
-        default="data/test/",
+        default="data/val/",
         help="Validation set path",
     )
     parser.add_argument(

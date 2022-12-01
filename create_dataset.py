@@ -53,7 +53,7 @@ class DatasetBuilder:
             "oci_soi",
             "oci_wp",
         ]
-        
+
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self._target_var = "gwis_ba"
         logger.info("Using target variable: {}".format(self._target_var))
@@ -106,13 +106,13 @@ class DatasetBuilder:
         # negative examples threshold (no fire)
         self._negative_samples_threshold = negative_samples_threshold
 
-        self._number_of_train_years = 17
+        self._number_of_train_years = 16
         self._days_per_week = 8
-        self._timeseries_weeks = 46
+        self._timeseries_weeks = 48
         self._aggregation_in_weeks = 4  # aggregate per month
         self._target_shift = target_shift  # in weeks, e.g. 0
         self._target_length = target_length  # in weeks, e.g. 4
-        self._year_in_weeks = 46
+        self._year_in_weeks = 48
 
         logger.info(
             "Target period weeks in the future: [{},{}]".format(
@@ -331,18 +331,17 @@ class DatasetBuilder:
         sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
         ).isel(time=slice(self._start_time, self._end_time))
-        
 
         # find target variable in region
         sample_region_gwsi_ba_values = sample_region.gwis_ba.values
-        
+
         # compute area in sample region and add time dimension
         sample_region_area = (
             self._cube["area"]
             .sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon))
             .expand_dims(dim={"time": sample_region.time}, axis=0)
         )
-        
+
         sample_region_area_values = sample_region_area.values / 10000.0
         print(np.unique(sample_region_area_values))
 
@@ -598,7 +597,7 @@ if __name__ == "__main__":
         default=0.0001,
         # default=0.0000001,
         help="Negative sample threshold",
-    )    
+    )
     parser.add_argument(
         "--seed",
         metavar="INT",
