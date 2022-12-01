@@ -23,6 +23,7 @@ class DatasetBuilder:
         output_folder,
         split,
         positive_samples_threshold,
+        negative_samples_threshold,
         seed,
         target_shift,
         target_length,
@@ -98,9 +99,12 @@ class DatasetBuilder:
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
 
-        # positive example threshold
+        # positive example threshold (fire)
         self._positive_samples_threshold = positive_samples_threshold
         self._number_of_positive_samples = 0
+
+        # negative examples threshold (no fire)
+        self._negative_samples_threshold = negative_samples_threshold
 
         self._number_of_train_years = 17
         self._days_per_week = 8
@@ -123,12 +127,14 @@ class DatasetBuilder:
             - (self._target_shift + self._target_length),
         )  # 46 - 778 (782-0-4) week -> 17 years
         logger.info("Train time in weeks: {}".format(self._time_train))
-        # self._time_val = (
-        #     self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
-        #     self._year_in_weeks * self._number_of_train_years
-        #     + 2 * self._timeseries_weeks,
-        # )  # 782+46 - 782+2*46 week -> 2 years
-        # logger.info("Val time in weeks: {}".format(self._time_val))
+
+        self._time_val = (
+            self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
+            self._year_in_weeks * self._number_of_train_years
+            + 2 * self._timeseries_weeks,
+        )  # 782+46 - 782+2*46 week -> 2 years
+        logger.info("Val time in weeks: {}".format(self._time_val))
+
         self._time_test = (
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
@@ -377,7 +383,7 @@ class DatasetBuilder:
 
         # now generate samples below threshold
         sample_region_gwsi_ba_per_area_below_threshold = (
-            sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
+            sample_region_gwsi_ba_per_area <= self._negative_samples_threshold
         )
         total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
         sample_len_below_threshold = sample_len_above_threshold
@@ -452,9 +458,8 @@ class DatasetBuilder:
         samples = above_threshold_samples + below_threshold_samples
 
         logger.info("About to create {} samples".format(len(samples)))
-        self._number_of_positive_samples = 846
         # now generate them and write to disk
-        for idx in tqdm(range(0, len(samples[846:]))):
+        for idx in tqdm(range(0, len(samples))):
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
@@ -527,6 +532,7 @@ def main(args):
         args.output_folder,
         args.split,
         args.positive_samples_threshold,
+        args.negative_samples_threshold,
         args.seed,
         args.target_shift,
         args.target_length,
@@ -583,6 +589,16 @@ if __name__ == "__main__":
         # default=0.0000005,
         help="Positive sample threshold",
     )
+    parser.add_argument(
+        "--negative-samples-threshold",
+        metavar="KEY",
+        type=float,
+        action="store",
+        dest="negative_samples_threshold",
+        default=0.0001,
+        # default=0.0000001,
+        help="Negative sample threshold",
+    )    
     parser.add_argument(
         "--seed",
         metavar="INT",
