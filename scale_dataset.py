@@ -2,23 +2,23 @@ import torch
 import numpy as np
 
 
-class StandardScaling():
+class StandardScaling:
     def __init__(self, model):
-        self.model = model
-        pass
+        self._model = model
 
     def fit(self, graphs):
         self.graphs = graphs
         self.mean_std_tuples = []
-        
-        for feature_idx in range (0, self.graphs[0].shape[1]):
-            if model=='GConvLstm':
-                temp = np.concatenate([graph[:, feature_idx,:] for graph in self.graphs])
-            elif model=='GCN':
+
+        for feature_idx in range(0, self.graphs[0].shape[1]):
+            if self._model == "GConvLstm":
+                temp = np.concatenate(
+                    [graph[:, feature_idx, :] for graph in self.graphs]
+                )
+            elif self._model == "GCN":
                 temp = np.concatenate([graph[:, feature_idx] for graph in self.graphs])
-            
-            self.mean_std_tuples.append(
-                tuple((np.nanmean(temp), np.nanstd(temp))))
+
+            self.mean_std_tuples.append(tuple((np.nanmean(temp), np.nanstd(temp))))
 
         return self.mean_std_tuples
 
@@ -31,10 +31,10 @@ class StandardScaling():
         std = torch.Tensor(list(tmp[1]))
         # print(std)
 
-        if model=='GConvLstm':
+        if self._model == "GConvLstm":
             for i in range(0, self.graph.shape[2]):
-                self.graph[:,:,i] = (self.graph[:,:,i] - mu) /std
-        elif model=='GCN':
-            self.graph = (self.graph - mu) /std
+                self.graph[:, :, i] = (self.graph[:, :, i] - mu) / std
+        elif self._model == "GCN":
+            self.graph = (self.graph - mu) / std
 
         return self.graph
