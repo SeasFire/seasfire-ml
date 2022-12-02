@@ -11,7 +11,7 @@ class StandardScaling:
         self.mean_std_tuples = []
 
         for feature_idx in range(0, self.graphs[0].shape[1]):
-            if self._model == "GConvLstm":
+            if self._model == "AttentionGNN":
                 temp = np.concatenate(
                     [graph[:, feature_idx, :] for graph in self.graphs]
                 )
@@ -31,7 +31,7 @@ class StandardScaling:
         std = torch.Tensor(list(tmp[1]))
         # print(std)
 
-        if self._model == "GConvLstm":
+        if self._model == "AttentionGNN":
             for i in range(0, self.graph.shape[2]):
                 self.graph[:, :, i] = (self.graph[:, :, i] - mu) / std
         elif self._model == "GCN":
