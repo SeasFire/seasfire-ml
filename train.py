@@ -3,13 +3,13 @@
 ## First draft for GCN model
 
 import torch
-import tqdm
+from tqdm import tqdm
 import logging
 import os
 import torch_geometric
 import argparse
 
-from models import GConvLSTM, GCN
+from models import RecurrentGCN, GCN, TemporalGNN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
 
@@ -24,7 +24,7 @@ def train(model, data_loader, epochs, val_loader, batch_size):
     # criterion = torch.nn.L1Loss()
     criterion = torch.nn.MSELoss()
 
-    for epoch in tqdm(range(epochs + 1)):
+    for epoch in tqdm(range(0, epochs + 1)):
         model.train()
         optimizer.zero_grad()
 
@@ -36,8 +36,8 @@ def train(model, data_loader, epochs, val_loader, batch_size):
 
         for data in data_loader:
             data = data.to(device)
-
-            preds = model(data.x, data.edge_index, data.batch)
+            preds = model(data.x, data.edge_index)
+            # preds = model(data.x, data.edge_index, data.batch)
             y = data.y.unsqueeze(1)
 
             train_predictions.append(preds)
@@ -51,26 +51,26 @@ def train(model, data_loader, epochs, val_loader, batch_size):
         print(preds, y)
 
         # Validation
-        with torch.no_grad():
-            model.eval()
+        # with torch.no_grad():
+        #     model.eval()
 
-            for data in val_loader:
-                data = data.to(device)
+        #     for data in val_loader:
+        #         data = data.to(device)
 
-                preds = model(data.x, data.edge_index, data.batch)
-                y = data.y.unsqueeze(1)
+        #         preds = model(data.x, data.edge_index, data.batch)
+        #         y = data.y.unsqueeze(1)
 
-                val_predictions.append(preds)
-                val_labels.append(y)
+        #         val_predictions.append(preds)
+        #         val_labels.append(y)
 
-                # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-                # acc = int(correct) / int(data.test_mask.sum())
-                # print(f'Accuracy: {acc:.4f}')
+        #         correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
+        #         acc = int(correct) / int(data.test_mask.sum())
+        #         print(f'Accuracy: {acc:.4f}')
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
-        val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+        # val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
-        print(f"Epoch {epoch} | Train Loss: {train_loss}" f" | Val Loss: {val_loss}")
+        print(f"Epoch {epoch} | Train Loss: {train_loss}") #f" | Val Loss: {val_loss}")
 
         # x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
 
@@ -99,26 +99,30 @@ def main(args):
     mean_std_tuples = scaler.fit(graphs)
     # print(mean_std_tuples)
 
-    train_dataset = GraphDataset(root_dir=args.train_path, transforms=scaler)
+    train_dataset = GraphDataset(root_dir=args.train_path, transform=scaler, task=args.task)
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset, batch_size=args.batch_size
     )
-    input_size = train_dataset.num_node_features
+    
 
-    val_dataset = GraphDataset(root_dir=args.val_path, transforms=scaler)
+    val_dataset = GraphDataset(root_dir=args.val_path, transform=scaler, task=args.task)
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset, batch_size=args.batch_size
     )
 
     model = None
 
-    if args.model == "GConvLstm":
-        model = GConvLSTM(
-            input_size, args.hidden_channels, args.learning_rate, args.weight_decay
+    if args.model == "AttentionGNN":
+        input_size = 250
+        model = AttentionGNN(10, 12, args.learning_rate, args.weight_decay
+        ).to(device)
+    if args.model == "LstmGCN":
+        input_size = 250
+        model = LstmGCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
     elif args.model == "GCN":
-        model = GCN(
-            input_size, args.hidden_channels, args.learning_rate, args.weight_decay
+        input_size = train_dataset.num_node_features
+        model = GCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
     else:
         raise ValueError("Invalid model")
@@ -144,7 +148,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val/",
+        default="data/test/",
         help="Validation set path",
     )
     parser.add_argument(
@@ -154,8 +158,18 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model",
-        default="GCN",
+        default="RecurrentGCN",
         help="Model name",
+    )
+    parser.add_argument(
+        "-t",
+        "--task",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="task",
+        default="regression",
+        help="Model task",
     )
     parser.add_argument(
         "-b",
@@ -164,7 +178,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=32,
+        default=1,
         help="Batch size",
     )
     parser.add_argument(
