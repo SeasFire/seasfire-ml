@@ -1,11 +1,12 @@
 import torch
 from torch_geometric.data import Dataset
 import os
+import xarray as xr
 from scale_dataset import *
 
 
 class GraphDataset(Dataset):
-    def __init__(self, root_dir, transforms):
+    def __init__(self, root_dir, transform, task):
         """
         Desc
         ----
@@ -22,7 +23,8 @@ class GraphDataset(Dataset):
         All the torch_geometric.data.Data objects (graphs)
         """
         self.root_dir = root_dir
-        self.transforms = transforms
+        self.transform = transform
+        self.task = task
 
     def __len__(self):
         return len([entry for entry in os.listdir(self.root_dir)])
@@ -30,14 +32,17 @@ class GraphDataset(Dataset):
     def __getitem__(self, idx):
         graph = torch.load(self.root_dir + f"graph_{idx}.pt")
 
-        graph.y = graph.y / 1000.0
+        if self.task == 'binary':
+            graph.y = torch.where(graph.y>5000, 1., 0.)
+        elif self.task == 'regression':
+            graph.y = graph.y / 1000.0
 
-        if self.transforms is not None:
-            graph.x = self.transforms.transform(graph.x)
+        if self.transform is not None:
+            graph.x = self.transform.transform(graph.x)
             graph.x = torch.nan_to_num(graph.x, nan=-1.0)
 
+        # print(graph.x.shape)
         # graph.pos = torch.cos(graph.pos)
         # print(graph.pos)
-        # graph.x = torch.cat((graph.x[:,:], graph.pos[:,:2]), axis = 1)
 
         return graph
