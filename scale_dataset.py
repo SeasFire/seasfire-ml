@@ -9,6 +9,7 @@ class StandardScaling:
     def fit(self, graphs):
         self.graphs = graphs
         self.mean_std_tuples = []
+        temp = []
 
         for feature_idx in range(0, self.graphs[0].shape[1]):
             if self._model == "AttentionGNN":
