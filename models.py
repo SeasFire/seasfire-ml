@@ -40,7 +40,7 @@ class GCN(torch.nn.Module):
 
         self.lin1 = Linear(hidden_channels, hidden_channels)
 
-        if(self.task == 'regression' or ):
+        if(self.task == 'regression'):
             self.lin2 = Linear(hidden_channels, 1)
         elif(self.task == 'binary'):
             self.lin2 = Linear(hidden_channels, 1)
@@ -77,7 +77,7 @@ class GCN(torch.nn.Module):
 
 class AttentionGNN(torch.nn.Module):
     def __init__(self, node_features, periods, learning_rate, weight_decay):
-        super(TemporalGNN, self).__init__()
+        super(AttentionGNN, self).__init__()
         # Attention Temporal Graph Convolutional Cell
         self.tgnn = A3TGCN(in_channels=node_features, 
                            out_channels=32, 
@@ -97,20 +97,21 @@ class AttentionGNN(torch.nn.Module):
         h = self.tgnn(x, edge_index)
         h = F.relu(h)
         h = self.linear(h)
+        h = F.relu(h)
         return h
 
 class LstmGCN(torch.nn.Module):
     def __init__(self, node_features, hidden_channels, learning_rate, weight_decay, task):
-        super(RecurrentGCN, self).__init__()
+        super(LstmGCN, self).__init__()
         # Documentation for GConvLSTM:
         # https://pytorch-geometric-temporal.readthedocs.io/en/latest/modules/root.html#torch_geometric_temporal.nn.recurrent.gconv_lstm.GConvLSTM
         self.task = task
         
-        self.recurrent_1 = GConvLSTM(node_features, 16, K=12)
+        self.recurrent_1 = GConvLSTM(node_features, 16, K=5)
         # self.recurrent_2 = GConvLSTM(32, 16, 4)
 
         if(self.task == 'regression'):
-            self.lin1 = Linear(32, 1)
+            self.lin1 = Linear(16, 1)
         elif(self.task == 'binary'):
             self.lin1 = Linear(16, 2)
 
@@ -135,7 +136,7 @@ class LstmGCN(torch.nn.Module):
         # print("is")
 
         # Use the final hidden state output of 2nd recurrent layer for input to classifier
-        x = F.relu(h1)
+        x = F.relu(h)
         print("going")
 
         x = F.dropout(x, training=self.training)
@@ -143,6 +144,7 @@ class LstmGCN(torch.nn.Module):
 
         x = self.lin1(x)
         print("?????????????????????")
+        x = x.relu()
 
         return x
         # return F.log_softmax(x, dim=1)
