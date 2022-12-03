@@ -9,7 +9,7 @@ import os
 import torch_geometric
 import argparse
 
-from models import RecurrentGCN, GCN, TemporalGNN
+from models import GCN, AttentionGNN, LstmGCN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
 
@@ -36,19 +36,23 @@ def train(model, data_loader, epochs, val_loader, batch_size):
 
         for data in data_loader:
             data = data.to(device)
+            # preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
             preds = model(data.x, data.edge_index)
             # preds = model(data.x, data.edge_index, data.batch)
+            pred = preds[12]
+            pred = pred.unsqueeze(1)
             y = data.y.unsqueeze(1)
 
-            train_predictions.append(preds)
+            print(pred)
+            print(y)
+
+            train_predictions.append(pred)
             train_labels.append(y)
 
-            train_loss = criterion(y, preds)
+            train_loss = criterion(y, pred)
             train_loss.backward()
 
             optimizer.step()
-
-        print(preds, y)
 
         # Validation
         # with torch.no_grad():
@@ -111,13 +115,14 @@ def main(args):
     )
 
     model = None
-
+    
+    print(args.model)
     if args.model == "AttentionGNN":
-        input_size = 250
+        # input_size = 250
         model = AttentionGNN(10, 12, args.learning_rate, args.weight_decay
         ).to(device)
-    if args.model == "LstmGCN":
-        input_size = 250
+    elif args.model == "LstmGCN":
+        input_size = 10
         model = LstmGCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
     elif args.model == "GCN":
@@ -139,7 +144,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train/",
+        default="dataset/train/",
         help="Train set path",
     )
     parser.add_argument(
@@ -148,7 +153,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/test/",
+        default="dataset/val/",
         help="Validation set path",
     )
     parser.add_argument(
@@ -158,7 +163,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model",
-        default="RecurrentGCN",
+        default="AttentionGNN",
         help="Model name",
     )
     parser.add_argument(
@@ -198,7 +203,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=400,
+        default=10,
         help="Epochs",
     )
     parser.add_argument(
