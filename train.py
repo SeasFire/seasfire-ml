@@ -8,6 +8,9 @@ import logging
 import os
 import torch_geometric
 import argparse
+import numpy as np
+import random
+import matplotlib.pyplot as plt
 
 from models import GCN, AttentionGNN, LstmGCN
 from graph_dataset import GraphDataset
@@ -17,8 +20,20 @@ logger = logging.getLogger(__name__)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def set_seed(seed: int = 42) -> None:
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    # When running on the CuDNN backend, two further options must be set
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    # Set a fixed value for the hash seed
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    print(f"Random seed set as {seed}")
 
-def train(model, data_loader, epochs, val_loader, batch_size):
+
+def train(model, train_loader, epochs, val_loader, batch_size):
 
     optimizer = model.optimizer
     # criterion = torch.nn.L1Loss()
@@ -34,7 +49,7 @@ def train(model, data_loader, epochs, val_loader, batch_size):
         val_predictions = []
         val_labels = []
 
-        for data in data_loader:
+        for data in train_loader:
             data = data.to(device)
             # preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
             preds = model(data.x, data.edge_index)
@@ -43,8 +58,8 @@ def train(model, data_loader, epochs, val_loader, batch_size):
             pred = pred.unsqueeze(1)
             y = data.y.unsqueeze(1)
 
-            print(pred)
-            print(y)
+            # print(pred)
+            # print(y)
 
             train_predictions.append(pred)
             train_labels.append(y)
@@ -55,33 +70,35 @@ def train(model, data_loader, epochs, val_loader, batch_size):
             optimizer.step()
 
         # Validation
-        # with torch.no_grad():
-        #     model.eval()
+        with torch.no_grad():
+            model.eval()
 
-        #     for data in val_loader:
-        #         data = data.to(device)
+            for data in val_loader:
+                data = data.to(device)
 
-        #         preds = model(data.x, data.edge_index, data.batch)
-        #         y = data.y.unsqueeze(1)
+                pred = model(data.x, data.edge_index)
+                # preds = model(data.x, data.edge_index, data.batch)
+                y = data.y.unsqueeze(1)
+                pred = pred[12]
+                pred = pred.unsqueeze(1)
+                val_predictions.append(pred)
+                val_labels.append(y)
 
-        #         val_predictions.append(preds)
-        #         val_labels.append(y)
-
-        #         correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-        #         acc = int(correct) / int(data.test_mask.sum())
-        #         print(f'Accuracy: {acc:.4f}')
+                # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
+                # acc = int(correct) / int(data.test_mask.sum())
+                # print(f'Accuracy: {acc:.4f}')
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
-        # val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+        val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
-        print(f"Epoch {epoch} | Train Loss: {train_loss}") #f" | Val Loss: {val_loss}")
-
-        # x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
-
-        # plt.scatter(x_axis, torch.cat(train_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
-        # plt.scatter(x_axis, torch.cat(train_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
-        # # plt.show()
-        # plt.savefig('logs/' + str(epoch)+'.png')
+        print(f"Epoch {epoch} | Train Loss: {train_loss}" + f" | Val Loss: {val_loss}")
+        # print(train_labels)
+        # print(train_predictions)
+        x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
+        plt.scatter(x_axis, torch.cat(train_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
+        plt.scatter(x_axis, torch.cat(train_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
+        # plt.show()
+        plt.savefig('logs/' + str(epoch)+'.png')
 
 
 def main(args):
@@ -92,6 +109,8 @@ def main(args):
     logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
         logger.debug("Torch cuda version: {}".format(torch.version.cuda))
+
+    set_seed()
 
     scaler = StandardScaling(args.model)
 
@@ -203,7 +222,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=10,
+        default=50,
         help="Epochs",
     )
     parser.add_argument(
@@ -213,7 +232,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-5,
+        default=5e-4,
         help="Learning rate",
     )
     parser.add_argument(
