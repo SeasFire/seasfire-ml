@@ -14,6 +14,75 @@ from torch_geometric.data import Data
 
 logger = logging.getLogger(__name__)
 
+OCI_BOUNDING_BOXES = {
+    "oci_nao": [
+        {
+            "min_lat": 55.0,
+            "max_lat": 20.0,
+            "min_lon": -90,
+            "max_lon": 60.0,
+        },
+        {
+            "min_lat": 55.0,
+            "max_lat": 90.0,
+            "min_lon": -90.0,
+            "max_lon": 60.0,
+        },
+    ],
+    "oci_nina34_anom": [
+        {
+            "min_lat": -170.0,
+            "max_lat": 120.0,
+            "min_lon": -5.0,
+            "max_lon": 5.0,
+        }
+    ],
+    "oci_pdo": [
+        {
+            "min_lat": 20.0,
+            "max_lat": 70.0,
+            "min_lon": 115.0,
+            "max_lon": 250.0,
+        }
+    ],
+    "oci_pna": [
+        {
+            "min_lat": 20.0,
+            "max_lat": 80.0,
+            "min_lon": -60.0,
+            "max_lon": 120.0,
+        }
+    ],
+    "oci_soi": [
+        {
+            "min_lat": -17.625,
+            "max_lat": -17.375,
+            "min_lon": -149.875,
+            "max_lon": -149.625,
+        },
+        {
+            "min_lat": -12.625,
+            "max_lat": -12.375,
+            "min_lon": -131.125,
+            "max_lon": -130.875,
+        },
+    ],
+    "oci_wp": [
+        {
+            "min_lat": 50.0,
+            "max_lat": 70.0,
+            "min_lon": -150.0,
+            "max_lon": 140.0,
+        },
+        {
+            "min_lat": 25.0,
+            "max_lat": 40.0,
+            "min_lon": -150.0,
+            "max_lon": 140.0,
+        },
+    ],
+}
+
 
 class DatasetBuilder:
     def __init__(
@@ -40,18 +109,6 @@ class DatasetBuilder:
             "t2m_mean",
             "tp",
             "vpd",
-        ]
-        self._oci_input_vars = [
-            "oci_censo",
-            "oci_ea",
-            "oci_epo",
-            "oci_gmsst",
-            "oci_nao",
-            "oci_nina34_anom",
-            "oci_pdo",
-            "oci_pna",
-            "oci_soi",
-            "oci_wp",
         ]
 
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
@@ -98,6 +155,31 @@ class DatasetBuilder:
         self._cube = xr.open_zarr(self._cube_path, consolidated=False)
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
+
+        self._oci_input_vars = [
+            "oci_censo",
+            "oci_ea",
+            "oci_epo",
+            "oci_gmsst",
+            "oci_nao",
+            "oci_nina34_anom",
+            "oci_pdo",
+            "oci_pna",
+            "oci_soi",
+            "oci_wp",
+        ]
+        for oci_var in self._oci_input_vars:
+            logger.debug(
+                "Oci name {}, description: {}".format(
+                    oci_var, self._cube[oci_var].description
+                )
+            )
+        #print(self._cube.longitude.values)
+        #for x in self._cube.longitude.values:
+        #    print(x)
+        #print(self._cube.latitude.values)
+        #for x in self._cube.longitude.values:
+        #    print(x)
 
         # positive example threshold (fire)
         self._positive_samples_threshold = positive_samples_threshold
