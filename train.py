@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-## First draft for GCN model
-
 import torch
 from tqdm import tqdm
 import logging
@@ -33,7 +31,7 @@ def set_seed(seed: int = 42) -> None:
     print(f"Random seed set as {seed}")
 
 
-def train(model_name, model, train_loader, epochs, val_loader, batch_size):
+def train(model, train_loader, epochs, val_loader, batch_size):
 
     optimizer = model.optimizer
     # criterion = torch.nn.L1Loss()
@@ -51,19 +49,9 @@ def train(model_name, model, train_loader, epochs, val_loader, batch_size):
 
         for data in train_loader:
             data = data.to(device)
+
             preds = []
-
-            if model_name == "AttentionGNN": ## Without batches
-                preds = model(data.x, data.edge_index)
-
-                ## Care only for central node, so calculate loss only for central node
-                preds = preds[int(data.x.shape[0]/2)]
-                preds = preds.unsqueeze(1)
-            elif model_name == "GCN":
-                preds = model(data.x, data.edge_index, data.batch)
-            # elif model_name == "LstmGCN":
-            #     preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
-            
+            preds = model(data.x, data.edge_index, data.batch)
             y = data.y.unsqueeze(1)
 
             train_predictions.append(preds)
@@ -81,17 +69,7 @@ def train(model_name, model, train_loader, epochs, val_loader, batch_size):
             for data in val_loader:
                 data = data.to(device)
 
-                if model_name == "AttentionGNN":
-                    preds = model(data.x, data.edge_index)
-
-                    ## Care only for central node
-                    preds = preds[int(data.x.shape[0]/2)]
-                    preds = preds.unsqueeze(1)
-                elif model_name == "GCN":
-                    preds = model(data.x, data.edge_index, data.batch)
-                # elif model_name == "LstmGCN":
-                #     preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
-                
+                preds = model(data.x, data.edge_index, data.batch)
                 y = data.y.unsqueeze(1)
 
                 val_predictions.append(preds)
@@ -114,6 +92,7 @@ def train(model_name, model, train_loader, epochs, val_loader, batch_size):
         # plt.show()
         plt.savefig('logs/' + str(epoch)+'.png')
 
+    return model, criterion
 
 def main(args):
     FileOutputHandler = logging.FileHandler("logs.log")
@@ -140,7 +119,6 @@ def main(args):
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset, batch_size=args.batch_size
     )
-    
 
     val_dataset = GraphDataset(root_dir=args.val_path, transform=scaler, task=args.task)
     val_loader = torch_geometric.loader.DataLoader(
@@ -165,8 +143,17 @@ def main(args):
     else:
         raise ValueError("Invalid model")
 
-    train(args.model_name, model, train_loader, args.epochs, val_loader, args.batch_size)
+    model, criterion = train(model, train_loader, args.epochs, val_loader, args.batch_size)
 
+    model_info = {
+        'model': model,
+        'criterion': criterion,
+        'scaler': scaler,
+        'name': args.model_name
+    }
+
+    ## Save the entire model to PATH
+    torch.save(model_info, args.model_path)
 
 if __name__ == "__main__":
 
@@ -200,7 +187,15 @@ if __name__ == "__main__":
         help="Model name",
     )
     parser.add_argument(
-        "-t",
+        "--model-path",
+        metavar="PATH",
+        type=str,
+        action="store",
+        dest="model_path",
+        default="attention_model.pt",
+        help="Path to save the trained model",
+    )
+    parser.add_argument(
         "--task",
         metavar="KEY",
         type=str,
@@ -236,7 +231,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=50,
+        default=5,
         help="Epochs",
     )
     parser.add_argument(
