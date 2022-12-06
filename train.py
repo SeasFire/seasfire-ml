@@ -33,7 +33,7 @@ def set_seed(seed: int = 42) -> None:
     print(f"Random seed set as {seed}")
 
 
-def train(model, train_loader, epochs, val_loader, batch_size):
+def train(model_name, model, train_loader, epochs, val_loader, batch_size):
 
     optimizer = model.optimizer
     # criterion = torch.nn.L1Loss()
@@ -51,20 +51,25 @@ def train(model, train_loader, epochs, val_loader, batch_size):
 
         for data in train_loader:
             data = data.to(device)
-            # preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
-            preds = model(data.x, data.edge_index)
-            # preds = model(data.x, data.edge_index, data.batch)
-            pred = preds[12]
-            pred = pred.unsqueeze(1)
+            preds = []
+
+            if model_name == "AttentionGNN": ## Without batches
+                preds = model(data.x, data.edge_index)
+
+                ## Care only for central node, so calculate loss only for central node
+                preds = preds[int(data.x.shape[0]/2)]
+                preds = preds.unsqueeze(1)
+            elif model_name == "GCN":
+                preds = model(data.x, data.edge_index, data.batch)
+            # elif model_name == "LstmGCN":
+            #     preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
+            
             y = data.y.unsqueeze(1)
 
-            # print(pred)
-            # print(y)
-
-            train_predictions.append(pred)
+            train_predictions.append(preds)
             train_labels.append(y)
 
-            train_loss = criterion(y, pred)
+            train_loss = criterion(y, preds)
             train_loss.backward()
 
             optimizer.step()
@@ -76,12 +81,20 @@ def train(model, train_loader, epochs, val_loader, batch_size):
             for data in val_loader:
                 data = data.to(device)
 
-                pred = model(data.x, data.edge_index)
-                # preds = model(data.x, data.edge_index, data.batch)
+                if model_name == "AttentionGNN":
+                    preds = model(data.x, data.edge_index)
+
+                    ## Care only for central node
+                    preds = preds[int(data.x.shape[0]/2)]
+                    preds = preds.unsqueeze(1)
+                elif model_name == "GCN":
+                    preds = model(data.x, data.edge_index, data.batch)
+                # elif model_name == "LstmGCN":
+                #     preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
+                
                 y = data.y.unsqueeze(1)
-                pred = pred[12]
-                pred = pred.unsqueeze(1)
-                val_predictions.append(pred)
+
+                val_predictions.append(preds)
                 val_labels.append(y)
 
                 # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
@@ -94,6 +107,7 @@ def train(model, train_loader, epochs, val_loader, batch_size):
         print(f"Epoch {epoch} | Train Loss: {train_loss}" + f" | Val Loss: {val_loss}")
         # print(train_labels)
         # print(train_predictions)
+        plt.figure(figsize=(24, 15))
         x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
         plt.scatter(x_axis, torch.cat(train_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
         plt.scatter(x_axis, torch.cat(train_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
@@ -112,7 +126,7 @@ def main(args):
 
     set_seed()
 
-    scaler = StandardScaling(args.model)
+    scaler = StandardScaling(args.model_name)
 
     graphs = []
     number_of_train_samples = len(os.listdir(args.train_path))
@@ -135,23 +149,23 @@ def main(args):
 
     model = None
     
-    print(args.model)
-    if args.model == "AttentionGNN":
-        # input_size = 250
-        model = AttentionGNN(10, 12, args.learning_rate, args.weight_decay
+    if args.model_name == "AttentionGNN":
+        num_node_features = train_dataset.num_node_features
+        timesteps = args.timesteps
+        model = AttentionGNN(num_node_features, timesteps, args.learning_rate, args.weight_decay
         ).to(device)
-    elif args.model == "LstmGCN":
-        input_size = 10
-        model = LstmGCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
+    elif args.model_name == "LstmGCN":
+        num_node_features = 10
+        model = LstmGCN(num_node_features, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
-    elif args.model == "GCN":
-        input_size = train_dataset.num_node_features
-        model = GCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
+    elif args.model_name == "GCN":
+        num_node_features = train_dataset.num_node_features
+        model = GCN(num_node_features, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
     else:
         raise ValueError("Invalid model")
 
-    train(model, train_loader, args.epochs, val_loader, args.batch_size)
+    train(args.model_name, model, train_loader, args.epochs, val_loader, args.batch_size)
 
 
 if __name__ == "__main__":
@@ -177,11 +191,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-m",
-        "--model",
+        "--model_name",
         metavar="KEY",
         type=str,
         action="store",
-        dest="model",
+        dest="model_name",
         default="AttentionGNN",
         help="Model name",
     )
@@ -224,6 +238,16 @@ if __name__ == "__main__":
         dest="epochs",
         default=50,
         help="Epochs",
+    )
+    parser.add_argument(
+        "-ts",
+        "--timesteps",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="timesteps",
+        default=12,
+        help="Time steps in the past",
     )
     parser.add_argument(
         "-lr",
