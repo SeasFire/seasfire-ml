@@ -30,19 +30,29 @@ class GraphDataset(Dataset):
         return len([entry for entry in os.listdir(self.root_dir)])
 
     def __getitem__(self, idx):
+        
         graph = torch.load(self.root_dir + f"graph_{idx}.pt")
-
+        
+        ## Define label
         if self.task == 'binary':
             graph.y = torch.where(graph.y>5000, 1., 0.)
         elif self.task == 'regression':
             graph.y = graph.y / 1000.0
 
+        ## Standardize features
         if self.transform is not None:
             graph.x = self.transform.transform(graph.x)
             graph.x = torch.nan_to_num(graph.x, nan=-1.0)
 
-        # print(graph.x.shape)
-        # graph.pos = torch.cos(graph.pos)
-        # print(graph.pos)
+        ## Add cosine of position to features
+        pos_graph = []
+        graph.pos = torch.cos(graph.pos)
 
+        for i in range(0, graph.x.shape[0]):
+            pos_features = graph.pos[i,:].unsqueeze(1)
+            pos_features = pos_features.expand(pos_features.shape[0], graph.x.shape[2])
+            graph_features = graph.x[i,:,:]
+            pos_graph.append(torch.cat((graph_features, pos_features), axis = 0))
+
+        graph.x = torch.stack(pos_graph, dim=0)
         return graph
