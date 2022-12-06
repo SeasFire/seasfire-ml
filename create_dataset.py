@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import torch
 from torch_geometric.data import Data
 
-
 logger = logging.getLogger(__name__)
 
 OCI_BOUNDING_BOXES = {
@@ -168,18 +167,18 @@ class DatasetBuilder:
             "oci_soi",
             "oci_wp",
         ]
-        for oci_var in self._oci_input_vars:
-            logger.debug(
-                "Oci name {}, description: {}".format(
-                    oci_var, self._cube[oci_var].description
-                )
-            )
-        #print(self._cube.longitude.values)
-        #for x in self._cube.longitude.values:
-        #    print(x)
-        #print(self._cube.latitude.values)
-        #for x in self._cube.longitude.values:
-        #    print(x)
+        # for oci_var in self._oci_input_vars:
+        #     logger.debug(
+        #         "Oci name {}, description: {}".format(
+        #             oci_var, self._cube[oci_var].description
+        #         )
+        #     )
+        # print(self._cube.longitude.values)
+        # for x in self._cube.longitude.values:
+        #     print(x)
+        # print(self._cube.latitude.values)
+        # for x in self._cube.longitude.values:
+        #     print(x)
 
         # positive example threshold (fire)
         self._positive_samples_threshold = positive_samples_threshold
@@ -259,17 +258,18 @@ class DatasetBuilder:
         center_lon,
         center_time,
         ground_truth,
-        radius=2,
+        small_radius=2,
+        medium_radius=4
     ):
         logger.info(
-            "Creating sample for center_lat={}, center_lon={}, center_time={}, radius={}".format(
-                center_lat, center_lon, center_time, radius
+            "Creating sample for center_lat={}, center_lon={}, center_time={}".format(
+                center_lat, center_lon, center_time
             )
         )
         first_week = center_time - np.timedelta64(
             self._timeseries_weeks * self._days_per_week, "D"
         )
-        logger.debug(
+        logger.info(
             "Sampling from time period in weeks: [{}, {}]".format(
                 first_week, center_time
             )
@@ -280,11 +280,12 @@ class DatasetBuilder:
         )
         logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
 
+        max_radius = max(medium_radius+1, small_radius+1)
         lat_slice = slice(
-            center_lat + radius * self._sp_res, center_lat - radius * self._sp_res
+            center_lat + max_radius * self._sp_res, center_lat - max_radius * self._sp_res
         )
         lon_slice = slice(
-            center_lon - radius * self._sp_res, center_lon + radius * self._sp_res
+            center_lon - max_radius * self._sp_res, center_lon + max_radius * self._sp_res
         )
 
         points_input_vars = self._cube[self._input_vars].sel(
@@ -297,34 +298,34 @@ class DatasetBuilder:
         time_dim = points_input_vars.time.shape[0]
         latitude_dim = points_input_vars.latitude.shape[0]
         longitude_dim = points_input_vars.longitude.shape[0]
-        logger.info(
+        logger.debug(
             "Sample dimensions: time={}, lat={}, lon={}".format(
                 time_dim, latitude_dim, longitude_dim
             )
         )
 
-        # Create list of vertices and mapping from vertices to integer indices
+        # Initialize basic graph representation
         vertices = []
         vertices_idx = {}
+        edges = []
+
+        # Create a small grid graph around the center vertex (small radius). 
         grid = list(
             map(
                 self._normalize_lat_lon,
                 self._create_neighbors(
-                    (center_lat, center_lon), include_self=True, radius=radius
+                    (center_lat, center_lon), include_self=True, radius=small_radius
                 ),
             )
         )
         for cur in grid:
             cur_vertex = (cur[0], cur[1])
-            cur_vertex_index = len(vertices)
-            vertices_idx[cur_vertex] = cur_vertex_index
+            vertices_idx[cur_vertex] = len(vertices)
             vertices.append(cur_vertex)
-        logger.info("Final graph will have {} vertices".format(len(vertices)))
 
-        # Create edges
-        edges = []
-        for lat_inc in range(-radius, radius + 1):
-            for lon_inc in range(-radius, radius + 1):
+        # Create small grid edges
+        for lat_inc in range(-small_radius, small_radius + 1):
+            for lon_inc in range(-small_radius, small_radius + 1):
                 # vertex that we care about
                 cur = (
                     center_lat + lat_inc * self._sp_res,
@@ -346,7 +347,7 @@ class DatasetBuilder:
                     if self._in_bounding_box(
                         neighbor,
                         center_lat_lon=(center_lat, center_lon),
-                        radius=radius,
+                        radius=small_radius,
                     )
                 ]
                 cur_neighbors_bb = list(map(self._normalize_lat_lon, cur_neighbors_bb))
@@ -360,8 +361,36 @@ class DatasetBuilder:
                     # add only one direction, the other will be added by the other vertex
                     edges.append((cur_idx, neighbor_idx))
 
-        # Create edge index tensor
+        # Create medium radius periphery
+        periphery_vertices = self._create_periphery_neighbors((center_lat, center_lon), radius=medium_radius, normalize=True)
+        center_idx = vertices_idx[(center_lat, center_lon)]
+        for cur_p_vertex in periphery_vertices:
+            vertices_idx[cur_p_vertex] = len(vertices)
+            cur_p_vertex_idx = len(vertices)
+            vertices.append(cur_p_vertex) 
+
+            edges.append((center_idx, cur_p_vertex_idx)) 
+            edges.append((cur_p_vertex_idx, center_idx)) 
+
+            cur_p_neighbors = self._create_neighbors(
+                cur_p_vertex, radius=1, include_self=False, normalize=True
+            )
+            for cur_p_neighbor in cur_p_neighbors: 
+                vertices_idx[cur_p_neighbor] = len(vertices)
+                cur_p_neighbor_idx = len(vertices)
+                vertices.append(cur_p_neighbor)
+
+                edges.append((cur_p_vertex_idx, cur_p_neighbor_idx)) 
+                edges.append((cur_p_neighbor_idx, cur_p_vertex_idx)) 
+
+        #print("periphery = {}".format(periphery_vertices))
+        #print(vertices)
+
+
+        logger.info("Graph will have {} vertices".format(len(vertices)))
         logger.info("Total edges added in graph = {}".format(len(edges)))
+
+        # Create edge index tensor
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.debug("Computed edge tensor= {}".format(edge_index))
@@ -468,7 +497,7 @@ class DatasetBuilder:
         )
         total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
         sample_len_below_threshold = sample_len_above_threshold
-        logger.info("Samples below threshold = {}".format(total_below_threshold))
+        logger.info("Samples below threshold={}".format(total_below_threshold))
 
         all_below_threshold_samples_index = np.argwhere(
             sample_region_gwsi_ba_per_area_below_threshold
@@ -570,10 +599,30 @@ class DatasetBuilder:
         )
 
     def _create_neighbors(self, lat_lon, radius=1, include_self=False, normalize=False):
+        """Create list of all neighbors inside a radius. Radius is measured in multiples of 
+            the spatial resolution.
+        """
         lat, lon = lat_lon
         neighbors = []
         for lat_inc in range(-radius, radius + 1):
             for lon_inc in range(-radius, radius + 1):
+                if not include_self and lat_inc == 0 and lon_inc == 0:
+                    continue
+                neighbors.append(
+                    (lat + lat_inc * self._sp_res, lon + lon_inc * self._sp_res)
+                )
+        if normalize:
+            neighbors = list(map(self._normalize_lat_lon, neighbors))
+        return neighbors        
+
+    def _create_periphery_neighbors(self, lat_lon, radius=4, include_self=False, normalize=False):
+        """Create a list of neighbors in the periphery of a square with a specific radius around 
+           a vertex.
+        """
+        lat, lon = lat_lon
+        neighbors = []
+        for lat_inc in [-radius, 0, radius]:
+            for lon_inc in [-radius, 0, radius]:
                 if not include_self and lat_inc == 0 and lon_inc == 0:
                     continue
                 neighbors.append(
