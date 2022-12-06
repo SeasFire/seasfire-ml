@@ -341,7 +341,8 @@ class DatasetBuilder:
             .sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon))
             .expand_dims(dim={"time": sample_region.time}, axis=0)
         )
-
+        
+        ## Convert m^2 into hectares
         sample_region_area_values = sample_region_area.values / 10000.0
         print(np.unique(sample_region_area_values))
 
