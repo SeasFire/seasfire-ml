@@ -28,13 +28,17 @@ class StandardScaling:
 
         tmp = list(zip(*self.mean_std_tuples))
         mu = torch.Tensor(list(tmp[0]))
-        # print(mu)
+        # print(mu.shape)
         std = torch.Tensor(list(tmp[1]))
         # print(std)
 
         if self._model == "AttentionGNN":
-            for i in range(0, self.graph.shape[2]):
-                self.graph[:, :, i] = (self.graph[:, :, i] - mu) / std
+            mu = mu.unsqueeze(1) 
+            mu = mu.expand(mu.shape[0], graph.shape[2])
+            std = std.unsqueeze(1) 
+            std = std.expand(std.shape[0], graph.shape[2])
+            for i in range(0, self.graph.shape[0]):
+                self.graph[i, :, :] = (self.graph[i, :, :] - mu) / std
         elif self._model == "GCN":
             self.graph = (self.graph - mu) / std
 
