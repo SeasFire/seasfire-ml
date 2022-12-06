@@ -168,6 +168,7 @@ class DatasetBuilder:
             "oci_wp",
         ]
         self._oci_locations = self._vertices_per_oci()
+
         # for oci_var in self._oci_input_vars:
         #     logger.debug(
         #         "Oci name {}, description: {}".format(
@@ -454,14 +455,14 @@ class DatasetBuilder:
             .expand_dims(dim={"time": sample_region.time}, axis=0)
         )
 
+        # Convert area in hectars
         sample_region_area_values = sample_region_area.values / 10000.0
-        print(np.unique(sample_region_area_values))
+        logger.info("Unique area values: {}".format(np.unique(sample_region_area_values)))
 
         # compute target variable per area and apply threshold
         sample_region_gwsi_ba_per_area = (
             sample_region_gwsi_ba_values / sample_region_area_values
         )
-        # print(sample_region_gwsi_ba_per_area.shape)
         sample_region_gwsi_ba_per_area_above_threshold = (
             sample_region_gwsi_ba_per_area > self._positive_samples_threshold
         )
@@ -740,8 +741,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.0005,
-        # default=0.0000005,
+        default=0.01,
         help="Positive sample threshold",
     )
     parser.add_argument(
@@ -750,8 +750,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="negative_samples_threshold",
-        default=0.0001,
-        # default=0.0000001,
+        default=0.05,
         help="Negative sample threshold",
     )
     parser.add_argument(
