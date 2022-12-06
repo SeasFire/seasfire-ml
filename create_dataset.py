@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 OCI_BOUNDING_BOXES = {
     "oci_nao": [
         {
-            "min_lat": 55.0,
-            "max_lat": 20.0,
+            "min_lat": 20.0,
+            "max_lat": 55.0,
             "min_lon": -90,
             "max_lon": 60.0,
         },
@@ -54,16 +54,16 @@ OCI_BOUNDING_BOXES = {
     ],
     "oci_soi": [
         {
-            "min_lat": -17.625,
-            "max_lat": -17.375,
-            "min_lon": -149.875,
-            "max_lon": -149.625,
+            "min_lat": -18.625,
+            "max_lat": -16.375,
+            "min_lon": -150.875,
+            "max_lon": -148.625,
         },
         {
-            "min_lat": -12.625,
-            "max_lat": -12.375,
-            "min_lon": -131.125,
-            "max_lon": -130.875,
+            "min_lat": -13.625,
+            "max_lat": -11.375,
+            "min_lon": -132.125,
+            "max_lon": -129.875,
         },
     ],
     "oci_wp": [
@@ -167,6 +167,7 @@ class DatasetBuilder:
             "oci_soi",
             "oci_wp",
         ]
+        self._oci_locations = self._vertices_per_oci()
         # for oci_var in self._oci_input_vars:
         #     logger.debug(
         #         "Oci name {}, description: {}".format(
@@ -646,6 +647,30 @@ class DatasetBuilder:
 
     def _datetime64_to_ts(self, dt64):
         return (dt64 - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
+
+    def _vertices_per_oci(self): 
+        all_long_range = []
+        for oci in self._oci_input_vars: 
+            if oci not in OCI_BOUNDING_BOXES: 
+                continue
+            for candidate_bb in OCI_BOUNDING_BOXES[oci]: 
+
+                lat_values = self._cube.latitude
+                lat_values = lat_values.where((lat_values >= candidate_bb["min_lat"]) & (lat_values <= candidate_bb["max_lat"]))
+                lat_values = lat_values[~np.isnan(lat_values)]
+                lat_values = lat_values.values
+                candidate_lat = np.take(lat_values, lat_values.size // 2)
+
+                lon_values = self._cube.longitude
+                lon_values = lon_values.where((lon_values >= candidate_bb["min_lon"]) & (lon_values <= candidate_bb["max_lon"]))
+                lon_values = lon_values[~np.isnan(lon_values)]
+                lon_values = lon_values.values
+                candidate_lon = np.take(lon_values, lon_values.size // 2)
+
+                logger.info("Using ({},{}) as location for oci {}".format(candidate_lat, candidate_lon, oci))
+                all_long_range.append((candidate_lat, candidate_lon))
+
+        return all_long_range
 
 
 def main(args):
