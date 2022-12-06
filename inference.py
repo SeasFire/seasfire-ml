@@ -15,7 +15,7 @@ from scale_dataset import StandardScaling
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test(model, test_loader, model_name, criterion):
+def test(model, test_loader, criterion):
     # Validation
     with torch.no_grad():
         model.eval()
@@ -25,17 +25,7 @@ def test(model, test_loader, model_name, criterion):
         for data in test_loader:
             data = data.to(device)
 
-            if model_name == "AttentionGNN":
-                preds = model(data.x, data.edge_index)
-
-                ## Care only for central node
-                preds = preds[int(data.x.shape[0]/2)]
-                preds = preds.unsqueeze(1)
-            elif model_name == "GCN":
-                preds = model(data.x, data.edge_index, data.batch)
-            # elif model_name == "LstmGCN":
-            #     preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
-            
+            preds = model(data.x, data.edge_index, data.batch)
             y = data.y.unsqueeze(1)
 
             val_predictions.append(preds)
@@ -78,7 +68,7 @@ def main(args):
         test_dataset, batch_size=args.batch_size
     )
     
-    test(model, test_loader, model_name, criterion)
+    test(model, test_loader, criterion)
 
 if __name__ == "__main__":
 
