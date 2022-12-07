@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import torch
 from tqdm import tqdm
 import logging
