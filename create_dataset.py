@@ -187,6 +187,8 @@ class DatasetBuilder:
         self._positive_samples_threshold = positive_samples_threshold
         # negative examples threshold (no fire)
         self._negative_samples_threshold = negative_samples_threshold
+        if self._negative_samples_threshold > self._positive_samples_threshold: 
+            self._negative_samples_threshold = self._positive_samples_threshold
 
         # sample index to start generation
         self._first_sample_index = first_sample_index
