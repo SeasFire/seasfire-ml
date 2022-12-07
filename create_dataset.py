@@ -112,7 +112,7 @@ class DatasetBuilder:
         self._aggregation_in_weeks = 4  # aggregate per month
         self._target_shift = target_shift  # in weeks, e.g. 0
         self._target_length = target_length  # in weeks, e.g. 4
-        self._year_in_weeks = 48
+        self._year_in_weeks = 46
 
         logger.info(
             "Target period weeks in the future: [{},{}]".format(
@@ -125,21 +125,21 @@ class DatasetBuilder:
             self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
             - (self._target_shift + self._target_length),
-        )  # 46 - 778 (782-0-4) week -> 17 years
+        )  # 48 - 732 (736-0-4) week -> 16 years
         logger.info("Train time in weeks: {}".format(self._time_train))
 
         self._time_val = (
             self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
-        )  # 782+46 - 782+2*46 week -> 2 years
+        )  # 736+48 - 736+2*48 week -> 2 years
         logger.info("Val time in weeks: {}".format(self._time_val))
 
         self._time_test = (
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
             918 - (self._target_shift + self._target_length),
-        )  # 828 (782+46) - 914 (918-0-4) week -> 2 years
+        )  # 736+2*48 week - 914 (918-0-4) week -> 2 years
         logger.info("Test time in weeks: {}".format(self._time_test))
 
         if self._split == "train":
@@ -459,7 +459,7 @@ class DatasetBuilder:
 
         logger.info("About to create {} samples".format(len(samples)))
         # now generate them and write to disk
-        for idx in tqdm(range(0, len(samples))):
+        for idx in tqdm(range(0, len(samples))): 
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
