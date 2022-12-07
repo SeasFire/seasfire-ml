@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-## First draft for GCN model
-
 import torch
 from tqdm import tqdm
 import logging
@@ -51,20 +49,15 @@ def train(model, train_loader, epochs, val_loader, batch_size):
 
         for data in train_loader:
             data = data.to(device)
-            # preds = [model(data.x[:,:,i], data.edge_index) for i in range(0, 12)]
-            preds = model(data.x, data.edge_index)
-            # preds = model(data.x, data.edge_index, data.batch)
-            pred = preds[12]
-            pred = pred.unsqueeze(1)
+
+            preds = []
+            preds = model(data.x, data.edge_index, data.batch)
             y = data.y.unsqueeze(1)
 
-            # print(pred)
-            # print(y)
-
-            train_predictions.append(pred)
+            train_predictions.append(preds)
             train_labels.append(y)
 
-            train_loss = criterion(y, pred)
+            train_loss = criterion(y, preds)
             train_loss.backward()
 
             optimizer.step()
@@ -76,12 +69,10 @@ def train(model, train_loader, epochs, val_loader, batch_size):
             for data in val_loader:
                 data = data.to(device)
 
-                pred = model(data.x, data.edge_index)
-                # preds = model(data.x, data.edge_index, data.batch)
+                preds = model(data.x, data.edge_index, data.batch)
                 y = data.y.unsqueeze(1)
-                pred = pred[12]
-                pred = pred.unsqueeze(1)
-                val_predictions.append(pred)
+
+                val_predictions.append(preds)
                 val_labels.append(y)
 
                 # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
@@ -94,12 +85,14 @@ def train(model, train_loader, epochs, val_loader, batch_size):
         print(f"Epoch {epoch} | Train Loss: {train_loss}" + f" | Val Loss: {val_loss}")
         # print(train_labels)
         # print(train_predictions)
+        plt.figure(figsize=(24, 15))
         x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
         plt.scatter(x_axis, torch.cat(train_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
         plt.scatter(x_axis, torch.cat(train_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
         # plt.show()
         plt.savefig('logs/' + str(epoch)+'.png')
 
+    return model, criterion
 
 def main(args):
     FileOutputHandler = logging.FileHandler("logs.log")
@@ -112,7 +105,7 @@ def main(args):
 
     set_seed()
 
-    scaler = StandardScaling(args.model)
+    scaler = StandardScaling(args.model_name)
 
     graphs = []
     number_of_train_samples = len(os.listdir(args.train_path))
@@ -126,7 +119,6 @@ def main(args):
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset, batch_size=args.batch_size
     )
-    
 
     val_dataset = GraphDataset(root_dir=args.val_path, transform=scaler, task=args.task)
     val_loader = torch_geometric.loader.DataLoader(
@@ -135,24 +127,33 @@ def main(args):
 
     model = None
     
-    print(args.model)
-    if args.model == "AttentionGNN":
-        # input_size = 250
-        model = AttentionGNN(10, 12, args.learning_rate, args.weight_decay
+    if args.model_name == "AttentionGNN":
+        num_node_features = train_dataset.num_node_features
+        timesteps = args.timesteps
+        model = AttentionGNN(num_node_features, timesteps, args.learning_rate, args.weight_decay
         ).to(device)
-    elif args.model == "LstmGCN":
-        input_size = 10
-        model = LstmGCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
+    elif args.model_name == "LstmGCN":
+        num_node_features = 10
+        model = LstmGCN(num_node_features, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
-    elif args.model == "GCN":
-        input_size = train_dataset.num_node_features
-        model = GCN(input_size, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
+    elif args.model_name == "GCN":
+        num_node_features = train_dataset.num_node_features
+        model = GCN(num_node_features, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
         ).to(device)
     else:
         raise ValueError("Invalid model")
 
-    train(model, train_loader, args.epochs, val_loader, args.batch_size)
+    model, criterion = train(model, train_loader, args.epochs, val_loader, args.batch_size)
 
+    model_info = {
+        'model': model,
+        'criterion': criterion,
+        'scaler': scaler,
+        'name': args.model_name
+    }
+
+    ## Save the entire model to PATH
+    torch.save(model_info, args.model_path)
 
 if __name__ == "__main__":
 
@@ -177,16 +178,24 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-m",
-        "--model",
+        "--model_name",
         metavar="KEY",
         type=str,
         action="store",
-        dest="model",
+        dest="model_name",
         default="AttentionGNN",
         help="Model name",
     )
     parser.add_argument(
-        "-t",
+        "--model-path",
+        metavar="PATH",
+        type=str,
+        action="store",
+        dest="model_path",
+        default="attention_model.pt",
+        help="Path to save the trained model",
+    )
+    parser.add_argument(
         "--task",
         metavar="KEY",
         type=str,
@@ -222,8 +231,18 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=50,
+        default=5,
         help="Epochs",
+    )
+    parser.add_argument(
+        "-ts",
+        "--timesteps",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="timesteps",
+        default=12,
+        help="Time steps in the past",
     )
     parser.add_argument(
         "-lr",

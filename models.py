@@ -89,13 +89,19 @@ class AttentionGNN(torch.nn.Module):
             self.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, batch=None):
         """
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
         h = self.tgnn(x, edge_index)
         h = F.relu(h)
+
+        # Readout layer
+        batch = torch.zeros(h.shape[0], dtype=int) if batch is None else batch
+        batch = batch.to(device)
+        h = global_mean_pool(h, batch)
+
         h = self.linear(h)
         h = F.relu(h)
         return h
