@@ -251,7 +251,6 @@ class DatasetBuilder:
         points_oci_vars = points_oci_vars.resample(
             time=aggregation_in_days, closed="left"
         ).mean(skipna=True)
-        logger.info("oci vars = {}".format(points_oci_vars.values))
         return points_oci_vars
 
     def create_sample(
@@ -261,48 +260,11 @@ class DatasetBuilder:
         center_time,
         ground_truth,
         small_radius=2,
-        medium_radius=4
+        medium_radius=4,
     ):
         logger.info(
             "Creating sample for center_lat={}, center_lon={}, center_time={}".format(
                 center_lat, center_lon, center_time
-            )
-        )
-        first_week = center_time - np.timedelta64(
-            self._timeseries_weeks * self._days_per_week, "D"
-        )
-        logger.info(
-            "Sampling from time period in weeks: [{}, {}]".format(
-                first_week, center_time
-            )
-        )
-
-        aggregation_in_days = "{}D".format(
-            self._aggregation_in_weeks * self._days_per_week
-        )
-        logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
-
-        max_radius = max(medium_radius+1, small_radius+1)
-        lat_slice = slice(
-            center_lat + max_radius * self._sp_res, center_lat - max_radius * self._sp_res
-        )
-        lon_slice = slice(
-            center_lon - max_radius * self._sp_res, center_lon + max_radius * self._sp_res
-        )
-
-        points_input_vars = self._cube[self._input_vars].sel(
-            latitude=lat_slice, longitude=lon_slice, time=slice(first_week, center_time)
-        )
-        points_input_vars = points_input_vars.resample(
-            time=aggregation_in_days, closed="left"
-        ).mean(skipna=True)
-
-        time_dim = points_input_vars.time.shape[0]
-        latitude_dim = points_input_vars.latitude.shape[0]
-        longitude_dim = points_input_vars.longitude.shape[0]
-        logger.debug(
-            "Sample dimensions: time={}, lat={}, lon={}".format(
-                time_dim, latitude_dim, longitude_dim
             )
         )
 
@@ -311,7 +273,7 @@ class DatasetBuilder:
         vertices_idx = {}
         edges = []
 
-        # Create a small grid graph around the center vertex (small radius). 
+        # Create a small grid graph around the center vertex (small radius).
         grid = list(
             map(
                 self._normalize_lat_lon,
@@ -364,44 +326,125 @@ class DatasetBuilder:
                     edges.append((cur_idx, neighbor_idx))
 
         # Create medium radius periphery
-        periphery_vertices = self._create_periphery_neighbors((center_lat, center_lon), radius=medium_radius, normalize=True)
+        periphery_vertices = self._create_periphery_neighbors(
+            (center_lat, center_lon), radius=medium_radius, normalize=True
+        )
         center_idx = vertices_idx[(center_lat, center_lon)]
         for cur_p_vertex in periphery_vertices:
             vertices_idx[cur_p_vertex] = len(vertices)
             cur_p_vertex_idx = len(vertices)
-            vertices.append(cur_p_vertex) 
+            vertices.append(cur_p_vertex)
 
-            edges.append((center_idx, cur_p_vertex_idx)) 
-            edges.append((cur_p_vertex_idx, center_idx)) 
+            edges.append((center_idx, cur_p_vertex_idx))
+            edges.append((cur_p_vertex_idx, center_idx))
 
             cur_p_neighbors = self._create_neighbors(
                 cur_p_vertex, radius=1, include_self=False, normalize=True
             )
-            for cur_p_neighbor in cur_p_neighbors: 
+            for cur_p_neighbor in cur_p_neighbors:
                 vertices_idx[cur_p_neighbor] = len(vertices)
                 cur_p_neighbor_idx = len(vertices)
                 vertices.append(cur_p_neighbor)
 
-                edges.append((cur_p_vertex_idx, cur_p_neighbor_idx)) 
-                edges.append((cur_p_neighbor_idx, cur_p_vertex_idx)) 
+                edges.append((cur_p_vertex_idx, cur_p_neighbor_idx))
+                edges.append((cur_p_neighbor_idx, cur_p_vertex_idx))
 
-        #print("periphery = {}".format(periphery_vertices))
-        #print(vertices)
+        vertex_features, vertex_positions = self._compute_local_vertices_features(
+            vertices, center_lat, center_lon, center_time, small_radius, medium_radius
+        )
 
+        # Create long range vertices to OCI
+        for cur_oci_vertex in self._oci_locations:
+            logger.debug("Oci = {}".format(cur_oci_vertex))
+            vertices_idx[cur_oci_vertex] = len(vertices)
+            cur_oci_vertex_idx = len(vertices)
+            vertices.append(cur_oci_vertex_idx)
 
-        logger.info("Graph will have {} vertices".format(len(vertices)))
-        logger.info("Total edges added in graph = {}".format(len(edges)))
+            oci_features, oci_positions = self._compute_vertex_features(
+                cur_oci_vertex[0], cur_oci_vertex[1], center_time
+            )
+            vertex_features.extend(oci_features)
+            vertex_positions.extend(oci_positions)
+
+            edges.append((center_idx, cur_oci_vertex_idx))
+            edges.append((cur_oci_vertex_idx, center_idx))
+
+            cur_oci_vertex_neighbors = self._create_neighbors(
+                cur_oci_vertex, radius=1, include_self=False, normalize=True
+            )
+
+            for cur_oci_vertex_neighbor in cur_oci_vertex_neighbors:
+                vertices_idx[cur_oci_vertex_neighbor] = len(vertices)
+                cur_oci_vertex_neighbor_idx = len(vertices)
+                vertices.append(cur_oci_vertex_neighbor)
+
+                oci_features, oci_positions = self._compute_vertex_features(
+                    cur_oci_vertex_neighbor[0], cur_oci_vertex_neighbor[1], center_time
+                )
+                vertex_features.extend(oci_features)
+                vertex_positions.extend(oci_positions)
+
+                edges.append((cur_oci_vertex_idx, cur_oci_vertex_neighbor_idx))
+                edges.append((cur_oci_vertex_neighbor_idx, cur_oci_vertex_idx))
+
+        vertex_features = np.array(vertex_features)
+        vertex_features = torch.from_numpy(vertex_features).type(torch.float32)
+        vertex_positions = np.array(vertex_positions)
+        vertex_positions = torch.from_numpy(vertex_positions).type(torch.float32)
+
+        graph_level_ground_truth = torch.from_numpy(np.array([ground_truth])).type(
+            torch.float32
+        )
 
         # Create edge index tensor
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.debug("Computed edge tensor= {}".format(edge_index))
 
-        # Compute OCI features
-        # self._get_oci_features(center_time=center_time)
+        return Data(
+            x=vertex_features,
+            y=graph_level_ground_truth,
+            edge_index=edge_index,
+            pos=vertex_positions,
+        )
+
+    def _compute_local_vertices_features(
+        self,
+        vertices,
+        center_lat,
+        center_lon,
+        center_time,
+        small_radius=2,
+        medium_radius=4,
+    ):
+        first_week = center_time - np.timedelta64(
+            self._timeseries_weeks * self._days_per_week, "D"
+        )
+
+        aggregation_in_days = "{}D".format(
+            self._aggregation_in_weeks * self._days_per_week
+        )
+        logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
+
+        max_radius = max(medium_radius + 1, small_radius + 1)
+        lat_slice = slice(
+            center_lat + max_radius * self._sp_res,
+            center_lat - max_radius * self._sp_res,
+        )
+        lon_slice = slice(
+            center_lon - max_radius * self._sp_res,
+            center_lon + max_radius * self._sp_res,
+        )
+
+        points_input_vars = self._cube[self._input_vars].sel(
+            latitude=lat_slice, longitude=lon_slice, time=slice(first_week, center_time)
+        )
+
+        points_input_vars = points_input_vars.resample(
+            time=aggregation_in_days, closed="left"
+        ).mean(skipna=True)
 
         # Create vertex feature tensors
-        # Now that we have our graph, compute variables per vertex
         vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude"))
         vertex_features = []
         vertex_positions = []
@@ -416,21 +459,48 @@ class DatasetBuilder:
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
-        vertex_features = np.array(vertex_features)
-        vertex_features = torch.from_numpy(vertex_features).type(torch.float32)
-        vertex_positions = np.array(vertex_positions)
-        vertex_positions = torch.from_numpy(vertex_positions).type(torch.float32)
+        return vertex_features, vertex_positions
 
-        graph_level_ground_truth = torch.from_numpy(np.array([ground_truth])).type(
-            torch.float32
+    def _compute_vertex_features(
+        self,
+        vertex_lat,
+        vertex_lon,
+        vertex_time,
+    ):
+        logger.debug(
+            "Computing oci features for ({},{},{})".format(
+                vertex_lat, vertex_lon, vertex_time
+            )
+        )
+        first_week = vertex_time - np.timedelta64(
+            self._timeseries_weeks * self._days_per_week, "D"
+        )
+        aggregation_in_days = "{}D".format(
+            self._aggregation_in_weeks * self._days_per_week
+        )
+        logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
+
+        points_input_vars = self._cube[self._input_vars].sel(
+            latitude=vertex_lat,
+            longitude=vertex_lon,
+            time=slice(first_week, vertex_time),
         )
 
-        return Data(
-            x=vertex_features,
-            y=graph_level_ground_truth,
-            edge_index=edge_index,
-            pos=vertex_positions,
+        points_input_vars = points_input_vars.resample(
+            time=aggregation_in_days, closed="left"
+        ).mean(skipna=True)
+
+        # Create vertex feature tensors
+        vertex_features = []
+        vertex_positions = [[vertex_lat, vertex_lon]]
+        v_features = (
+            points_input_vars
+            .to_array(dim="variable", name=None)
+            .values
         )
+        vertex_features.append(v_features)
+
+        return vertex_features, vertex_positions
 
     def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         logger.info("Generating sample list for split={}".format(self._split))
@@ -457,7 +527,9 @@ class DatasetBuilder:
 
         # Convert area in hectars
         sample_region_area_values = sample_region_area.values / 10000.0
-        logger.info("Unique area values: {}".format(np.unique(sample_region_area_values)))
+        logger.info(
+            "Unique area values: {}".format(np.unique(sample_region_area_values))
+        )
 
         # compute target variable per area and apply threshold
         sample_region_gwsi_ba_per_area = (
@@ -601,8 +673,8 @@ class DatasetBuilder:
         )
 
     def _create_neighbors(self, lat_lon, radius=1, include_self=False, normalize=False):
-        """Create list of all neighbors inside a radius. Radius is measured in multiples of 
-            the spatial resolution.
+        """Create list of all neighbors inside a radius. Radius is measured in multiples of
+        the spatial resolution.
         """
         lat, lon = lat_lon
         neighbors = []
@@ -615,11 +687,13 @@ class DatasetBuilder:
                 )
         if normalize:
             neighbors = list(map(self._normalize_lat_lon, neighbors))
-        return neighbors        
+        return neighbors
 
-    def _create_periphery_neighbors(self, lat_lon, radius=4, include_self=False, normalize=False):
-        """Create a list of neighbors in the periphery of a square with a specific radius around 
-           a vertex.
+    def _create_periphery_neighbors(
+        self, lat_lon, radius=4, include_self=False, normalize=False
+    ):
+        """Create a list of neighbors in the periphery of a square with a specific radius around
+        a vertex.
         """
         lat, lon = lat_lon
         neighbors = []
@@ -649,26 +723,36 @@ class DatasetBuilder:
     def _datetime64_to_ts(self, dt64):
         return (dt64 - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
 
-    def _vertices_per_oci(self): 
+    def _vertices_per_oci(self):
         all_long_range = []
-        for oci in self._oci_input_vars: 
-            if oci not in OCI_BOUNDING_BOXES: 
+        for oci in self._oci_input_vars:
+            if oci not in OCI_BOUNDING_BOXES:
                 continue
-            for candidate_bb in OCI_BOUNDING_BOXES[oci]: 
+            for candidate_bb in OCI_BOUNDING_BOXES[oci]:
 
                 lat_values = self._cube.latitude
-                lat_values = lat_values.where((lat_values >= candidate_bb["min_lat"]) & (lat_values <= candidate_bb["max_lat"]))
+                lat_values = lat_values.where(
+                    (lat_values >= candidate_bb["min_lat"])
+                    & (lat_values <= candidate_bb["max_lat"])
+                )
                 lat_values = lat_values[~np.isnan(lat_values)]
                 lat_values = lat_values.values
                 candidate_lat = np.take(lat_values, lat_values.size // 2)
 
                 lon_values = self._cube.longitude
-                lon_values = lon_values.where((lon_values >= candidate_bb["min_lon"]) & (lon_values <= candidate_bb["max_lon"]))
+                lon_values = lon_values.where(
+                    (lon_values >= candidate_bb["min_lon"])
+                    & (lon_values <= candidate_bb["max_lon"])
+                )
                 lon_values = lon_values[~np.isnan(lon_values)]
                 lon_values = lon_values.values
                 candidate_lon = np.take(lon_values, lon_values.size // 2)
 
-                logger.info("Using ({},{}) as location for oci {}".format(candidate_lat, candidate_lon, oci))
+                logger.info(
+                    "Using ({},{}) as location for oci {}".format(
+                        candidate_lat, candidate_lon, oci
+                    )
+                )
                 all_long_range.append((candidate_lat, candidate_lon))
 
         return all_long_range
