@@ -92,6 +92,7 @@ class DatasetBuilder:
         split,
         positive_samples_threshold,
         negative_samples_threshold,
+        first_sample_index,
         seed,
         target_shift,
         target_length,
@@ -184,10 +185,11 @@ class DatasetBuilder:
 
         # positive example threshold (fire)
         self._positive_samples_threshold = positive_samples_threshold
-        self._number_of_positive_samples = 0
-
         # negative examples threshold (no fire)
         self._negative_samples_threshold = negative_samples_threshold
+
+        # sample index to start generation
+        self._first_sample_index = first_sample_index
 
         self._number_of_train_years = 16
         self._days_per_week = 8
@@ -493,11 +495,7 @@ class DatasetBuilder:
         # Create vertex feature tensors
         vertex_features = []
         vertex_positions = [[vertex_lat, vertex_lon]]
-        v_features = (
-            points_input_vars
-            .to_array(dim="variable", name=None)
-            .values
-        )
+        v_features = points_input_vars.to_array(dim="variable", name=None).values
         vertex_features.append(v_features)
 
         return vertex_features, vertex_positions
@@ -644,6 +642,8 @@ class DatasetBuilder:
         logger.info("About to create {} samples".format(len(samples)))
         # now generate them and write to disk
         for idx in tqdm(range(0, len(samples))):
+            if idx < self._first_sample_index:
+                continue
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
@@ -655,8 +655,7 @@ class DatasetBuilder:
                 ground_truth=ground_truth,
             )
 
-            self._write_sample_to_disk(graph, self._number_of_positive_samples)
-            self._number_of_positive_samples += 1
+            self._write_sample_to_disk(graph, idx)
 
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
@@ -773,6 +772,7 @@ def main(args):
         args.split,
         args.positive_samples_threshold,
         args.negative_samples_threshold,
+        args.first_sample_index,
         args.seed,
         args.target_shift,
         args.target_length,
@@ -784,7 +784,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Create dataset")
     parser.add_argument(
-        "--cubepath",
+        "--cube-path",
         metavar="PATH",
         type=str,
         action="store",
@@ -845,6 +845,15 @@ if __name__ == "__main__":
         dest="seed",
         default=17,
         help="Seed for random number generation",
+    )
+    parser.add_argument(
+        "--first-sample-index",
+        metavar="INT",
+        type=int,
+        action="store",
+        dest="first_sample_index",
+        default=0,
+        help="Generate samples starting from a specific sample index. Allows to resume dataset creation.",
     )
     parser.add_argument(
         "--target-shift",
