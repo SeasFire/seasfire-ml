@@ -38,17 +38,16 @@ def train(model, train_loader, epochs, val_loader, batch_size):
     # criterion = torch.nn.L1Loss()
     criterion = torch.nn.MSELoss()
 
-    for epoch in tqdm(range(0, epochs + 1)):
+    for epoch in range(1, epochs + 1):
+        logger.info("Starting Epoch {}".format(epoch))
+
         model.train()
         optimizer.zero_grad()
 
+        logger.info("Epoch {} Training".format(epoch))
         train_predictions = []
         train_labels = []
-
-        val_predictions = []
-        val_labels = []
-
-        for data in train_loader:
+        for _, data in enumerate(tqdm(train_loader)):
             data = data.to(device)
 
             preds = []
@@ -64,10 +63,13 @@ def train(model, train_loader, epochs, val_loader, batch_size):
             optimizer.step()
 
         # Validation
+        logger.info("Epoch {} Validation".format(epoch))
+        val_predictions = []
+        val_labels = []
         with torch.no_grad():
             model.eval()
 
-            for data in val_loader:
+            for _, data in enumerate(tqdm(val_loader)):
                 data = data.to(device)
 
                 preds = model(data.x, data.edge_index, data.batch)
@@ -243,7 +245,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=1,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
@@ -263,7 +265,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=5,
+        default=100,
         help="Epochs",
     )
     parser.add_argument(
