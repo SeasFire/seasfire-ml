@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def set_seed(seed: int = 42) -> None:
+    logger.info("Using random seed={}".format(seed))
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
@@ -28,7 +30,6 @@ def set_seed(seed: int = 42) -> None:
     torch.backends.cudnn.benchmark = False
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
-    print(f"Random seed set as {seed}")
 
 
 def train(model, train_loader, epochs, val_loader, batch_size):
@@ -37,17 +38,16 @@ def train(model, train_loader, epochs, val_loader, batch_size):
     # criterion = torch.nn.L1Loss()
     criterion = torch.nn.MSELoss()
 
-    for epoch in tqdm(range(0, epochs + 1)):
+    for epoch in range(1, epochs + 1):
+        logger.info("Starting Epoch {}".format(epoch))
+
         model.train()
         optimizer.zero_grad()
 
+        logger.info("Epoch {} Training".format(epoch))
         train_predictions = []
         train_labels = []
-
-        val_predictions = []
-        val_labels = []
-
-        for data in train_loader:
+        for _, data in enumerate(tqdm(train_loader)):
             data = data.to(device)
 
             preds = []
@@ -63,10 +63,13 @@ def train(model, train_loader, epochs, val_loader, batch_size):
             optimizer.step()
 
         # Validation
+        logger.info("Epoch {} Validation".format(epoch))
+        val_predictions = []
+        val_labels = []
         with torch.no_grad():
             model.eval()
 
-            for data in val_loader:
+            for _, data in enumerate(tqdm(val_loader)):
                 data = data.to(device)
 
                 preds = model(data.x, data.edge_index, data.batch)
@@ -86,41 +89,52 @@ def train(model, train_loader, epochs, val_loader, batch_size):
         # print(train_labels)
         # print(train_predictions)
         plt.figure(figsize=(24, 15))
-        x_axis = torch.arange(0, (torch.cat(train_predictions).to('cpu').detach().numpy()).shape[0])
-        plt.scatter(x_axis, torch.cat(train_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
-        plt.scatter(x_axis, torch.cat(train_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
+        x_axis = torch.arange(
+            0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
+        )
+        plt.scatter(
+            x_axis,
+            torch.cat(train_predictions).to("cpu").detach().numpy(),
+            linestyle="dotted",
+            color="b",
+        )
+        plt.scatter(
+            x_axis,
+            torch.cat(train_labels).to("cpu").numpy(),
+            linestyle="dotted",
+            color="r",
+        )
         # plt.show()
-        plt.savefig('logs/' + str(epoch)+'.png')
+        plt.savefig("logs/" + str(epoch) + ".png")
 
     return model, criterion
 
+
 def main(args):
-    # FileOutputHandler = logging.FileHandler("logs.log")
-    # logger.addHandler(FileOutputHandler)
+    logging.basicConfig(level=logging.INFO)
+    logger.addHandler(logging.FileHandler("logs.log"))
 
-    print("Torch version: {}".format(torch.__version__))
-    print("Cuda available: {}".format(torch.cuda.is_available()))
+    logger.info("Torch version: {}".format(torch.__version__))
+    logger.info("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
-        print("Torch cuda version: {}".format(torch.version.cuda))
-
-    # logger.debug("Torch version: {}".format(torch.__version__))
-    # logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
-    # if torch.cuda.is_available():
-    #     logger.debug("Torch cuda version: {}".format(torch.version.cuda))
+        logger.info("Torch cuda version: {}".format(torch.version.cuda))
 
     set_seed()
 
-    scaler = StandardScaling(args.model_name)
 
+    logger.info("Extracting dataset statistics")
+    scaler = StandardScaling(args.model_name)
     graphs = []
     number_of_train_samples = len(os.listdir(args.train_path))
     for idx in range(0, number_of_train_samples):
-        graph = torch.load(args.train_path + f"/graph_{idx}.pt")
+        graph = torch.load(os.path.join(args.train_path, "graph_{}.pt".format(idx)))
         graphs.append(graph.x)
     mean_std_tuples = scaler.fit(graphs)
-    # print(mean_std_tuples)
+    logger.info("Statistics: {}".format(mean_std_tuples))
 
-    train_dataset = GraphDataset(root_dir=args.train_path, transform=scaler, task=args.task)
+    train_dataset = GraphDataset(
+        root_dir=args.train_path, transform=scaler, task=args.task
+    )
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset, batch_size=args.batch_size
     )
@@ -130,35 +144,50 @@ def main(args):
         val_dataset, batch_size=args.batch_size
     )
 
-    model = None
-    
+    logger.info("Building model {}".format(args.model_name))
     if args.model_name == "AttentionGNN":
         num_node_features = train_dataset.num_node_features
         timesteps = args.timesteps
-        model = AttentionGNN(num_node_features, timesteps, args.learning_rate, args.weight_decay
+        model = AttentionGNN(
+            num_node_features, timesteps, args.learning_rate, args.weight_decay
         ).to(device)
     elif args.model_name == "LstmGCN":
         num_node_features = 10
-        model = LstmGCN(num_node_features, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
+        model = LstmGCN(
+            num_node_features,
+            args.hidden_channels,
+            args.learning_rate,
+            args.weight_decay,
+            args.task,
         ).to(device)
     elif args.model_name == "GCN":
         num_node_features = train_dataset.num_node_features
-        model = GCN(num_node_features, args.hidden_channels, args.learning_rate, args.weight_decay, args.task
+        model = GCN(
+            num_node_features,
+            args.hidden_channels,
+            args.learning_rate,
+            args.weight_decay,
+            args.task,
         ).to(device)
     else:
         raise ValueError("Invalid model")
 
-    model, criterion = train(model, train_loader, args.epochs, val_loader, args.batch_size)
+    logger.info("Starting training")
+    model, criterion = train(
+        model, train_loader, args.epochs, val_loader, args.batch_size
+    )
 
+    logger.info("Saving model as {}".format(args.model_path))
     model_info = {
-        'model': model,
-        'criterion': criterion,
-        'scaler': scaler,
-        'name': args.model_name
+        "model": model,
+        "criterion": criterion,
+        "scaler": scaler,
+        "name": args.model_name,
     }
 
     ## Save the entire model to PATH
     torch.save(model_info, args.model_path)
+
 
 if __name__ == "__main__":
 
@@ -169,7 +198,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train/",
+        default="data/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -178,7 +207,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val/",
+        default="data/val",
         help="Validation set path",
     )
     parser.add_argument(
@@ -216,7 +245,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=1,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
@@ -236,7 +265,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=50,
+        default=100,
         help="Epochs",
     )
     parser.add_argument(

@@ -30,13 +30,12 @@ class GraphDataset(Dataset):
         return len([entry for entry in os.listdir(self.root_dir)])
 
     def __getitem__(self, idx):
-        
-        graph = torch.load(self.root_dir + f"graph_{idx}.pt")
-        
+        graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(idx)))
+
         ## Define label
-        if self.task == 'binary':
-            graph.y = torch.where(graph.y>5000, 1., 0.)
-        elif self.task == 'regression':
+        if self.task == "binary":
+            graph.y = torch.where(graph.y > 5000, 1.0, 0.0)
+        elif self.task == "regression":
             graph.y = graph.y / 1000.0
 
         ## Standardize features
