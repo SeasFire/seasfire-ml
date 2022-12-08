@@ -95,13 +95,18 @@ def train(model, train_loader, epochs, val_loader, batch_size):
     return model, criterion
 
 def main(args):
-    FileOutputHandler = logging.FileHandler("logs.log")
-    logger.addHandler(FileOutputHandler)
+    # FileOutputHandler = logging.FileHandler("logs.log")
+    # logger.addHandler(FileOutputHandler)
 
-    logger.debug("Torch version: {}".format(torch.__version__))
-    logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
+    print("Torch version: {}".format(torch.__version__))
+    print("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
-        logger.debug("Torch cuda version: {}".format(torch.version.cuda))
+        print("Torch cuda version: {}".format(torch.version.cuda))
+
+    # logger.debug("Torch version: {}".format(torch.__version__))
+    # logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
+    # if torch.cuda.is_available():
+    #     logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
     set_seed()
 
@@ -164,7 +169,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="dataset/train/",
+        default="data/train/",
         help="Train set path",
     )
     parser.add_argument(
@@ -173,7 +178,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="dataset/val/",
+        default="data/val/",
         help="Validation set path",
     )
     parser.add_argument(
@@ -231,7 +236,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=5,
+        default=50,
         help="Epochs",
     )
     parser.add_argument(
