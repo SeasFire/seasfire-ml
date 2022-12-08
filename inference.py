@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def test(model, test_loader, criterion):
-    # Validation
     with torch.no_grad():
         model.eval()
         val_predictions = []

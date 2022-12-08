@@ -46,13 +46,22 @@ class GraphDataset(Dataset):
 
         ## Add cosine of position to features
         pos_graph = []
-        graph.pos = torch.cos(graph.pos)
-
+        # graph.pos = torch.cos(graph.pos)
+        
         for i in range(0, graph.x.shape[0]):
-            pos_features = graph.pos[i,:].unsqueeze(1)
-            pos_features = pos_features.expand(pos_features.shape[0], graph.x.shape[2])
+            cosine_pos_features = torch.cos(graph.pos[i,:]).unsqueeze(1)
+            cosine_pos_features = cosine_pos_features.expand(cosine_pos_features.shape[0], graph.x.shape[2])
+            sine_pos_features = torch.cos(graph.pos[i,:]).unsqueeze(1)
+            sine_pos_features = sine_pos_features.expand(sine_pos_features.shape[0], graph.x.shape[2])
+            
             graph_features = graph.x[i,:,:]
-            pos_graph.append(torch.cat((graph_features, pos_features), axis = 0))
+            
+            pos_graph.append(torch.cat((graph_features, cosine_pos_features), axis = 0))
+
+        print(len(pos_graph))
+        print(pos_graph[0])
 
         graph.x = torch.stack(pos_graph, dim=0)
+        # print(graph.x.shape)
+        # print(graph.x)
         return graph
