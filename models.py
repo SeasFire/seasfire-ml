@@ -94,7 +94,10 @@ class AttentionGNN(torch.nn.Module):
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
+        
+        
         h = self.tgnn(x, edge_index)
+        h.to(device)
         h = F.relu(h)
 
         # Readout layer
