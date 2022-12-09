@@ -62,50 +62,50 @@ def train(model, train_loader, epochs, val_loader, batch_size):
 
             optimizer.step()
 
-        # Validation
-        logger.info("Epoch {} Validation".format(epoch))
-        val_predictions = []
-        val_labels = []
-        with torch.no_grad():
-            model.eval()
+    #     # Validation
+    #     logger.info("Epoch {} Validation".format(epoch))
+    #     val_predictions = []
+    #     val_labels = []
+    #     with torch.no_grad():
+    #         model.eval()
 
-            for _, data in enumerate(tqdm(val_loader)):
-                data = data.to(device)
+    #         for _, data in enumerate(tqdm(val_loader)):
+    #             data = data.to(device)
 
-                preds = model(data.x, data.edge_index, data.batch)
-                y = data.y.unsqueeze(1)
+    #             preds = model(data.x, data.edge_index, data.batch)
+    #             y = data.y.unsqueeze(1)
 
-                val_predictions.append(preds)
-                val_labels.append(y)
+    #             val_predictions.append(preds)
+    #             val_labels.append(y)
 
-                # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-                # acc = int(correct) / int(data.test_mask.sum())
-                # print(f'Accuracy: {acc:.4f}')
+    #             # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
+    #             # acc = int(correct) / int(data.test_mask.sum())
+    #             # print(f'Accuracy: {acc:.4f}')
 
-        train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
-        val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+    #     train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
+    #     val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
-        print(f"Epoch {epoch} | Train Loss: {train_loss}" + f" | Val Loss: {val_loss}")
-        # print(train_labels)
-        # print(train_predictions)
-        plt.figure(figsize=(24, 15))
-        x_axis = torch.arange(
-            0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
-        )
-        plt.scatter(
-            x_axis,
-            torch.cat(train_predictions).to("cpu").detach().numpy(),
-            linestyle="dotted",
-            color="b",
-        )
-        plt.scatter(
-            x_axis,
-            torch.cat(train_labels).to("cpu").numpy(),
-            linestyle="dotted",
-            color="r",
-        )
-        # plt.show()
-        plt.savefig("logs/" + str(epoch) + ".png")
+        print(f"Epoch {epoch} | Train Loss: {train_loss}") #+ f" | Val Loss: {val_loss}")
+    #     # print(train_labels)
+    #     # print(train_predictions)
+    #     plt.figure(figsize=(24, 15))
+    #     x_axis = torch.arange(
+    #         0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
+    #     )
+    #     plt.scatter(
+    #         x_axis,
+    #         torch.cat(train_predictions).to("cpu").detach().numpy(),
+    #         linestyle="dotted",
+    #         color="b",
+    #     )
+    #     plt.scatter(
+    #         x_axis,
+    #         torch.cat(train_labels).to("cpu").numpy(),
+    #         linestyle="dotted",
+    #         color="r",
+    #     )
+    #     # plt.show()
+    #     plt.savefig("logs/" + str(epoch) + ".png")
 
     return model, criterion
 
@@ -146,7 +146,7 @@ def main(args):
 
     logger.info("Building model {}".format(args.model_name))
     if args.model_name == "AttentionGNN":
-        num_node_features = train_dataset.num_node_features
+        num_node_features = train_dataset.num_node_features + 2
         timesteps = args.timesteps
         model = AttentionGNN(
             num_node_features, timesteps, args.learning_rate, args.weight_decay
@@ -186,7 +186,7 @@ def main(args):
     }
 
     ## Save the entire model to PATH
-    torch.save(model_info, args.model_path)
+    # torch.save(model_info, args.model_path)
 
 
 if __name__ == "__main__":
@@ -245,7 +245,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=2,
         help="Batch size",
     )
     parser.add_argument(
@@ -265,7 +265,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=100,
+        default=1,
         help="Epochs",
     )
     parser.add_argument(
