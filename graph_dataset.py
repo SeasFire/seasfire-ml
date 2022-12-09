@@ -55,11 +55,9 @@ class GraphDataset(Dataset):
             
             graph_features = graph.x[i,:,:]
             
-            pos_graph.append(torch.cat((graph_features, cosine_pos_features), axis = 0))
-
-        print(len(pos_graph))
-        print(pos_graph[0])
-
+            pos_graph.append(torch.cat((graph_features, cosine_pos_features, sine_pos_features), axis = 0))
+        
+        print(pos_graph[0].shape)
         graph.x = torch.stack(pos_graph, dim=0)
         # print(graph.x.shape)
         # print(graph.x)
