@@ -1,28 +1,19 @@
-import torch
-import torch.nn.functional as F
-from torch_geometric_temporal.nn.recurrent import A3TGCN
-
-
 import argparse
 import json
 import time
 import logging
 import os
 from tqdm import tqdm
-import xarray as xr
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import pickle as pkl
+
 import torch
 import torch_geometric
 from torch_geometric.data import Dataset, Data
-
-from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GATConv, GATv2Conv, TransformerConv
+from torch.nn import Linear
+from torch_geometric.nn import GCNConv
 from torch_geometric.nn import global_mean_pool, global_max_pool
-from torch_geometric_temporal import GConvLSTM
+from my_A3TGCN import *
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
@@ -79,7 +70,7 @@ class AttentionGNN(torch.nn.Module):
     def __init__(self, node_features, periods, learning_rate, weight_decay):
         super(AttentionGNN, self).__init__()
         # Attention Temporal Graph Convolutional Cell
-        self.tgnn = A3TGCN(in_channels=node_features, 
+        self.tgnn = my_A3TGCN(in_channels=node_features, 
                            out_channels=32, 
                            periods=periods)
         # Equals single-shot prediction
@@ -89,21 +80,20 @@ class AttentionGNN(torch.nn.Module):
             self.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
 
-    def forward(self, x, edge_index, batch=None):
+    def forward(self, x, edge_index, readout_batch=None):
         """
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
         
-        
-        h = self.tgnn(x, edge_index)
+        h = self.tgnn(x, edge_index, readout_batch)
         h.to(device)
         h = F.relu(h)
 
-        # Readout layer
-        batch = torch.zeros(h.shape[0], dtype=int) if batch is None else batch
-        batch = batch.to(device)
-        h = global_mean_pool(h, batch)
+        # # Readout layer
+        # batch = torch.zeros(h.shape[0], dtype=int) if batch is None else batch
+        # batch = batch.to(device)
+        # h = global_mean_pool(h, batch)
 
         h = self.linear(h)
         h = F.relu(h)
