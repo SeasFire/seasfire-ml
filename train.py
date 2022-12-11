@@ -32,80 +32,102 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, batch_size):
-
+def train(model, train_loader, epochs, val_loader, batch_size, task):
     optimizer = model.optimizer
-    # criterion = torch.nn.L1Loss()
-    criterion = torch.nn.MSELoss()
+
+    criterion = 0
+    if task == 'binary':
+        criterion = torch.nn.BCELoss()
+    elif task == 'regression':
+        # criterion = torch.nn.L1Loss()
+        criterion = torch.nn.MSELoss()
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
 
         model.train()
-        optimizer.zero_grad()
-
+    
         logger.info("Epoch {} Training".format(epoch))
+
         train_predictions = []
         train_labels = []
+
         for _, data in enumerate(tqdm(train_loader)):
+            
             data = data.to(device)
 
-            preds = []
-            preds = model(data.x, data.edge_index, data.batch)
+            preds = model(data.x, data.edge_index, task, data.batch)
             y = data.y.unsqueeze(1)
 
             train_predictions.append(preds)
             train_labels.append(y)
 
             train_loss = criterion(y, preds)
-            train_loss.backward()
+            print(train_loss)
 
+            optimizer.zero_grad()
+            train_loss.backward()
             optimizer.step()
 
-    #     # Validation
-    #     logger.info("Epoch {} Validation".format(epoch))
-    #     val_predictions = []
-    #     val_labels = []
-    #     with torch.no_grad():
-    #         model.eval()
+            if task == 'binary':
+                preds = preds.to("cpu").reshape(-1).detach().numpy().round()
+                print("Preds: ",preds)
 
-    #         for _, data in enumerate(tqdm(val_loader)):
-    #             data = data.to(device)
+                y = y.to("cpu").reshape(-1).detach().numpy()
+                print("Y: ", y)
 
-    #             preds = model(data.x, data.edge_index, data.batch)
-    #             y = data.y.unsqueeze(1)
+                correct = (preds == y).astype(int)
+                print(correct)
+                acc = correct.sum() / correct.shape[0]
+                print(f'Accuracy: {acc:.4f}')
 
-    #             val_predictions.append(preds)
-    #             val_labels.append(y)
 
-    #             # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-    #             # acc = int(correct) / int(data.test_mask.sum())
-    #             # print(f'Accuracy: {acc:.4f}')
+            # train_loss = criterion(y, preds)
 
-    #     train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
-    #     val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+        # # Validation
+        # logger.info("Epoch {} Validation".format(epoch))
+        # val_predictions = []
+        # val_labels = []
+        # with torch.no_grad():
+        #     model.eval()
 
-        print(f"Epoch {epoch} | Train Loss: {train_loss}") #+ f" | Val Loss: {val_loss}")
+        #     for _, data in enumerate(tqdm(val_loader)):
+        #         data = data.to(device)
+
+        #         preds = model(data.x, data.edge_index, data.batch)
+        #         y = data.y.unsqueeze(1)
+
+        #         val_predictions.append(preds)
+        #         val_labels.append(y)
+
+        #         # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
+        #         # acc = int(correct) / int(data.test_mask.sum())
+        #         # print(f'Accuracy: {acc:.4f}')
+
+        train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
+        # val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+
+        print(f"Epoch {epoch} | Train Loss: {train_loss}") # + f" | Val Loss: {val_loss}")
     #     # print(train_labels)
     #     # print(train_predictions)
-    #     plt.figure(figsize=(24, 15))
-    #     x_axis = torch.arange(
-    #         0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
-    #     )
-    #     plt.scatter(
-    #         x_axis,
-    #         torch.cat(train_predictions).to("cpu").detach().numpy(),
-    #         linestyle="dotted",
-    #         color="b",
-    #     )
-    #     plt.scatter(
-    #         x_axis,
-    #         torch.cat(train_labels).to("cpu").numpy(),
-    #         linestyle="dotted",
-    #         color="r",
-    #     )
-    #     # plt.show()
-    #     plt.savefig("logs/" + str(epoch) + ".png")
+        plt.figure(figsize=(24, 15))
+        x_axis = torch.arange(
+            0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
+        )
+        plt.scatter(
+            x_axis,
+            torch.cat(train_predictions).to("cpu").detach().numpy(),
+            linestyle="dotted",
+            color="b",
+        )
+        plt.scatter(
+            x_axis,
+            torch.cat(train_labels).to("cpu").numpy(),
+            linestyle="dotted",
+            color="r",
+        )
+        # plt.show()
+        plt.savefig("logs/" + str(epoch) + ".png")
 
     return model, criterion
 
@@ -174,7 +196,7 @@ def main(args):
 
     logger.info("Starting training")
     model, criterion = train(
-        model, train_loader, args.epochs, val_loader, args.batch_size
+        model, train_loader, args.epochs, val_loader, args.batch_size, args.task
     )
 
     logger.info("Saving model as {}".format(args.model_path))
@@ -245,7 +267,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=2,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
