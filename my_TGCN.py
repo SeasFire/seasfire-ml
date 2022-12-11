@@ -78,15 +78,14 @@ class my_TGCN(torch.nn.Module):
 
     def _set_hidden_state(self, X, H, readout_batch):
         if H is None:
-            # torch.sum((x.unique(return_counts=True))[0])
-            H = torch.zeros(2, self.out_channels).to(X.device)
-            print("H_set: ", H.shape)
+            dim_0 = (readout_batch.unique(return_counts=True))[0].shape[0]
+            H = torch.zeros(dim_0, self.out_channels).to(X.device)
+          
+            # print("H_set: ", H.shape)
         return H
 
     def _calculate_update_gate(self, X, edge_index, edge_weight, H, readout_batch):
         # Z = torch.cat([self.conv_z(X, edge_index, edge_weight), H], axis=1)
-
-        print(X.shape)
 
         #GCN
         Z_temp = self.conv_z(X, edge_index, edge_weight) # (b, 207, 64)
@@ -95,9 +94,9 @@ class my_TGCN(torch.nn.Module):
         readout_batch = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
         readout_batch = readout_batch.to(device)
         Z = global_mean_pool(Z_temp, readout_batch) #(b,64)
-        print(Z.shape)
+        # print(Z.shape)
         Z = torch.cat([Z, H], axis=1) # (b, 64)
-        print("Z: ", Z.shape)
+        # print("Z: ", Z.shape)
 
         Z = self.linear_z(Z)
         Z = torch.sigmoid(Z)
@@ -115,7 +114,7 @@ class my_TGCN(torch.nn.Module):
         R_temp = global_mean_pool(R_temp, readout_batch) #(b,64)
         
         R = torch.cat([R_temp, H], axis=1) # (b, 64)
-        print("r: ", R.shape)
+        # print("r: ", R.shape)
         
         R = self.linear_r(R)
         R = torch.sigmoid(R)
@@ -133,7 +132,7 @@ class my_TGCN(torch.nn.Module):
         H_tilde_temp = global_mean_pool(H_tilde_temp, readout_batch) #(b,64)
         
         H_tilde = torch.cat([H_tilde_temp, H], axis=1) # (b, 64)
-        print("H_tilde: ", H_tilde.shape)
+        # print("H_tilde: ", H_tilde.shape)
         
         H_tilde = self.linear_h(H_tilde)
         H_tilde = torch.tanh(H_tilde)
@@ -141,7 +140,7 @@ class my_TGCN(torch.nn.Module):
 
     def _calculate_hidden_state(self, Z, H, H_tilde):
         H = Z * H + (1 - Z) * H_tilde
-        print("H_final: ", H.shape)
+        # print("H_final: ", H.shape)
         return H
 
     def forward(
