@@ -76,11 +76,12 @@ class AttentionGNN(torch.nn.Module):
         # Equals single-shot prediction
         self.linear = torch.nn.Linear(32, 1)
 
+        # print(self.parameters)
         self.optimizer = torch.optim.Adam(
             self.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
 
-    def forward(self, x, edge_index, readout_batch=None):
+    def forward(self, x, edge_index, task, readout_batch=None):
         """
         x = Node features for T time steps
         edge_index = Graph edge indices
@@ -96,7 +97,11 @@ class AttentionGNN(torch.nn.Module):
         # h = global_mean_pool(h, batch)
 
         h = self.linear(h)
-        h = F.relu(h)
+        if task == 'binary':
+            h = torch.sigmoid(h)
+            print("eeeeeeeeeee")
+            print(h)
+            return h
         return h
 
 class LstmGCN(torch.nn.Module):
@@ -120,8 +125,8 @@ class LstmGCN(torch.nn.Module):
 
     def forward(self, x, edge_index, edge_weight=None):
 
-        print(x.shape)
-        print(edge_index.shape)
+        # print(x.shape)
+        # print(edge_index.shape)
 
         # Process the sequence of graphs with our 2 GConvLSTM layers
         h = None
