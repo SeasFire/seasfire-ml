@@ -45,8 +45,8 @@ class my_A3TGCN(torch.nn.Module):
             add_self_loops=self.add_self_loops,
         )
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self._attention = torch.nn.Parameter(torch.empty(self.periods, device=device))
-        torch.nn.init.uniform_(self._attention)
+        self.attention = torch.nn.Parameter(torch.empty(self.periods, device=device))
+        torch.nn.init.uniform_(self.attention)
 
     def forward(
         self,
@@ -70,7 +70,7 @@ class my_A3TGCN(torch.nn.Module):
             * **H** (PyTorch Float Tensor): Hidden state matrix for all nodes.
         """
         H_accum = 0
-        probs = torch.nn.functional.softmax(self._attention, dim=0)
+        probs = torch.nn.functional.softmax(self.attention, dim=0)
         for period in range(self.periods):
             H_accum = H_accum + probs[period] * self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H
