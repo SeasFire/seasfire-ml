@@ -6,7 +6,7 @@ from scale_dataset import *
 
 
 class GraphDataset(Dataset):
-    def __init__(self, root_dir, transform, task):
+    def __init__(self, root_dir, transform, task, shuffle=True): #, drop_last=True
         """
         Desc
         ----
@@ -34,7 +34,7 @@ class GraphDataset(Dataset):
 
         ## Define label
         if self.task == "binary":
-            graph.y = torch.where(graph.y > 5000, 1.0, 0.0)
+            graph.y = torch.where(graph.y > 0.0, 1.0, 0.0)
         elif self.task == "regression":
             graph.y = graph.y / 1000.0
 
@@ -57,8 +57,6 @@ class GraphDataset(Dataset):
             
             pos_graph.append(torch.cat((graph_features, cosine_pos_features, sine_pos_features), axis = 0))
         
-        print(pos_graph[0].shape)
         graph.x = torch.stack(pos_graph, dim=0)
         # print(graph.x.shape)
-        # print(graph.x)
         return graph
