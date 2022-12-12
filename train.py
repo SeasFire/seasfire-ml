@@ -10,7 +10,7 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
-from models import GCN, AttentionGNN, LstmGCN
+from models import AttentionGNN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
 
@@ -37,21 +37,22 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
     criterion = 0
     if task == 'binary':
-        criterion = torch.nn.BCELoss()
+        #criterion = torch.nn.BCELoss()
+        criterion = torch.nn.CrossEntropyLoss()
     elif task == 'regression':
         # criterion = torch.nn.L1Loss()
         criterion = torch.nn.MSELoss()
 
-    print('Net\'s state_dict:')
-    total_param = 0
-    for param_tensor in model.state_dict():
-        print(param_tensor, '\t', model.state_dict()[param_tensor].size())
-        total_param += np.prod(model.state_dict()[param_tensor].size())
-    print('Net\'s total params:', total_param)
-    #--------------------------------------------------
-    print('Optimizer\'s state_dict:')
-    for var_name in optimizer.state_dict():
-        print(var_name, '\t', optimizer.state_dict()[var_name])
+    # print('Net\'s state_dict:')
+    # total_param = 0
+    # for param_tensor in model.state_dict():
+    #     print(param_tensor, '\t', model.state_dict()[param_tensor].size())
+    #     total_param += np.prod(model.state_dict()[param_tensor].size())
+    # print('Net\'s total params:', total_param)
+    # #--------------------------------------------------
+    # print('Optimizer\'s state_dict:')
+    # for var_name in optimizer.state_dict():
+    #     print(var_name, '\t', optimizer.state_dict()[var_name])
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
@@ -68,29 +69,41 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             data = data.to(device)
 
             preds = model(data.x, data.edge_index, task, data.batch)
-            y = data.y.unsqueeze(1)
+            y = data.y # .unsqueeze(1)
 
             train_predictions.append(preds)
             train_labels.append(y)
 
+            # print(preds)
+            # print(y)
+
             train_loss = criterion(y, preds)
             # print(train_loss)
+
 
             optimizer.zero_grad()
             train_loss.backward()
             # for name, param in model.named_parameters():
-            #     print(name, torch.isfinite(param.grad).all())
+            #     #print(name, torch.isfinite(param.grad).all())
+            #     print(name)
+            #     print(param)
             optimizer.step()
 
             if task == 'binary':
-                preds = preds.to("cpu").reshape(-1).detach().numpy().round()
-                print("Preds: ",preds)
 
-                y = y.to("cpu").reshape(-1).detach().numpy()
+                #preds = preds.to("cpu").reshape(-1).detach().numpy().round()
+                print("Preds: ", preds)
+                argmax_pred = torch.argmax(preds, dim=1)
+                print("Argmax preds: ", argmax_pred)
+
+                #y = y.to("cpu").reshape(-1).detach().numpy()
                 print("Y: ", y)
 
-                correct = (preds == y).astype(int)
-                print(correct)
+                argmax_y = torch.argmax(y, dim=1)
+                print("Argmax y: ", argmax_y)
+
+                correct = (argmax_pred == argmax_y)
+                print("Correct: ", correct)
                 acc = correct.sum() / correct.shape[0]
                 print(f'Accuracy: {acc:.4f}')
 
@@ -172,7 +185,7 @@ def main(args):
         root_dir=args.train_path, transform=scaler, task=args.task
     )
     train_loader = torch_geometric.loader.DataLoader(
-        train_dataset, batch_size=args.batch_size
+        train_dataset, batch_size=args.batch_size, shuffle=True,
     )
 
     val_dataset = GraphDataset(root_dir=args.val_path, transform=scaler, task=args.task)
@@ -182,28 +195,10 @@ def main(args):
 
     logger.info("Building model {}".format(args.model_name))
     if args.model_name == "AttentionGNN":
-        num_node_features = train_dataset.num_node_features + 2
+        num_node_features = 10
         timesteps = args.timesteps
         model = AttentionGNN(
             num_node_features, timesteps, args.learning_rate, args.weight_decay
-        ).to(device)
-    elif args.model_name == "LstmGCN":
-        num_node_features = 10
-        model = LstmGCN(
-            num_node_features,
-            args.hidden_channels,
-            args.learning_rate,
-            args.weight_decay,
-            args.task,
-        ).to(device)
-    elif args.model_name == "GCN":
-        num_node_features = train_dataset.num_node_features
-        model = GCN(
-            num_node_features,
-            args.hidden_channels,
-            args.learning_rate,
-            args.weight_decay,
-            args.task,
         ).to(device)
     else:
         raise ValueError("Invalid model")

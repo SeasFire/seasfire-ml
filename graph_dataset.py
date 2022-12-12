@@ -6,7 +6,7 @@ from scale_dataset import *
 
 
 class GraphDataset(Dataset):
-    def __init__(self, root_dir, transform, task, shuffle=True): #, drop_last=True
+    def __init__(self, root_dir, transform, task): #, drop_last=True
         """
         Desc
         ----
@@ -34,7 +34,11 @@ class GraphDataset(Dataset):
 
         ## Define label
         if self.task == "binary":
-            graph.y = torch.where(graph.y > 0.0, 1.0, 0.0)
+            graph.y = torch.where(graph.y > 0.0, 1, 0)
+            graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
+            #graph.y = torch.squeeze(graph.y)
+            #print(graph.y)
+            # graph.y = torch.where(graph.y > 0.0, 1.0, 0.0)
         elif self.task == "regression":
             graph.y = graph.y / 1000.0
 
@@ -44,19 +48,19 @@ class GraphDataset(Dataset):
             graph.x = torch.nan_to_num(graph.x, nan=-1.0)
 
         ## Add cosine of position to features
-        pos_graph = []
+        # pos_graph = []
         # graph.pos = torch.cos(graph.pos)
         
-        for i in range(0, graph.x.shape[0]):
-            cosine_pos_features = torch.cos(graph.pos[i,:]).unsqueeze(1)
-            cosine_pos_features = cosine_pos_features.expand(cosine_pos_features.shape[0], graph.x.shape[2])
-            sine_pos_features = torch.cos(graph.pos[i,:]).unsqueeze(1)
-            sine_pos_features = sine_pos_features.expand(sine_pos_features.shape[0], graph.x.shape[2])
+        # for i in range(0, graph.x.shape[0]):
+        #     cosine_pos_features = torch.cos(graph.pos[i,:]).unsqueeze(1)
+        #     cosine_pos_features = cosine_pos_features.expand(cosine_pos_features.shape[0], graph.x.shape[2])
+        #     sine_pos_features = torch.cos(graph.pos[i,:]).unsqueeze(1)
+        #     sine_pos_features = sine_pos_features.expand(sine_pos_features.shape[0], graph.x.shape[2])
             
-            graph_features = graph.x[i,:,:]
+        #     graph_features = graph.x[i,:,:]
             
-            pos_graph.append(torch.cat((graph_features, cosine_pos_features, sine_pos_features), axis = 0))
+        #     pos_graph.append(torch.cat((graph_features, cosine_pos_features, sine_pos_features), axis = 0))
         
-        graph.x = torch.stack(pos_graph, dim=0)
+        # graph.x = torch.stack(pos_graph, dim=0)
         # print(graph.x.shape)
         return graph
