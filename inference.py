@@ -13,11 +13,12 @@ import matplotlib.pyplot as plt
 from models import GCN, AttentionGNN, LstmGCN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
+import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test(model, test_loader, criterion):
+def test(model, test_loader, criterion, task):
     with torch.no_grad():
         model.eval()
         val_predictions = []
@@ -26,7 +27,8 @@ def test(model, test_loader, criterion):
         for data in test_loader:
             data = data.to(device)
 
-            preds = model(data.x, data.edge_index, data.batch)
+            preds = model(data.x, data.edge_index, task, data.batch)
+            # preds = F.relu(preds)
             y = data.y.unsqueeze(1)
 
             val_predictions.append(preds)
@@ -38,15 +40,15 @@ def test(model, test_loader, criterion):
 
     val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
-    print(f" | Val Loss: {val_loss}")
+    print(f" | Test Loss: {val_loss}")
     # print(train_labels)
     # print(train_predictions)
     plt.figure(figsize=(24, 15))
     x_axis = torch.arange(0, (torch.cat(val_predictions).to('cpu').detach().numpy()).shape[0])
     plt.scatter(x_axis, torch.cat(val_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
     plt.scatter(x_axis, torch.cat(val_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
-    # plt.show()
-    plt.savefig('logs1/' + 'test'+'.png')
+    # # plt.show()
+    plt.savefig('logs/' + 'test'+'.png')
 
 
 def main(args):
@@ -69,7 +71,7 @@ def main(args):
         test_dataset, batch_size=args.batch_size
     )
     
-    test(model, test_loader, criterion)
+    test(model, test_loader, criterion, args.task)
 
 if __name__ == "__main__":
 
@@ -81,7 +83,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="dataset/val/",
+        default="data/test/",
         help="Test set path",
     )
     parser.add_argument(
@@ -100,7 +102,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="attention_model.pt",
+        default="regression_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(

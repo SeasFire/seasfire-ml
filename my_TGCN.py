@@ -23,7 +23,7 @@ class my_TGCN(torch.nn.Module):
         out_channels: int,
         improved: bool = False,
         cached: bool = False,
-        add_self_loops: bool = True,
+        add_self_loops: bool = False,
     ):
         super(my_TGCN, self).__init__()
 
@@ -86,16 +86,19 @@ class my_TGCN(torch.nn.Module):
 
     def _calculate_update_gate(self, X, edge_index, edge_weight, H, readout_batch):
         # Z = torch.cat([self.conv_z(X, edge_index, edge_weight), H], axis=1)
-
+        # print(X[0])
+        # print(edge_index[0])
+        # print(H)
+        
         #GCN
         Z_temp = self.conv_z(X, edge_index, edge_weight) # (b, 207, 64)
-        
+        # print(Z_temp.shape)
         # Readout layer
         readout_batch = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
         readout_batch = readout_batch.to(device)
-        Z = global_mean_pool(Z_temp, readout_batch) #(b,64)
-        # print(Z.shape)
-        Z = torch.cat([Z, H], axis=1) # (b, 64)
+        Z_temp = global_mean_pool(Z_temp, readout_batch) #(b,64)
+        # print(Z_temp.shape)
+        Z = torch.cat([Z_temp, H], axis=1) # (b, 64)
         # print("Z: ", Z.shape)
 
         Z = self.linear_z(Z)
@@ -167,6 +170,8 @@ class my_TGCN(torch.nn.Module):
         """
         H = self._set_hidden_state(X, H, readout_batch)
         Z = self._calculate_update_gate(X, edge_index, edge_weight, H, readout_batch)
+        # print("aaaaaaaaaaaaa")
+        # print(Z)
         R = self._calculate_reset_gate(X, edge_index, edge_weight, H, readout_batch)
         H_tilde = self._calculate_candidate_state(X, edge_index, edge_weight, H, R, readout_batch)
         H = self._calculate_hidden_state(Z, H, H_tilde)

@@ -42,6 +42,17 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
         # criterion = torch.nn.L1Loss()
         criterion = torch.nn.MSELoss()
 
+    print('Net\'s state_dict:')
+    total_param = 0
+    for param_tensor in model.state_dict():
+        print(param_tensor, '\t', model.state_dict()[param_tensor].size())
+        total_param += np.prod(model.state_dict()[param_tensor].size())
+    print('Net\'s total params:', total_param)
+    #--------------------------------------------------
+    print('Optimizer\'s state_dict:')
+    for var_name in optimizer.state_dict():
+        print(var_name, '\t', optimizer.state_dict()[var_name])
+
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
 
@@ -63,10 +74,12 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             train_labels.append(y)
 
             train_loss = criterion(y, preds)
-            print(train_loss)
+            # print(train_loss)
 
             optimizer.zero_grad()
             train_loss.backward()
+            # for name, param in model.named_parameters():
+            #     print(name, torch.isfinite(param.grad).all())
             optimizer.step()
 
             if task == 'binary':
@@ -84,50 +97,50 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
             # train_loss = criterion(y, preds)
 
-        # # Validation
-        # logger.info("Epoch {} Validation".format(epoch))
-        # val_predictions = []
-        # val_labels = []
-        # with torch.no_grad():
-        #     model.eval()
+        # Validation
+        logger.info("Epoch {} Validation".format(epoch))
+        val_predictions = []
+        val_labels = []
+        with torch.no_grad():
+            model.eval()
 
-        #     for _, data in enumerate(tqdm(val_loader)):
-        #         data = data.to(device)
+            for _, data in enumerate(tqdm(val_loader)):
+                data = data.to(device)
 
-        #         preds = model(data.x, data.edge_index, data.batch)
-        #         y = data.y.unsqueeze(1)
+                preds = model(data.x, data.edge_index, task, data.batch)
+                y = data.y.unsqueeze(1)
 
-        #         val_predictions.append(preds)
-        #         val_labels.append(y)
+                val_predictions.append(preds)
+                val_labels.append(y)
 
-        #         # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-        #         # acc = int(correct) / int(data.test_mask.sum())
-        #         # print(f'Accuracy: {acc:.4f}')
+                # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
+                # acc = int(correct) / int(data.test_mask.sum())
+                # print(f'Accuracy: {acc:.4f}')
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
-        # val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+        val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
-        print(f"Epoch {epoch} | Train Loss: {train_loss}") # + f" | Val Loss: {val_loss}")
+        print(f"Epoch {epoch} | Train Loss: {train_loss}"  + f" | Val Loss: {val_loss}")
     #     # print(train_labels)
     #     # print(train_predictions)
-        plt.figure(figsize=(24, 15))
-        x_axis = torch.arange(
-            0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
-        )
-        plt.scatter(
-            x_axis,
-            torch.cat(train_predictions).to("cpu").detach().numpy(),
-            linestyle="dotted",
-            color="b",
-        )
-        plt.scatter(
-            x_axis,
-            torch.cat(train_labels).to("cpu").numpy(),
-            linestyle="dotted",
-            color="r",
-        )
-        # plt.show()
-        plt.savefig("logs/" + str(epoch) + ".png")
+        # plt.figure(figsize=(24, 15))
+        # x_axis = torch.arange(
+        #     0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
+        # )
+        # plt.scatter(
+        #     x_axis,
+        #     torch.cat(train_predictions).to("cpu").detach().numpy(),
+        #     linestyle="dotted",
+        #     color="b",
+        # )
+        # plt.scatter(
+        #     x_axis,
+        #     torch.cat(train_labels).to("cpu").numpy(),
+        #     linestyle="dotted",
+        #     color="r",
+        # )
+        # # plt.show()
+        # plt.savefig("logs/" + str(epoch) + ".png")
 
     return model, criterion
 
@@ -141,7 +154,7 @@ def main(args):
     if torch.cuda.is_available():
         logger.info("Torch cuda version: {}".format(torch.version.cuda))
 
-    set_seed()
+    set_seed(32)
 
 
     logger.info("Extracting dataset statistics")
@@ -151,6 +164,7 @@ def main(args):
     for idx in range(0, number_of_train_samples):
         graph = torch.load(os.path.join(args.train_path, "graph_{}.pt".format(idx)))
         graphs.append(graph.x)
+    print(len(graphs))
     mean_std_tuples = scaler.fit(graphs)
     logger.info("Statistics: {}".format(mean_std_tuples))
 
@@ -207,8 +221,8 @@ def main(args):
         "name": args.model_name,
     }
 
-    ## Save the entire model to PATH
-    # torch.save(model_info, args.model_path)
+    # Save the entire model to PATH
+    torch.save(model_info, args.model_path)
 
 
 if __name__ == "__main__":
@@ -248,7 +262,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="attention_model.pt",
+        default="binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -257,7 +271,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="regression",
+        default="binary",
         help="Model task",
     )
     parser.add_argument(
@@ -287,7 +301,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=1,
+        default=300,
         help="Epochs",
     )
     parser.add_argument(
@@ -307,7 +321,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-4,
+        default=5e-7,
         help="Learning rate",
     )
     parser.add_argument(
@@ -317,7 +331,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=5e-5,
+        default=5e-4,
         help="Weight decay",
     )
     args = parser.parse_args()
