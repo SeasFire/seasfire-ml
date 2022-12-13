@@ -41,28 +41,11 @@ class AttentionGNN(torch.nn.Module):
 
         h = self.tgnn(x, edge_index, readout_batch)
         h.to(device)
-
         h = F.relu(h)
 
-        # if task == 'binary':
-        #     # print("elaaaaaaaaaaaaa")
-        #     h = F.relu(h)
-        # elif task == 'regression':
-        #     h = F.relu(h)
-        # print(h)
-        # # Readout layer
-        # batch = torch.zeros(h.shape[0], dtype=int) if batch is None else batch
-        # batch = batch.to(device)
-        # h = global_mean_pool(h, batch)
-
         h = self.linear(h)
-        
         if task == 'binary':
-            # h = torch.sigmoid(h)
-            #h = torch.nn.Softmax(h)
             h = torch.softmax(h, dim=1)
-            # print("eeeeeeeeeee")
-            # print(h)
-            return h
+            
         return h
 
