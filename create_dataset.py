@@ -187,7 +187,7 @@ class DatasetBuilder:
         self._positive_samples_threshold = positive_samples_threshold
         # negative examples threshold (no fire)
         self._negative_samples_threshold = negative_samples_threshold
-        if self._negative_samples_threshold > self._positive_samples_threshold: 
+        if self._negative_samples_threshold > self._positive_samples_threshold:
             self._negative_samples_threshold = self._positive_samples_threshold
 
         # sample index to start generation
@@ -242,7 +242,7 @@ class DatasetBuilder:
         self,
         center_time,
     ):
-        """Get the OCI features for a certail timerange"""
+        """Get the OCI features for a certain timerange"""
         first_week = center_time - np.timedelta64(
             self._timeseries_weeks * self._days_per_week, "D"
         )
@@ -405,6 +405,8 @@ class DatasetBuilder:
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.debug("Computed edge tensor= {}".format(edge_index))
 
+        logger.info("Vertex positions={}".format(vertex_positions))
+
         return Data(
             x=vertex_features,
             y=graph_level_ground_truth,
@@ -459,7 +461,12 @@ class DatasetBuilder:
                 .to_array(dim="variable", name=None)
                 .values
             )
-            v_position = [vertex[0], vertex[1]]
+            v_position = [
+                np.cos(vertex[0]),
+                np.sin(vertex[0]),
+                np.cos(vertex[1]),
+                np.sin(vertex[1]),
+            ]
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
@@ -496,7 +503,14 @@ class DatasetBuilder:
 
         # Create vertex feature tensors
         vertex_features = []
-        vertex_positions = [[vertex_lat, vertex_lon]]
+        vertex_positions = [
+            [
+                np.cos(vertex_lat),
+                np.sin(vertex_lat),
+                np.cos(vertex_lon),
+                np.sin(vertex_lon),
+            ]
+        ]
         v_features = points_input_vars.to_array(dim="variable", name=None).values
         vertex_features.append(v_features)
 
@@ -836,7 +850,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="negative_samples_threshold",
-        default=0.05,
+        default=0.0,
         help="Negative sample threshold",
     )
     parser.add_argument(

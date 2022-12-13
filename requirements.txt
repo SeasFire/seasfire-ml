@@ -6,3 +6,4 @@ zarr
 pandas
 matplotlib
 torch==1.12.1
+torchmetrics
