@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from models import AttentionGNN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 
 logger = logging.getLogger(__name__)
 
@@ -33,26 +34,23 @@ def set_seed(seed: int = 42) -> None:
 
 
 def train(model, train_loader, epochs, val_loader, batch_size, task):
+    current_max_avg = 0
+    best_model = model
+    
     optimizer = model.optimizer
 
     criterion = 0
-    if task == 'binary':
-        #criterion = torch.nn.BCELoss()
-        criterion = torch.nn.CrossEntropyLoss()
-    elif task == 'regression':
-        # criterion = torch.nn.L1Loss()
-        criterion = torch.nn.MSELoss()
+    F1_score_test = 0
+    avprc_test = 0
+    auroc_test = 0
 
-    # print('Net\'s state_dict:')
-    # total_param = 0
-    # for param_tensor in model.state_dict():
-    #     print(param_tensor, '\t', model.state_dict()[param_tensor].size())
-    #     total_param += np.prod(model.state_dict()[param_tensor].size())
-    # print('Net\'s total params:', total_param)
-    # #--------------------------------------------------
-    # print('Optimizer\'s state_dict:')
-    # for var_name in optimizer.state_dict():
-    #     print(var_name, '\t', optimizer.state_dict()[var_name])
+    if task == 'binary':
+        criterion = torch.nn.CrossEntropyLoss()
+        F1_score_test = F1Score(task = 'binary', num_classes = 2).to(device)
+        avprc_test= AveragePrecision(task="multiclass", num_classes = 2).to(device)
+        auroc_test= AUROC(task="multiclass", num_classes = 2).to(device)
+    elif task == 'regression':
+        criterion = torch.nn.MSELoss()
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
@@ -63,57 +61,40 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
         train_predictions = []
         train_labels = []
+        train_results = []
 
         for _, data in enumerate(tqdm(train_loader)):
-            
             data = data.to(device)
 
             preds = model(data.x, data.edge_index, task, data.batch)
-            y = data.y # .unsqueeze(1)
+            y = data.y
+            if task == 'regression':
+                y = y.unsqueeze(1)
 
             train_predictions.append(preds)
             train_labels.append(y)
-
-            # print(preds)
-            # print(y)
-
             train_loss = criterion(y, preds)
-            # print(train_loss)
-
 
             optimizer.zero_grad()
             train_loss.backward()
-            # for name, param in model.named_parameters():
-            #     #print(name, torch.isfinite(param.grad).all())
-            #     print(name)
-            #     print(param)
             optimizer.step()
 
             if task == 'binary':
-
-                #preds = preds.to("cpu").reshape(-1).detach().numpy().round()
-                print("Preds: ", preds)
                 argmax_pred = torch.argmax(preds, dim=1)
-                print("Argmax preds: ", argmax_pred)
-
-                #y = y.to("cpu").reshape(-1).detach().numpy()
-                print("Y: ", y)
+                # print("Argmax preds: ", argmax_pred)
 
                 argmax_y = torch.argmax(y, dim=1)
-                print("Argmax y: ", argmax_y)
+                # print("Argmax y: ", argmax_y)
 
-                correct = (argmax_pred == argmax_y)
-                print("Correct: ", correct)
-                acc = correct.sum() / correct.shape[0]
-                print(f'Accuracy: {acc:.4f}')
-
-
-            # train_loss = criterion(y, preds)
+                train_results.append((argmax_pred == argmax_y))
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
+
         val_predictions = []
         val_labels = []
+        val_results = []
+
         with torch.no_grad():
             model.eval()
 
@@ -121,20 +102,52 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
                 data = data.to(device)
 
                 preds = model(data.x, data.edge_index, task, data.batch)
-                y = data.y.unsqueeze(1)
+                y = data.y
+                if task == 'regression':
+                    y = y.unsqueeze(1)
 
                 val_predictions.append(preds)
                 val_labels.append(y)
 
-                # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-                # acc = int(correct) / int(data.test_mask.sum())
-                # print(f'Accuracy: {acc:.4f}')
+                if task == 'binary':
+                    F1_score_test.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
+                    avprc_test.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
+                    auroc_test.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
 
+                    argmax_pred = torch.argmax(preds, dim=1)
+                    # print("Argmax preds: ", argmax_pred)
+
+                    argmax_y = torch.argmax(y, dim=1)
+                    # print("Argmax y: ", argmax_y)
+
+                    val_results.append((argmax_pred == argmax_y))
+            
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+        logger.info("| Train Loss: {:.4f}".format(train_loss))
+        logger.info("| Val Loss: {:.4f}".format(val_loss))
+        # print(f"Epoch {epoch} | Train Loss: {train_loss}"  + f" | Val Loss: {val_loss}")
 
-        print(f"Epoch {epoch} | Train Loss: {train_loss}"  + f" | Val Loss: {val_loss}")
-    #     # print(train_labels)
+        if task == 'binary':
+            train_results = torch.cat(train_results)
+            train_accuracy = train_results.sum() / train_results.shape[0]
+            val_results = torch.cat(val_results)
+            val_accuracy = val_results.sum() / val_results.shape[0]
+            logger.info("| Train Accuracy: {:.4f}".format(train_accuracy))
+            logger.info("| Val Accuracy: {:.4f}".format(val_accuracy))
+
+            logger.info("| Val F1_score: {:.4f}".format(F1_score_test.compute()))
+            logger.info("| Val Average precision: {:.4f}".format(avprc_test.compute()))
+            logger.info("| AUROC: {:.4f}".format(auroc_test.compute()))
+            
+            if avprc_test.compute()>current_max_avg:
+                best_model = model
+
+            F1_score_test.reset()
+            avprc_test.reset()
+            auroc_test.reset()
+        
+#    #     # print(train_labels)
     #     # print(train_predictions)
         # plt.figure(figsize=(24, 15))
         # x_axis = torch.arange(
@@ -153,10 +166,9 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
         #     color="r",
         # )
         # # plt.show()
-        # plt.savefig("logs/" + str(epoch) + ".png")
+#        # plt.savefig("logs/" + str(epoch) + ".png")
 
-    return model, criterion
-
+    return model, best_model, criterion
 
 def main(args):
     logging.basicConfig(level=logging.INFO)
@@ -177,7 +189,7 @@ def main(args):
     for idx in range(0, number_of_train_samples):
         graph = torch.load(os.path.join(args.train_path, "graph_{}.pt".format(idx)))
         graphs.append(graph.x)
-    print(len(graphs))
+    
     mean_std_tuples = scaler.fit(graphs)
     logger.info("Statistics: {}".format(mean_std_tuples))
 
@@ -204,7 +216,7 @@ def main(args):
         raise ValueError("Invalid model")
 
     logger.info("Starting training")
-    model, criterion = train(
+    model, best_model, criterion = train(
         model, train_loader, args.epochs, val_loader, args.batch_size, args.task
     )
 
@@ -216,8 +228,18 @@ def main(args):
         "name": args.model_name,
     }
 
+    best_model_info = {
+        "model": model,
+        "criterion": criterion,
+        "scaler": scaler,
+        "name": args.model_name,
+    }
+
     # Save the entire model to PATH
     torch.save(model_info, args.model_path)
+
+    # Save the entire best model to PATH
+    torch.save(best_model_info, "best_" + args.model_path)
 
 
 if __name__ == "__main__":
@@ -296,7 +318,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=300,
+        default=50,
         help="Epochs",
     )
     parser.add_argument(
@@ -316,7 +338,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-7,
+        default=5e-4,
         help="Learning rate",
     )
     parser.add_argument(
