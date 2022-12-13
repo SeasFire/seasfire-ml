@@ -405,8 +405,6 @@ class DatasetBuilder:
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.debug("Computed edge tensor= {}".format(edge_index))
 
-        logger.info("Vertex positions={}".format(vertex_positions))
-
         return Data(
             x=vertex_features,
             y=graph_level_ground_truth,
