@@ -658,6 +658,9 @@ class DatasetBuilder:
         for idx in tqdm(range(0, len(samples))):
             if idx < self._first_sample_index:
                 continue
+            if self._is_sample_present(idx): 
+                logger.info("Skipping sample {} generation.".format(idx))
+                continue
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
@@ -674,6 +677,10 @@ class DatasetBuilder:
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
         torch.save(data, output_path)
+
+    def _is_sample_present(self, index):
+        output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
+        return os.path.exists(output_path)
 
     def _in_bounding_box(self, lat_lon, center_lat_lon, radius):
         lat, lon = lat_lon
@@ -839,7 +846,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.01,
+        default=0.001,
         help="Positive sample threshold",
     )
     parser.add_argument(
