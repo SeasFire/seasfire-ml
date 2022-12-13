@@ -10,10 +10,11 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
-from models import GCN, AttentionGNN, LstmGCN
+from models import AttentionGNN
 from graph_dataset import GraphDataset
 from scale_dataset import StandardScaling
 import torch.nn.functional as F
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -21,35 +22,53 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def test(model, test_loader, criterion, task):
     with torch.no_grad():
         model.eval()
-        val_predictions = []
-        val_labels = []
 
-        for data in test_loader:
+        F1_score_test = F1Score(task = 'binary', num_classes = 2).to(device)
+        avprc_test= AveragePrecision(task="multiclass", num_classes = 2).to(device)
+        auroc_test= AUROC(task="multiclass", num_classes = 2).to(device)
+
+        test_predictions = []
+        test_labels = []
+
+        results = []
+
+        for data in tqdm(test_loader):
             data = data.to(device)
 
             preds = model(data.x, data.edge_index, task, data.batch)
-            # preds = F.relu(preds)
-            y = data.y.unsqueeze(1)
+            y = data.y #.unsqueeze(1)
 
-            val_predictions.append(preds)
-            val_labels.append(y)
+            test_predictions.append(preds)
+            test_labels.append(y)
 
-            # correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-            # acc = int(correct) / int(data.test_mask.sum())
-            # print(f'Accuracy: {acc:.4f}')
+            if task == 'binary':
+                F1_score_test.update(torch.argmax(torch.cat(test_predictions), dim=1), torch.argmax(torch.cat(test_labels), dim=1))
+                avprc_test.update(torch.cat(test_predictions), torch.argmax(torch.cat(test_labels), dim=1))
+                auroc_test.update(torch.cat(test_predictions), torch.argmax(torch.cat(test_labels), dim=1))
 
-    val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+                argmax_pred = torch.argmax(preds, dim=1)
+                # print("Argmax preds: ", argmax_pred)
 
-    print(f" | Test Loss: {val_loss}")
-    # print(train_labels)
-    # print(train_predictions)
-    plt.figure(figsize=(24, 15))
-    x_axis = torch.arange(0, (torch.cat(val_predictions).to('cpu').detach().numpy()).shape[0])
-    plt.scatter(x_axis, torch.cat(val_predictions).to('cpu').detach().numpy(), linestyle = 'dotted', color='b')
-    plt.scatter(x_axis, torch.cat(val_labels).to('cpu').numpy(), linestyle = 'dotted', color='r')
-    # # plt.show()
-    plt.savefig('logs/' + 'test'+'.png')
+                argmax_y = torch.argmax(y, dim=1)
+                # print("Argmax y: ", argmax_y)
 
+                results.append((argmax_pred == argmax_y))
+
+                
+    test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
+    print(f" | Test Loss: {test_loss}")
+
+    if task == 'binary':
+        results = torch.cat(results)
+        acc = results.sum() / results.shape[0]
+        print(f'Test accuracy: {acc:.4f}')
+        print(f"F1_score: {(F1_score_test.compute()):.4f}")
+        print(f"Average precision: {(avprc_test.compute()):.4f}")
+        print(f"AUROC: {(auroc_test.compute()):.4f}")
+
+        F1_score_test.reset()
+        avprc_test.reset()
+        auroc_test.reset()
 
 def main(args):
     FileOutputHandler = logging.FileHandler("logs.log")
@@ -102,7 +121,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="regression_attention_model.pt",
+        default="binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -111,7 +130,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="regression",
+        default="binary",
         help="Model task",
     )
     parser.add_argument(
@@ -121,7 +140,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=1,
+        default=16,
         help="Batch size",
     )
 

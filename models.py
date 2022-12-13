@@ -26,7 +26,7 @@ class AttentionGNN(torch.nn.Module):
                            out_channels=32, 
                            periods=periods)
         # Equals single-shot prediction
-        self.linear = torch.nn.Linear(32, 2)
+        self.linear = torch.nn.Linear(16, 2)
 
         # print(self.parameters)
         self.optimizer = torch.optim.Adam(
