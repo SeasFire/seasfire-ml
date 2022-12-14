@@ -809,7 +809,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="output_folder",
-        default="data",
+        default="binary_data",
         help="Output folder",
     )
     parser.add_argument(
@@ -818,7 +818,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="split",
-        default="train",
+        default="val",
         help="Split type. Can be train, test, val.",
     )
     parser.add_argument(
@@ -827,7 +827,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.01,
+        default=0.0,
         help="Positive sample threshold",
     )
     parser.add_argument(
@@ -836,7 +836,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="negative_samples_threshold",
-        default=0.05,
+        default=0.0,
         help="Negative sample threshold",
     )
     parser.add_argument(
