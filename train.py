@@ -207,7 +207,7 @@ def main(args):
 
     logger.info("Building model {}".format(args.model_name))
     if args.model_name == "AttentionGNN":
-        num_node_features = 10
+        num_node_features = 12
         timesteps = args.timesteps
         model = AttentionGNN(
             num_node_features, timesteps, args.learning_rate, args.weight_decay
