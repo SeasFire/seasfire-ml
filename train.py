@@ -203,7 +203,6 @@ def main(args):
 
     if args.model_name == "AttentionGNN":
         num_features = train_dataset.num_node_features
-        print(num_features)
         timesteps = args.timesteps
         model = AttentionGNN(
             num_features, args.hidden_channels, timesteps, args.learning_rate, args.weight_decay
