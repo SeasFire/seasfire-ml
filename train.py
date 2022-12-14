@@ -246,7 +246,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t" "--train-path",
+        "-t", 
+        "--train-path",
         metavar="PATH",
         type=str,
         action="store",
@@ -255,7 +256,8 @@ if __name__ == "__main__":
         help="Train set path",
     )
     parser.add_argument(
-        "-v" "--val-path",
+        "-v",
+        "--val-path",
         metavar="PATH",
         type=str,
         action="store",
