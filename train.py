@@ -84,11 +84,7 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
             if task == 'binary':
                 argmax_pred = torch.argmax(preds, dim=1)
-                # print("Argmax preds: ", argmax_pred)
-
                 argmax_y = torch.argmax(y, dim=1)
-                # print("Argmax y: ", argmax_y)
-
                 train_results.append((argmax_pred == argmax_y))
 
         # Validation
@@ -113,6 +109,7 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
                 val_labels.append(y)
 
                 if task == 'binary':
+<<<<<<< HEAD
                     accuracy_val.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
                     F1_score_val.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
                     avprc_val.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
@@ -125,6 +122,16 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
                     # # print("Argmax y: ", argmax_y)
 
                     # val_results.append((argmax_pred == argmax_y))
+=======
+                    F1_score_test.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
+                    avprc_test.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
+                    auroc_test.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
+                    argmax_pred = torch.argmax(preds, dim=1)
+                    # print("Argmax preds: ", argmax_pred)
+                    argmax_y = torch.argmax(y, dim=1)
+                    # print("Argmax y: ", argmax_y)
+                    val_results.append((argmax_pred == argmax_y))
+>>>>>>> 420a51f2ab680b0859f2105dca8ea03a8a70576d
             
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
@@ -152,27 +159,6 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             avprc_val.reset()
             auroc_val.reset()
         
-#    #     # print(train_labels)
-    #     # print(train_predictions)
-        # plt.figure(figsize=(24, 15))
-        # x_axis = torch.arange(
-        #     0, (torch.cat(train_predictions).to("cpu").detach().numpy()).shape[0]
-        # )
-        # plt.scatter(
-        #     x_axis,
-        #     torch.cat(train_predictions).to("cpu").detach().numpy(),
-        #     linestyle="dotted",
-        #     color="b",
-        # )
-        # plt.scatter(
-        #     x_axis,
-        #     torch.cat(train_labels).to("cpu").numpy(),
-        #     linestyle="dotted",
-        #     color="r",
-        # )
-        # # plt.show()
-#        # plt.savefig("logs/" + str(epoch) + ".png")
-
     return model, best_model, criterion
 
 def main(args):
@@ -314,7 +300,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=32,
         help="Batch size",
     )
     parser.add_argument(

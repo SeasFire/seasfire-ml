@@ -837,7 +837,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="split",
-        default="val",
+        default="train",
         help="Split type. Can be train, test, val.",
     )
     parser.add_argument(
