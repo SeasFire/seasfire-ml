@@ -121,7 +121,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="binary_attention_model.pt",
+        default="best_binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
