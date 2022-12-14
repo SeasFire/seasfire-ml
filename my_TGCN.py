@@ -1,6 +1,7 @@
 import torch
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn import global_mean_pool, global_max_pool
+from torch_geometric.nn import aggr
 import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -53,9 +54,8 @@ class my_TGCN(torch.nn.Module):
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
-        
+        self.mean_aggr_z = aggr.MeanAggregation()
         self.linear_z = torch.nn.Linear(self.out_channels, int(self.out_channels/2))
-
         # self.linear_z = torch.nn.Linear(2 * self.out_channels, self.out_channels)
 
     def _create_reset_gate_parameters_and_layers(self):
@@ -76,6 +76,7 @@ class my_TGCN(torch.nn.Module):
             add_self_loops=self.add_self_loops,
         )
 
+        self.mean_aggr_r = aggr.MeanAggregation()
         self.linear_r = torch.nn.Linear(self.out_channels, int(self.out_channels/2))
         # self.linear_r = torch.nn.Linear(2 * self.out_channels, self.out_channels)
 
@@ -97,6 +98,7 @@ class my_TGCN(torch.nn.Module):
             add_self_loops=self.add_self_loops,
         )
 
+        self.mean_aggr_h = aggr.MeanAggregation()
         self.linear_h = torch.nn.Linear(self.out_channels, int(self.out_channels/2))
         # self.linear_h = torch.nn.Linear(2 * self.out_channels, self.out_channels)
 
@@ -109,40 +111,32 @@ class my_TGCN(torch.nn.Module):
         if H is None:
             dim_0 = (readout_batch.unique(return_counts=True))[0].shape[0]
             H = torch.zeros(dim_0, int(self.out_channels / 2)).to(X.device) #(b,16)
-          
             # print("H_set: ", H.shape)
         return H
 
     def _calculate_update_gate(self, X, edge_index, edge_weight, H, readout_batch):
-        # Z = torch.cat([self.conv_z(X, edge_index, edge_weight), H], axis=1)
-        
         #GCN layer1
         Z_temp = self.conv_z(X, edge_index, edge_weight) # (num_nodes, 32)
         Z_temp = Z_temp.relu()
         Z_temp = F.dropout(Z_temp, p=0.3, training=self.training)
-        # print(Z_temp.shape)
         
         #GCN layer2
         Z_temp = self.conv_z_2(Z_temp, edge_index, edge_weight) #(num_nodes, 16)
         Z_temp = Z_temp.relu()
         Z_temp = F.dropout(Z_temp, p=0.2, training=self.training)
-        # print(Z_temp.shape)
 
         # Readout layer
-        readout_batch = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
-        readout_batch = readout_batch.to(device)
-        Z_temp = global_mean_pool(Z_temp, readout_batch) #(b,16)
+        index = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
+        index = readout_batch.to(device)
+        Z_temp = self.mean_aggr_z(Z_temp, index)
         
         Z = torch.cat([Z_temp, H], axis=1) # (b, 32)
-        # print("z: ", Z.shape)
 
         Z = self.linear_z(Z) #(b,16)
         Z = torch.sigmoid(Z)
         return Z
 
     def _calculate_reset_gate(self, X, edge_index, edge_weight, H, readout_batch):
-        # R = torch.cat([self.conv_r(X, edge_index, edge_weight), H], axis=1)
-        
         #GCN layer1
         R_temp = self.conv_r(X, edge_index, edge_weight) # (num_nodes, 32)
         R_temp = R_temp.relu()
@@ -154,20 +148,17 @@ class my_TGCN(torch.nn.Module):
         R_temp = F.dropout(R_temp, p=0.2, training=self.training)
 
         # Readout layer
-        readout_batch = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
-        readout_batch = readout_batch.to(device)
-        R_temp = global_mean_pool(R_temp, readout_batch) #(b,16)
+        index = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
+        index = readout_batch.to(device)
+        R_temp = self.mean_aggr_r(R_temp, index)
         
         R = torch.cat([R_temp, H], axis=1) # (b, 32)
-        # print("r: ", R.shape)
         
         R = self.linear_r(R) #(b,16)
         R = torch.sigmoid(R)
         return R
 
     def _calculate_candidate_state(self, X, edge_index, edge_weight, H, R, readout_batch):
-        # H_tilde = torch.cat([self.conv_h(X, edge_index, edge_weight), H * R], axis=1)
-        
         #GCN layer1
         H_tilde_temp = self.conv_h(X, edge_index, edge_weight) # (num_nodes, 32)
         H_tilde_temp = H_tilde_temp.relu()
@@ -179,12 +170,11 @@ class my_TGCN(torch.nn.Module):
         H_tilde_temp = F.dropout(H_tilde_temp, p=0.2, training=self.training)
         
         # Readout layer
-        readout_batch = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
-        readout_batch = readout_batch.to(device)
-        H_tilde_temp = global_mean_pool(H_tilde_temp, readout_batch) #(b,16)
+        index = torch.zeros(X.shape[0], dtype=int) if readout_batch is None else readout_batch
+        index = readout_batch.to(device)
+        H_tilde_temp = self.mean_aggr_h(H_tilde_temp, index)
         
         H_tilde = torch.cat([H_tilde_temp, H], axis=1) # (b, 32)
-        # print("H_tilde: ", H_tilde.shape)
         
         H_tilde = self.linear_h(H_tilde) #(b,16)
         H_tilde = torch.tanh(H_tilde)
@@ -192,7 +182,6 @@ class my_TGCN(torch.nn.Module):
 
     def _calculate_hidden_state(self, Z, H, H_tilde):
         H = Z * H + (1 - Z) * H_tilde
-        # print("H_final: ", H.shape)
         return H
 
     def forward(
