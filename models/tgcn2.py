@@ -113,8 +113,6 @@ class TGCN2(torch.nn.Module):
         if H is None:
             dim_0 = (readout_batch.unique(return_counts=True))[0].shape[0]
             H = torch.zeros(dim_0, int(self.out_channels / 2)).to(X.device) #(b,16)
-          
-            # print("H_set: ", H.shape)
         return H
 
     def _calculate_update_gate(self, X, edge_index, edge_weight, H, readout_batch):

@@ -46,7 +46,8 @@ class GraphDataset(Dataset):
 
         # Concatenate positions with features
         if self.append_position_as_feature:
-            positions = graph.pos.unsqueeze(2).expand(-1, -1, graph.x.shape[2])
+            positions = graph.pos.unsqueeze(2)
+            positions = positions.expand(-1, -1, graph.x.shape[2])
             graph.x = torch.cat((graph.x, positions), dim=1)
 
         return graph
