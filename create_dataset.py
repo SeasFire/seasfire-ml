@@ -187,7 +187,7 @@ class DatasetBuilder:
         self._positive_samples_threshold = positive_samples_threshold
         # negative examples threshold (no fire)
         self._negative_samples_threshold = negative_samples_threshold
-        if self._negative_samples_threshold > self._positive_samples_threshold: 
+        if self._negative_samples_threshold > self._positive_samples_threshold:
             self._negative_samples_threshold = self._positive_samples_threshold
 
         # sample index to start generation
@@ -242,7 +242,7 @@ class DatasetBuilder:
         self,
         center_time,
     ):
-        """Get the OCI features for a certail timerange"""
+        """Get the OCI features for a certain timerange"""
         first_week = center_time - np.timedelta64(
             self._timeseries_weeks * self._days_per_week, "D"
         )
@@ -459,7 +459,12 @@ class DatasetBuilder:
                 .to_array(dim="variable", name=None)
                 .values
             )
-            v_position = [vertex[0], vertex[1]]
+            v_position = [
+                np.cos(vertex[0]),
+                np.sin(vertex[0]),
+                np.cos(vertex[1]),
+                np.sin(vertex[1]),
+            ]
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
@@ -496,7 +501,14 @@ class DatasetBuilder:
 
         # Create vertex feature tensors
         vertex_features = []
-        vertex_positions = [[vertex_lat, vertex_lon]]
+        vertex_positions = [
+            [
+                np.cos(vertex_lat),
+                np.sin(vertex_lat),
+                np.cos(vertex_lon),
+                np.sin(vertex_lon),
+            ]
+        ]
         v_features = points_input_vars.to_array(dim="variable", name=None).values
         vertex_features.append(v_features)
 
@@ -646,6 +658,9 @@ class DatasetBuilder:
         for idx in tqdm(range(0, len(samples))):
             if idx < self._first_sample_index:
                 continue
+            if self._is_sample_present(idx): 
+                logger.info("Skipping sample {} generation.".format(idx))
+                continue
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
@@ -662,6 +677,10 @@ class DatasetBuilder:
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
         torch.save(data, output_path)
+
+    def _is_sample_present(self, index):
+        output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
+        return os.path.exists(output_path)
 
     def _in_bounding_box(self, lat_lon, center_lat_lon, radius):
         lat, lon = lat_lon
@@ -827,7 +846,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.0,
+        default=0.001,
         help="Positive sample threshold",
     )
     parser.add_argument(
