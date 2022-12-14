@@ -1,11 +1,11 @@
 import torch
 from torch_geometric.nn import GCNConv
-from torch_geometric.nn import global_mean_pool, global_max_pool
+from torch_geometric.nn import global_mean_pool
 import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class my_TGCN(torch.nn.Module):
+class TGCN2(torch.nn.Module):
     r"""An implementation of the Temporal Graph Convolutional Gated Recurrent Cell.
     For details see this paper: `"T-GCN: A Temporal Graph ConvolutionalNetwork for
     Traffic Prediction." <https://arxiv.org/abs/1811.05320>`_
@@ -26,7 +26,7 @@ class my_TGCN(torch.nn.Module):
         cached: bool = False,
         add_self_loops: bool = True,
     ):
-        super(my_TGCN, self).__init__()
+        super(TGCN2, self).__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
