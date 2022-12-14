@@ -91,7 +91,7 @@ class DatasetBuilder:
         output_folder,
         split,
         positive_samples_threshold,
-        negative_samples_threshold,
+        positive_samples_size,
         first_sample_index,
         seed,
         target_shift,
@@ -183,12 +183,10 @@ class DatasetBuilder:
         # for x in self._cube.longitude.values:
         #     print(x)
 
-        # positive example threshold (fire)
+        # Threshold for fires
         self._positive_samples_threshold = positive_samples_threshold
-        # negative examples threshold (no fire)
-        self._negative_samples_threshold = negative_samples_threshold
-        if self._negative_samples_threshold > self._positive_samples_threshold:
-            self._negative_samples_threshold = self._positive_samples_threshold
+        # How many samples to take above the threshold
+        self._positive_samples_size = positive_samples_size
 
         # sample index to start generation
         self._first_sample_index = first_sample_index
@@ -514,6 +512,52 @@ class DatasetBuilder:
 
         return vertex_features, vertex_positions
 
+    def _sample_wrt_threshold(
+        self, sample_region, sample_region_gwsi_ba_per_area, strategy
+    ):
+        if strategy == "above-threshold":
+            sample_region_gwsi_ba_per_area_wrt_threshold = (
+                sample_region_gwsi_ba_per_area > self._positive_samples_threshold
+            )
+        elif strategy == "positive-below-threshold":
+            sample_region_gwsi_ba_per_area_wrt_threshold = (
+                sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
+            ) & (sample_region_gwsi_ba_per_area > 0.0)
+        elif strategy == "zero":
+            sample_region_gwsi_ba_per_area_wrt_threshold = (
+                sample_region_gwsi_ba_per_area <= 0.0
+            )
+        else:
+            raise ValueError("Invalid strategy")
+
+        sample_len_wrt_threshold = np.sum(sample_region_gwsi_ba_per_area_wrt_threshold)
+        logger.info(
+            "Samples for strategy={} are {}".format(strategy, sample_len_wrt_threshold)
+        )
+
+        result = []
+        all_wrt_threshold_samples_index = np.argwhere(
+            sample_region_gwsi_ba_per_area_wrt_threshold
+        )
+        if self._positive_samples_size > len(all_wrt_threshold_samples_index):
+            raise ValueError("Not enough samples to sample from.")
+
+        wrt_threshold_samples_index = self._rng.choice(
+            all_wrt_threshold_samples_index,
+            size=self._positive_samples_size,
+            replace=False,
+        )
+
+        for index in wrt_threshold_samples_index:
+            result.append(
+                (
+                    sample_region.latitude.values[index[1]],
+                    sample_region.longitude.values[index[2]],
+                    sample_region.time.values[index[0]],
+                ),
+            )
+        return result
+
     def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         logger.info("Generating sample list for split={}".format(self._split))
         logger.info(
@@ -543,67 +587,30 @@ class DatasetBuilder:
             "Unique area values: {}".format(np.unique(sample_region_area_values))
         )
 
-        # compute target variable per area and apply threshold
+        # compute target variable per area
         sample_region_gwsi_ba_per_area = (
             sample_region_gwsi_ba_values / sample_region_area_values
         )
-        sample_region_gwsi_ba_per_area_above_threshold = (
-            sample_region_gwsi_ba_per_area > self._positive_samples_threshold
-        )
-        sample_len_above_threshold = np.sum(
-            sample_region_gwsi_ba_per_area_above_threshold
-        )
-        logger.info("Samples above threshold={}".format(sample_len_above_threshold))
 
-        # Percentage of burnt area to all grid area without Wetlands, permanent snow_ice and water bodies
-        # grid_area_land = (self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values
-        #                   -(self._cube.lccs_class_4.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
-        #                   -(self._cube.lccs_class_7.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values/100.0)
-        #                   -(self._cube.lccs_class_8.sel(latitude=lat_inc, longitude=lon_inc).isel(time=58).values * self._cube.area.sel(latitude=lat_inc, longitude=lon_inc).values)/100.0)
-        # burnt_grid_area_percentage = burnt_grid_area / grid_area_land
-        # print(grid_area_land)
-
-        # create (lat, lon, time) of samples for samples above threshold
-        above_threshold_samples_list = []
-        above_threshold_samples_index = np.argwhere(
-            sample_region_gwsi_ba_per_area_above_threshold
+        above_threshold_samples_list = self._sample_wrt_threshold(
+            sample_region, sample_region_gwsi_ba_per_area, strategy="above-threshold"
         )
-        for index in above_threshold_samples_index:
-            above_threshold_samples_list.append(
-                (
-                    sample_region.latitude.values[index[1]],
-                    sample_region.longitude.values[index[2]],
-                    sample_region.time.values[index[0]],
-                ),
-            )
 
-        # now generate samples below threshold
-        sample_region_gwsi_ba_per_area_below_threshold = (
-            sample_region_gwsi_ba_per_area <= self._negative_samples_threshold
+        below_threshold_samples_list = self._sample_wrt_threshold(
+            sample_region,
+            sample_region_gwsi_ba_per_area,
+            strategy="positive-below-threshold",
         )
-        total_below_threshold = np.sum(sample_region_gwsi_ba_per_area_below_threshold)
-        sample_len_below_threshold = sample_len_above_threshold
-        logger.info("Samples below threshold={}".format(total_below_threshold))
 
-        all_below_threshold_samples_index = np.argwhere(
-            sample_region_gwsi_ba_per_area_below_threshold
+        zero_threshold_samples_list = self._sample_wrt_threshold(
+            sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
         )
-        below_threshold_samples_index = self._rng.choice(
-            all_below_threshold_samples_index,
-            size=sample_len_below_threshold,
-            replace=False,
-        )
-        below_threshold_samples_list = []
-        for index in below_threshold_samples_index:
-            below_threshold_samples_list.append(
-                (
-                    sample_region.latitude.values[index[1]],
-                    sample_region.longitude.values[index[2]],
-                    sample_region.time.values[index[0]],
-                ),
-            )
 
-        return above_threshold_samples_list, below_threshold_samples_list
+        return (
+            above_threshold_samples_list
+            + below_threshold_samples_list
+            + zero_threshold_samples_list
+        )
 
     def compute_ground_truth(self, lat, lon, time):
         start_time = time + np.timedelta64(
@@ -648,17 +655,16 @@ class DatasetBuilder:
         max_lat = 72
 
         # create list of samples to generate
-        above_threshold_samples, below_threshold_samples = self.generate_samples_lists(
+        samples = self.generate_samples_lists(
             min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
         )
-        samples = above_threshold_samples + below_threshold_samples
 
         logger.info("About to create {} samples".format(len(samples)))
         # now generate them and write to disk
         for idx in tqdm(range(0, len(samples))):
             if idx < self._first_sample_index:
                 continue
-            if self._is_sample_present(idx): 
+            if self._is_sample_present(idx):
                 logger.info("Skipping sample {} generation.".format(idx))
                 continue
             center_lat, center_lon, center_time = samples[idx]
@@ -792,7 +798,7 @@ def main(args):
         args.output_folder,
         args.split,
         args.positive_samples_threshold,
-        args.negative_samples_threshold,
+        args.positive_samples_size,
         args.first_sample_index,
         args.seed,
         args.target_shift,
@@ -828,7 +834,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="output_folder",
-        default="binary_data",
+        default="data",
         help="Output folder",
     )
     parser.add_argument(
@@ -850,13 +856,13 @@ if __name__ == "__main__":
         help="Positive sample threshold",
     )
     parser.add_argument(
-        "--negative-samples-threshold",
+        "--positive-samples-size",
         metavar="KEY",
-        type=float,
+        type=int,
         action="store",
-        dest="negative_samples_threshold",
-        default=0.0,
-        help="Negative sample threshold",
+        dest="positive_samples_size",
+        default=2500,
+        help="Positive samples size.",
     )
     parser.add_argument(
         "--seed",
