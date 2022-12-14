@@ -23,6 +23,7 @@ def test(model, test_loader, criterion, task):
     with torch.no_grad():
         model.eval()
 
+        accuracy_test = Accuracy(task="multiclass", num_classes=2).to(device)
         F1_score_test = F1Score(task = 'binary', num_classes = 2).to(device)
         avprc_test= AveragePrecision(task="multiclass", num_classes = 2).to(device)
         auroc_test= AUROC(task="multiclass", num_classes = 2).to(device)
@@ -42,30 +43,22 @@ def test(model, test_loader, criterion, task):
             test_labels.append(y)
 
             if task == 'binary':
+                accuracy_test.update(torch.argmax(torch.cat(test_predictions), dim=1), torch.argmax(torch.cat(test_labels), dim=1))
                 F1_score_test.update(torch.argmax(torch.cat(test_predictions), dim=1), torch.argmax(torch.cat(test_labels), dim=1))
                 avprc_test.update(torch.cat(test_predictions), torch.argmax(torch.cat(test_labels), dim=1))
                 auroc_test.update(torch.cat(test_predictions), torch.argmax(torch.cat(test_labels), dim=1))
-
-                argmax_pred = torch.argmax(preds, dim=1)
-                # print("Argmax preds: ", argmax_pred)
-
-                argmax_y = torch.argmax(y, dim=1)
-                # print("Argmax y: ", argmax_y)
-
-                results.append((argmax_pred == argmax_y))
 
                 
     test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
     print(f" | Test Loss: {test_loss}")
 
     if task == 'binary':
-        results = torch.cat(results)
-        acc = results.sum() / results.shape[0]
-        print(f'Test accuracy: {acc:.4f}')
+        print(f'Test accuracy: {(accuracy_test.compute()):.4f}')
         print(f"F1_score: {(F1_score_test.compute()):.4f}")
         print(f"Average precision: {(avprc_test.compute()):.4f}")
         print(f"AUROC: {(auroc_test.compute()):.4f}")
 
+        accuracy_test.reset()
         F1_score_test.reset()
         avprc_test.reset()
         auroc_test.reset()
@@ -121,7 +114,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_binary_attention_model.pt",
+        default="best_temp_binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
