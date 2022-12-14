@@ -22,7 +22,7 @@ class TGCN2(torch.nn.Module):
     def __init__(
         self,
         in_channels: int,
-        out_channels: int,
+        out_channels: tuple,
         improved: bool = False,
         cached: bool = False,
         add_self_loops: bool = True,
@@ -41,68 +41,64 @@ class TGCN2(torch.nn.Module):
 
         self.conv_z = GCNConv(
             in_channels=self.in_channels,
-            out_channels=self.out_channels,
+            out_channels=self.out_channels[0],
             improved=self.improved,
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
 
         self.conv_z_2 = GCNConv(
-            in_channels=self.out_channels,
-            out_channels=int(self.out_channels / 2),
+            in_channels=self.out_channels[0],
+            out_channels=int(self.out_channels[1]),
             improved=self.improved,
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
         
         self.mean_aggr_z = aggr.MeanAggregation()
-        self.linear_z = torch.nn.Linear(self.out_channels, int(self.out_channels/2))
-
-        # self.linear_z = torch.nn.Linear(2 * self.out_channels, self.out_channels)
+        self.linear_z = torch.nn.Linear(self.out_channels[0], self.out_channels[1])
 
     def _create_reset_gate_parameters_and_layers(self):
 
         self.conv_r = GCNConv(
             in_channels=self.in_channels,
-            out_channels=self.out_channels,
+            out_channels=self.out_channels[0],
             improved=self.improved,
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
 
         self.conv_r_2 = GCNConv(
-            in_channels=self.out_channels,
-            out_channels=int(self.out_channels / 2),
+            in_channels=self.out_channels[0],
+            out_channels=int(self.out_channels[1]),
             improved=self.improved,
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
-
+        
         self.mean_aggr_r = aggr.MeanAggregation()
-        self.linear_r = torch.nn.Linear(self.out_channels, int(self.out_channels/2))
-        # self.linear_r = torch.nn.Linear(2 * self.out_channels, self.out_channels)
+        self.linear_r = torch.nn.Linear(self.out_channels[0], self.out_channels[1])
 
     def _create_candidate_state_parameters_and_layers(self):
 
         self.conv_h = GCNConv(
             in_channels=self.in_channels,
-            out_channels=self.out_channels,
+            out_channels=self.out_channels[0],
             improved=self.improved,
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
 
         self.conv_h_2 = GCNConv(
-            in_channels=self.out_channels,
-            out_channels=int(self.out_channels / 2),
+            in_channels=self.out_channels[0],
+            out_channels=int(self.out_channels[1]),
             improved=self.improved,
             cached=self.cached,
             add_self_loops=self.add_self_loops,
         )
-
+        
         self.mean_aggr_h = aggr.MeanAggregation()
-        self.linear_h = torch.nn.Linear(self.out_channels, int(self.out_channels/2))
-        # self.linear_h = torch.nn.Linear(2 * self.out_channels, self.out_channels)
+        self.linear_h = torch.nn.Linear(self.out_channels[0], self.out_channels[1])
 
     def _create_parameters_and_layers(self):
         self._create_update_gate_parameters_and_layers()
@@ -112,7 +108,7 @@ class TGCN2(torch.nn.Module):
     def _set_hidden_state(self, X, H, readout_batch):
         if H is None:
             dim_0 = (readout_batch.unique(return_counts=True))[0].shape[0]
-            H = torch.zeros(dim_0, int(self.out_channels / 2)).to(X.device) #(b,16)
+            H = torch.zeros(dim_0, int(self.out_channels[1])).to(X.device) #(b,16)
           
             # print("H_set: ", H.shape)
         return H
