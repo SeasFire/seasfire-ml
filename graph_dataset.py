@@ -52,3 +52,7 @@ class GraphDataset(Dataset):
 
         return self.graph
 
+    def num_features(self) -> int:
+        r"""Returns the number of features per node in the dataset.
+        Alias for :py:attr:`~num_node_features`."""
+        return self.graph.x.shape[1]
