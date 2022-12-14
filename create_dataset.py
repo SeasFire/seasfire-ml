@@ -515,18 +515,23 @@ class DatasetBuilder:
     def _sample_wrt_threshold(
         self, sample_region, sample_region_gwsi_ba_per_area, strategy
     ):
+        size = 0
+
         if strategy == "above-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area > self._positive_samples_threshold
             )
+            size = self._positive_samples_size
         elif strategy == "positive-below-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
             ) & (sample_region_gwsi_ba_per_area > 0.0)
+            size = self._positive_samples_size
         elif strategy == "zero":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= 0.0
             )
+            size = 2* self._positive_samples_size
         else:
             raise ValueError("Invalid strategy")
 
@@ -541,10 +546,10 @@ class DatasetBuilder:
         )
         if self._positive_samples_size > len(all_wrt_threshold_samples_index):
             raise ValueError("Not enough samples to sample from.")
-
+        
         wrt_threshold_samples_index = self._rng.choice(
             all_wrt_threshold_samples_index,
-            size=self._positive_samples_size,
+            size=size,
             replace=False,
         )
 
@@ -665,7 +670,7 @@ class DatasetBuilder:
             if idx < self._first_sample_index:
                 continue
             if self._is_sample_present(idx):
-                logger.info("Skipping sample {} generation.".format(idx))
+                # logger.info("Skipping sample {} generation.".format(idx))
                 continue
             center_lat, center_lon, center_time = samples[idx]
             ground_truth = self.compute_ground_truth(
