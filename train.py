@@ -40,7 +40,12 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
     optimizer = model.optimizer
 
     criterion = 0
+
     accuracy_test = 0
+    F1_score_test = 0
+    avprc_test = 0
+    auroc_test = 0
+
     accuracy_val = 0
     F1_score_val = 0
     avprc_val = 0
@@ -48,10 +53,16 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
     if task == 'binary':
         criterion = torch.nn.CrossEntropyLoss()
+
+        accuracy_train = Accuracy(task="multiclass", num_classes=2).to(device)
+        F1_score_train = F1Score(task = 'multiclass', num_classes = 2).to(device)
+        avprc_train = AveragePrecision(task="multiclass", num_classes = 2).to(device)
+        auroc_train = AUROC(task="multiclass", num_classes = 2).to(device)
+
         accuracy_val = Accuracy(task="multiclass", num_classes=2).to(device)
         F1_score_val = F1Score(task = 'multiclass', num_classes = 2).to(device)
-        avprc_val= AveragePrecision(task="multiclass", num_classes = 2).to(device)
-        auroc_val= AUROC(task="multiclass", num_classes = 2).to(device)
+        avprc_val = AveragePrecision(task="multiclass", num_classes = 2).to(device)
+        auroc_val = AUROC(task="multiclass", num_classes = 2).to(device)
     elif task == 'regression':
         criterion = torch.nn.MSELoss()
 
@@ -83,10 +94,11 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             optimizer.step()
 
             if task == 'binary':
-                argmax_pred = torch.argmax(preds, dim=1)
-                argmax_y = torch.argmax(y, dim=1)
-                train_results.append((argmax_pred == argmax_y))
-
+                accuracy_train.update(torch.argmax(torch.cat(train_predictions), dim=1), torch.argmax(torch.cat(train_labels), dim=1))
+                F1_score_train.update(torch.argmax(torch.cat(train_predictions), dim=1), torch.argmax(torch.cat(train_labels), dim=1))
+                avprc_train.update(torch.cat(train_predictions), torch.argmax(torch.cat(train_labels), dim=1))
+                auroc_train.update(torch.cat(train_predictions), torch.argmax(torch.cat(train_labels), dim=1))
+            
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
 
@@ -109,51 +121,35 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
                 val_labels.append(y)
 
                 if task == 'binary':
-<<<<<<< HEAD
                     accuracy_val.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
                     F1_score_val.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
                     avprc_val.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
                     auroc_val.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
-
-                    # argmax_pred = torch.argmax(preds, dim=1)
-                    # # print("Argmax preds: ", argmax_pred)
-
-                    # argmax_y = torch.argmax(y, dim=1)
-                    # # print("Argmax y: ", argmax_y)
-
-                    # val_results.append((argmax_pred == argmax_y))
-=======
-                    F1_score_test.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
-                    avprc_test.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
-                    auroc_test.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
-                    argmax_pred = torch.argmax(preds, dim=1)
-                    # print("Argmax preds: ", argmax_pred)
-                    argmax_y = torch.argmax(y, dim=1)
-                    # print("Argmax y: ", argmax_y)
-                    val_results.append((argmax_pred == argmax_y))
->>>>>>> 420a51f2ab680b0859f2105dca8ea03a8a70576d
             
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
         logger.info("| Train Loss: {:.4f}".format(train_loss))
         logger.info("| Val Loss: {:.4f}".format(val_loss))
-        # print(f"Epoch {epoch} | Train Loss: {train_loss}"  + f" | Val Loss: {val_loss}")
 
         if task == 'binary':
-            # train_results = torch.cat(train_results)
-            # train_accuracy = train_results.sum() / train_results.shape[0]
-            # val_results = torch.cat(val_results)
-            # val_accuracy = val_results.sum() / val_results.shape[0]
-            # logger.info("| Train Accuracy: {:.4f}".format(accuracy_train.compute()))
+            logger.info("| Train Accuracy: {:.4f}".format(accuracy_train.compute()))
+            logger.info("| Train F1_score: {:.4f}".format(F1_score_train.compute()))
+            logger.info("| Train Average precision: {:.4f}".format(avprc_train.compute()))
+            logger.info("| Train AUROC: {:.4f}".format(auroc_train.compute()))
+            
             logger.info("| Val Accuracy: {:.4f}".format(accuracy_val.compute()))
-
             logger.info("| Val F1_score: {:.4f}".format(F1_score_val.compute()))
             logger.info("| Val Average precision: {:.4f}".format(avprc_val.compute()))
-            logger.info("| AUROC: {:.4f}".format(auroc_val.compute()))
+            logger.info("| Val AUROC: {:.4f}".format(auroc_val.compute()))
             
             if avprc_val.compute()>current_max_avg:
                 best_model = model
 
+            accuracy_train.reset()
+            F1_score_train.reset()
+            avprc_train.reset()
+            auroc_train.reset()
+            
             accuracy_val.reset()
             F1_score_val.reset()
             avprc_val.reset()
@@ -210,7 +206,7 @@ def main(args):
         print(num_features)
         timesteps = args.timesteps
         model = AttentionGNN(
-            num_node_features, args.hidden_channels, timesteps, args.learning_rate, args.weight_decay
+            num_features, args.hidden_channels, timesteps, args.learning_rate, args.weight_decay
         ).to(device)
     else:
         raise ValueError("Invalid model")
@@ -300,7 +296,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=32,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
