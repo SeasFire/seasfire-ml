@@ -20,7 +20,7 @@ class A3TGCN2(torch.nn.Module):
     def __init__(
         self,
         in_channels: int,
-        out_channels: int,
+        out_channels: tuple,
         periods: int,
         improved: bool = False,
         cached: bool = False,
@@ -79,12 +79,12 @@ class A3TGCN2(torch.nn.Module):
 
 
 class AttentionGNN(torch.nn.Module):
-    def __init__(self, node_features, periods, learning_rate, weight_decay):
+    def __init__(self, node_features, output_channels, periods, learning_rate, weight_decay):
         super(AttentionGNN, self).__init__()
         # Attention Temporal Graph Convolutional Cell with 2 layers
-        self.tgnn = A3TGCN2(in_channels=node_features, out_channels=32, periods=periods)
+        self.tgnn = A3TGCN2(in_channels=node_features, out_channels=output_channels, periods=periods)
         # Equals single-shot prediction
-        self.linear = torch.nn.Linear(16, 2)
+        self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
 
         # print(self.parameters)
         self.optimizer = torch.optim.Adam(
