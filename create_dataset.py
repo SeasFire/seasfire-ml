@@ -516,7 +516,6 @@ class DatasetBuilder:
         self, sample_region, sample_region_gwsi_ba_per_area, strategy
     ):
         size = 0
-
         if strategy == "above-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area > self._positive_samples_threshold
