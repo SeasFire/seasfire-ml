@@ -1,6 +1,9 @@
 import torch
-from torch_geometric.data import Dataset
+from torch_geometric.data import Dataset, Data
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class GraphDataset(Dataset):
     def __init__(self, root_dir, transform, task, append_position_as_feature=True):
@@ -23,11 +26,18 @@ class GraphDataset(Dataset):
         self.transform = transform
         self.task = task
         self.append_position_as_feature = append_position_as_feature
+        self._num_features = None
+        self._size = None
 
-    def __len__(self):
-        return len([entry for entry in os.listdir(self.root_dir)])
+        # load self._indices 
+        length = len([entry for entry in os.listdir(self.root_dir)])
+        self._indices = []
+        for idx in range(length): 
+            if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(idx))): 
+                self._indices.append(idx)
 
-    def __getitem__(self, idx):
+    def get(self, idx: int) -> Data:
+        r"""Gets the data object at index :obj:`idx`."""
         graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(idx)))
         
         # Define label
@@ -41,7 +51,7 @@ class GraphDataset(Dataset):
 
         # Standardize features
         if self.transform is not None:
-            graph.x = self.transform.transform(graph.x)
+            graph.x = self.transform(graph.x)
             graph.x = torch.nan_to_num(graph.x, nan=-1.0)
 
         # Concatenate positions with features
@@ -49,12 +59,9 @@ class GraphDataset(Dataset):
             positions = graph.pos.unsqueeze(2).expand(-1, -1, graph.x.shape[2])
             graph.x = torch.cat((graph.x, positions), dim=1)
 
-        return graph
-
-    def num_features(self) -> int:
-        r"""Returns the number of features per node in the dataset.
-        Alias for :py:attr:`~num_node_features`."""
-        graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(0)))
         if self.append_position_as_feature: 
-            return graph.x.shape[1] + graph.pos.shape[1]
-        return graph.x.shape[1]
+            graph.num_node_features = graph.x.shape[1] + graph.pos.shape[1]
+        else: 
+            graph.num_node_features = graph.x.shape[1]
+
+        return graph
