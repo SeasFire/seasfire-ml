@@ -54,7 +54,7 @@ class A3TGCN2(torch.nn.Module):
         edge_index: torch.LongTensor,
         edge_weight: torch.FloatTensor = None,
         H: torch.FloatTensor = None,
-        readout_batch=None,        
+        readout_batch=None,
     ) -> torch.FloatTensor:
         """
         Making a forward pass. If edge weights are not present the forward pass
@@ -80,10 +80,14 @@ class A3TGCN2(torch.nn.Module):
 
 
 class AttentionGNN(torch.nn.Module):
-    def __init__(self, node_features, output_channels, periods, learning_rate, weight_decay):
+    def __init__(
+        self, node_features, output_channels, periods, learning_rate, weight_decay, task
+    ):
         super(AttentionGNN, self).__init__()
         # Attention Temporal Graph Convolutional Cell with 2 layers
-        self.tgnn = A3TGCN2(in_channels=node_features, out_channels=output_channels, periods=periods)
+        self.tgnn = A3TGCN2(
+            in_channels=node_features, out_channels=output_channels, periods=periods
+        )
         # Equals single-shot prediction
         self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
 
@@ -92,18 +96,27 @@ class AttentionGNN(torch.nn.Module):
             self.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
 
-    def forward(self, x, edge_index, task, readout_batch=None):
+        self.task = task
+
+    def forward(
+        self,
+        X: torch.FloatTensor,
+        edge_index: torch.LongTensor,
+        edge_weight: torch.FloatTensor = None,
+        H: torch.FloatTensor = None,
+        readout_batch=None,
+    ) -> torch.FloatTensor:
         """
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
 
-        h = self.tgnn(x, edge_index, readout_batch)
+        h = self.tgnn(X, edge_index, edge_weight, H, readout_batch)
         h.to(device)
         h = F.relu(h)
 
         h = self.linear(h)
-        if task == "binary":
+        if self.task == "binary":
             h = torch.softmax(h, dim=1)
 
         return h

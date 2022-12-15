@@ -83,7 +83,7 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
             assert data.x.shape[1] == 14
 
-            preds = model(data.x, data.edge_index, task, data.batch)
+            preds = model(data.x, data.edge_index, None, None, data.batch)
             y = data.y
             if task == "regression":
                 y = y.unsqueeze(1)
@@ -127,7 +127,7 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             for _, data in enumerate(tqdm(val_loader)):
                 data = data.to(device)
 
-                preds = model(data.x, data.edge_index, task, data.batch)
+                preds = model(data.x, data.edge_index, None, None, data.batch)
                 y = data.y
                 if task == "regression":
                     y = y.unsqueeze(1)
@@ -255,6 +255,7 @@ def main(args):
             timesteps,
             args.learning_rate,
             args.weight_decay,
+            task=args.task,
         ).to(device)
     else:
         raise ValueError("Invalid model")
@@ -344,7 +345,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=32,
         help="Batch size",
     )
     parser.add_argument(
