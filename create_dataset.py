@@ -515,7 +515,6 @@ class DatasetBuilder:
     def _sample_wrt_threshold(
         self, sample_region, sample_region_gwsi_ba_per_area, strategy
     ):
-        size = 0
         if strategy == "above-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area > self._positive_samples_threshold
@@ -543,7 +542,7 @@ class DatasetBuilder:
         all_wrt_threshold_samples_index = np.argwhere(
             sample_region_gwsi_ba_per_area_wrt_threshold
         )
-        if self._positive_samples_size > len(all_wrt_threshold_samples_index):
+        if size > len(all_wrt_threshold_samples_index):
             raise ValueError("Not enough samples to sample from.")
         
         wrt_threshold_samples_index = self._rng.choice(
