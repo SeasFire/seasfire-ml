@@ -12,8 +12,9 @@ import matplotlib.pyplot as plt
 
 from models import AttentionGNN
 from graph_dataset import GraphDataset
-from scale_dataset import StandardScaling
+from transforms import GraphNormalize
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
+from utils import compute_mean_std_per_feature
 
 logger = logging.getLogger(__name__)
 
@@ -198,22 +199,21 @@ def main(args):
     set_seed(32)
 
     logger.info("Extracting dataset statistics")
-    scaler = StandardScaling(
-        args.model_name, task=args.task, append_position_as_feature=True
+    mean_std_per_feature = compute_mean_std_per_feature(
+        GraphDataset(root_dir=args.train_path)
     )
+    logger.info("Statistics: {}".format(mean_std_per_feature))
 
-    graphs = []
-    number_of_train_samples = len(os.listdir(args.train_path))
-    for idx in range(0, number_of_train_samples):
-        graph = torch.load(os.path.join(args.train_path, "graph_{}.pt".format(idx)))
-        graphs.append(graph.x)
-
-    mean_std_tuples = scaler.fit(graphs)
-    logger.info("Statistics: {}".format(mean_std_tuples))
+    transform = GraphNormalize(
+        args.model_name,
+        task=args.task,
+        mean_std_per_feature=mean_std_per_feature,
+        append_position_as_feature=True,
+    )
 
     train_dataset = GraphDataset(
         root_dir=args.train_path,
-        transform=scaler,
+        transform=transform,
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
     # logger.info("Checking train dataset shape")
@@ -221,7 +221,7 @@ def main(args):
     #     assert d.x.shape[0] == 178
     #     assert d.x.shape[1] == 14
     #     assert d.x.shape[2] == 12
-    # logger.info("Done shapes are ok")        
+    # logger.info("Done shapes are ok")
 
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset,
@@ -231,7 +231,7 @@ def main(args):
 
     val_dataset = GraphDataset(
         root_dir=args.val_path,
-        transform=scaler,
+        transform=transform,
     )
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset, batch_size=args.batch_size
@@ -268,14 +268,14 @@ def main(args):
     model_info = {
         "model": model,
         "criterion": criterion,
-        "scaler": scaler,
+        "transform": transform,
         "name": args.model_name,
     }
 
     best_model_info = {
         "model": model,
         "criterion": criterion,
-        "scaler": scaler,
+        "transform": transform,
         "name": args.model_name,
     }
 
