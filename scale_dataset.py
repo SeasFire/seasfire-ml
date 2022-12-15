@@ -1,6 +1,8 @@
 import torch
 import numpy as np
+import logging
 
+logger = logging.getLogger(__name__)
 
 class StandardScaling:
     def __init__(self, model, task, append_position_as_feature=True):
@@ -58,10 +60,5 @@ class StandardScaling:
         if self._append_position_as_feature:
             positions = graph.pos.unsqueeze(2).expand(-1, -1, graph.x.shape[2])
             graph.x = torch.cat((graph.x, positions), dim=1)
-
-        if self._append_position_as_feature: 
-            graph.num_node_features = graph.x.shape[1] + graph.pos.shape[1]
-        else: 
-            graph.num_node_features = graph.x.shape[1]
 
         return graph

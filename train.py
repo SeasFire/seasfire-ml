@@ -80,6 +80,8 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
         for _, data in enumerate(tqdm(train_loader)):
             data = data.to(device)
 
+            assert data.x.shape[1] == 14
+
             preds = model(data.x, data.edge_index, task, data.batch)
             y = data.y
             if task == "regression":
@@ -214,14 +216,13 @@ def main(args):
         transform=scaler,
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
-    for d in train_dataset:
-        assert d.x.shape[0] == 178
-        assert d.x.shape[1] == 14
-        assert d.x.shape[2] == 12
+    # logger.info("Checking train dataset shape")
+    # for d in train_dataset:
+    #     assert d.x.shape[0] == 178
+    #     assert d.x.shape[1] == 14
+    #     assert d.x.shape[2] == 12
+    # logger.info("Done shapes are ok")        
 
-    logger.info(
-        "Train dataset node features: {}".format(train_dataset.num_node_features)
-    )
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -232,7 +233,6 @@ def main(args):
         root_dir=args.val_path,
         transform=scaler,
     )
-    logger.info("Val dataset node features: {}".format(val_dataset.num_node_features))
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset, batch_size=args.batch_size
     )
