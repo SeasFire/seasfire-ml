@@ -36,7 +36,7 @@ def set_seed(seed: int = 42) -> None:
 def train(model, train_loader, epochs, val_loader, batch_size, task):
     current_max_avg = 0
     best_model = model
-    
+
     optimizer = model.optimizer
 
     criterion = 0
@@ -51,26 +51,26 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
     avprc_val = 0
     auroc_val = 0
 
-    if task == 'binary':
+    if task == "binary":
         criterion = torch.nn.CrossEntropyLoss()
 
         accuracy_train = Accuracy(task="multiclass", num_classes=2).to(device)
-        F1_score_train = F1Score(task = 'multiclass', num_classes = 2).to(device)
-        avprc_train = AveragePrecision(task="multiclass", num_classes = 2).to(device)
-        auroc_train = AUROC(task="multiclass", num_classes = 2).to(device)
+        F1_score_train = F1Score(task="multiclass", num_classes=2).to(device)
+        avprc_train = AveragePrecision(task="multiclass", num_classes=2).to(device)
+        auroc_train = AUROC(task="multiclass", num_classes=2).to(device)
 
         accuracy_val = Accuracy(task="multiclass", num_classes=2).to(device)
-        F1_score_val = F1Score(task = 'multiclass', num_classes = 2).to(device)
-        avprc_val = AveragePrecision(task="multiclass", num_classes = 2).to(device)
-        auroc_val = AUROC(task="multiclass", num_classes = 2).to(device)
-    elif task == 'regression':
+        F1_score_val = F1Score(task="multiclass", num_classes=2).to(device)
+        avprc_val = AveragePrecision(task="multiclass", num_classes=2).to(device)
+        auroc_val = AUROC(task="multiclass", num_classes=2).to(device)
+    elif task == "regression":
         criterion = torch.nn.MSELoss()
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
 
         model.train()
-    
+
         logger.info("Epoch {} Training".format(epoch))
 
         train_predictions = []
@@ -80,9 +80,11 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
         for _, data in enumerate(tqdm(train_loader)):
             data = data.to(device)
 
+            assert data.x.shape[1] == 14
+
             preds = model(data.x, data.edge_index, task, data.batch)
             y = data.y
-            if task == 'regression':
+            if task == "regression":
                 y = y.unsqueeze(1)
 
             train_predictions.append(preds)
@@ -93,12 +95,24 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             train_loss.backward()
             optimizer.step()
 
-            if task == 'binary':
-                accuracy_train.update(torch.argmax(torch.cat(train_predictions), dim=1), torch.argmax(torch.cat(train_labels), dim=1))
-                F1_score_train.update(torch.argmax(torch.cat(train_predictions), dim=1), torch.argmax(torch.cat(train_labels), dim=1))
-                avprc_train.update(torch.cat(train_predictions), torch.argmax(torch.cat(train_labels), dim=1))
-                auroc_train.update(torch.cat(train_predictions), torch.argmax(torch.cat(train_labels), dim=1))
-            
+            if task == "binary":
+                accuracy_train.update(
+                    torch.argmax(torch.cat(train_predictions), dim=1),
+                    torch.argmax(torch.cat(train_labels), dim=1),
+                )
+                F1_score_train.update(
+                    torch.argmax(torch.cat(train_predictions), dim=1),
+                    torch.argmax(torch.cat(train_labels), dim=1),
+                )
+                avprc_train.update(
+                    torch.cat(train_predictions),
+                    torch.argmax(torch.cat(train_labels), dim=1),
+                )
+                auroc_train.update(
+                    torch.cat(train_predictions),
+                    torch.argmax(torch.cat(train_labels), dim=1),
+                )
+
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
 
@@ -114,48 +128,63 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
                 preds = model(data.x, data.edge_index, task, data.batch)
                 y = data.y
-                if task == 'regression':
+                if task == "regression":
                     y = y.unsqueeze(1)
 
                 val_predictions.append(preds)
                 val_labels.append(y)
 
-                if task == 'binary':
-                    accuracy_val.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
-                    F1_score_val.update(torch.argmax(torch.cat(val_predictions), dim=1), torch.argmax(torch.cat(val_labels), dim=1))
-                    avprc_val.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
-                    auroc_val.update(torch.cat(val_predictions), torch.argmax(torch.cat(val_labels), dim=1))
-            
+                if task == "binary":
+                    accuracy_val.update(
+                        torch.argmax(torch.cat(val_predictions), dim=1),
+                        torch.argmax(torch.cat(val_labels), dim=1),
+                    )
+                    F1_score_val.update(
+                        torch.argmax(torch.cat(val_predictions), dim=1),
+                        torch.argmax(torch.cat(val_labels), dim=1),
+                    )
+                    avprc_val.update(
+                        torch.cat(val_predictions),
+                        torch.argmax(torch.cat(val_labels), dim=1),
+                    )
+                    auroc_val.update(
+                        torch.cat(val_predictions),
+                        torch.argmax(torch.cat(val_labels), dim=1),
+                    )
+
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
         logger.info("| Train Loss: {:.4f}".format(train_loss))
         logger.info("| Val Loss: {:.4f}".format(val_loss))
 
-        if task == 'binary':
+        if task == "binary":
             logger.info("| Train Accuracy: {:.4f}".format(accuracy_train.compute()))
             logger.info("| Train F1_score: {:.4f}".format(F1_score_train.compute()))
-            logger.info("| Train Average precision: {:.4f}".format(avprc_train.compute()))
+            logger.info(
+                "| Train Average precision: {:.4f}".format(avprc_train.compute())
+            )
             logger.info("| Train AUROC: {:.4f}".format(auroc_train.compute()))
-            
+
             logger.info("| Val Accuracy: {:.4f}".format(accuracy_val.compute()))
             logger.info("| Val F1_score: {:.4f}".format(F1_score_val.compute()))
             logger.info("| Val Average precision: {:.4f}".format(avprc_val.compute()))
             logger.info("| Val AUROC: {:.4f}".format(auroc_val.compute()))
-            
-            if avprc_val.compute()>current_max_avg:
+
+            if avprc_val.compute() > current_max_avg:
                 best_model = model
 
             accuracy_train.reset()
             F1_score_train.reset()
             avprc_train.reset()
             auroc_train.reset()
-            
+
             accuracy_val.reset()
             F1_score_val.reset()
             avprc_val.reset()
             auroc_val.reset()
-        
+
     return model, best_model, criterion
+
 
 def main(args):
     logging.basicConfig(level=logging.INFO)
@@ -168,36 +197,52 @@ def main(args):
 
     set_seed(32)
 
-
     logger.info("Extracting dataset statistics")
-    scaler = StandardScaling(args.model_name)
+    scaler = StandardScaling(
+        args.model_name, task=args.task, append_position_as_feature=True
+    )
+
     graphs = []
     number_of_train_samples = len(os.listdir(args.train_path))
     for idx in range(0, number_of_train_samples):
         graph = torch.load(os.path.join(args.train_path, "graph_{}.pt".format(idx)))
         graphs.append(graph.x)
-    
+
     mean_std_tuples = scaler.fit(graphs)
     logger.info("Statistics: {}".format(mean_std_tuples))
 
     train_dataset = GraphDataset(
-        root_dir=args.train_path, transform=scaler, task=args.task
+        root_dir=args.train_path,
+        transform=scaler,
     )
+    logger.info("Train dataset length: {}".format(len(train_dataset)))
+    # logger.info("Checking train dataset shape")
+    # for d in train_dataset:
+    #     assert d.x.shape[0] == 178
+    #     assert d.x.shape[1] == 14
+    #     assert d.x.shape[2] == 12
+    # logger.info("Done shapes are ok")        
+
     train_loader = torch_geometric.loader.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True,
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
     )
 
-    val_dataset = GraphDataset(root_dir=args.val_path, transform=scaler, task=args.task)
+    val_dataset = GraphDataset(
+        root_dir=args.val_path,
+        transform=scaler,
+    )
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset, batch_size=args.batch_size
     )
 
     logger.info("Building model {}".format(args.model_name))
 
-    if args.task == 'binary':
+    if args.task == "binary":
         linear_out_channels = 2
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
-    elif args.task == 'regression':
+    elif args.task == "regression":
         linear_out_channels = 1
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
 
@@ -205,7 +250,11 @@ def main(args):
         num_features = train_dataset.num_node_features
         timesteps = args.timesteps
         model = AttentionGNN(
-            num_features, args.hidden_channels, timesteps, args.learning_rate, args.weight_decay
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
         ).to(device)
     else:
         raise ValueError("Invalid model")
@@ -241,7 +290,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t", 
+        "-t",
         "--train-path",
         metavar="PATH",
         type=str,
@@ -304,7 +353,7 @@ if __name__ == "__main__":
         type=tuple,
         action="store",
         dest="hidden_channels",
-        default=(32,16),
+        default=(32, 16),
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(

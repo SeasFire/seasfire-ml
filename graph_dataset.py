@@ -1,9 +1,12 @@
 import torch
-from torch_geometric.data import Dataset
+from torch_geometric.data import Dataset, Data
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class GraphDataset(Dataset):
-    def __init__(self, root_dir, transform, task, append_position_as_feature=True):
+    def __init__(self, root_dir, transform):
         """
         Desc
         ----
@@ -21,38 +24,14 @@ class GraphDataset(Dataset):
         """
         self.root_dir = root_dir
         self.transform = transform
-        self.task = task
-        self.append_position_as_feature = append_position_as_feature
 
-    def __len__(self):
-        return len([entry for entry in os.listdir(self.root_dir)])
+        # load self._indices 
+        length = len([entry for entry in os.listdir(self.root_dir)])
+        self._indices = []
+        for idx in range(length): 
+            if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(idx))): 
+                self._indices.append(idx)
 
-    def __getitem__(self, idx):
-        graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(idx)))
-        self.graph = graph
-        
-        # Define label
-        if self.task == "binary":
-            self.graph.y = torch.where(self.graph.y > 0.0, 1, 0)
-            self.graph.y = torch.nn.functional.one_hot(self.graph.y, 2).float()
-        elif self.task == "regression":
-            self.graph.y = self.graph.y / 1000.0
-        else:
-            raise ValueError("Invalid task")
-
-        # Standardize features
-        if self.transform is not None:
-            self.graph.x = self.transform.transform(self.graph.x)
-            self.graph.x = torch.nan_to_num(self.graph.x, nan=-1.0)
-
-        # Concatenate positions with features
-        if self.append_position_as_feature:
-            positions = self.graph.pos.unsqueeze(2).expand(-1, -1, self.graph.x.shape[2])
-            self.graph.x = torch.cat((self.graph.x, positions), dim=1)
-
-        return self.graph
-
-    def num_features(self) -> int:
-        r"""Returns the number of features per node in the dataset.
-        Alias for :py:attr:`~num_node_features`."""
-        return self.graph.x.shape[1]
+    def get(self, idx: int) -> Data:
+        r"""Gets the data object at index :obj:`idx`."""
+        return torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(idx)))
