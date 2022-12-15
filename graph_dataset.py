@@ -36,7 +36,18 @@ class GraphDataset(Dataset):
         self._num_features = 0
         if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(0))): 
             graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(0)))
-            self._num_features = graph.x.shape[1]
+            self._num_features = self.transform(graph).x.shape[1]
+
+    @property
+    def num_features(self) -> int:
+        r"""Returns the number of features per node in the dataset.
+        Alias for :py:attr:`~num_node_features`."""
+        return self._num_features
+
+    @property
+    def num_node_features(self) -> int:
+        r"""Returns the number of features per node in the dataset."""
+        return self._num_features
 
     def get(self, idx: int) -> Data:
         r"""Gets the data object at index :obj:`idx`."""
