@@ -196,7 +196,10 @@ def main(args):
     set_seed(32)
 
     logger.info("Extracting dataset statistics")
-    scaler = StandardScaling(args.model_name)
+    scaler = StandardScaling(
+        args.model_name, task=args.task, append_position_as_feature=True
+    )
+
     graphs = []
     number_of_train_samples = len(os.listdir(args.train_path))
     for idx in range(0, number_of_train_samples):
@@ -209,16 +212,16 @@ def main(args):
     train_dataset = GraphDataset(
         root_dir=args.train_path,
         transform=scaler,
-        task=args.task,
-        append_position_as_feature=True,
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
-    for d in train_dataset: 
+    for d in train_dataset:
         assert d.x.shape[0] == 178
         assert d.x.shape[1] == 14
         assert d.x.shape[2] == 12
 
-    logger.info("Train dataset node features: {}".format(train_dataset.num_node_features))
+    logger.info(
+        "Train dataset node features: {}".format(train_dataset.num_node_features)
+    )
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -228,8 +231,6 @@ def main(args):
     val_dataset = GraphDataset(
         root_dir=args.val_path,
         transform=scaler,
-        task=args.task,
-        append_position_as_feature=True,
     )
     logger.info("Val dataset node features: {}".format(val_dataset.num_node_features))
     val_loader = torch_geometric.loader.DataLoader(
