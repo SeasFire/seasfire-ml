@@ -54,6 +54,7 @@ class A3TGCN2(torch.nn.Module):
         edge_index: torch.LongTensor,
         edge_weight: torch.FloatTensor = None,
         H: torch.FloatTensor = None,
+        readout_batch=None,        
     ) -> torch.FloatTensor:
         """
         Making a forward pass. If edge weights are not present the forward pass
@@ -73,7 +74,7 @@ class A3TGCN2(torch.nn.Module):
         probs = torch.nn.functional.softmax(self.attention, dim=0)
         for period in range(self.periods):
             H_accum = H_accum + probs[period] * self._base_tgcn(
-                X[:, :, period], edge_index, edge_weight, H
+                X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
         return H_accum
 
