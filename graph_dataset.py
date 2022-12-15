@@ -32,6 +32,13 @@ class GraphDataset(Dataset):
             if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(idx))): 
                 self._indices.append(idx)
 
+        #define number of features per node --> same for all nodes
+        self._num_features = 0
+        if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(0))): 
+            graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(0)))
+            self._num_features = graph.x.shape[1]
+
     def get(self, idx: int) -> Data:
         r"""Gets the data object at index :obj:`idx`."""
+
         return torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(idx)))
