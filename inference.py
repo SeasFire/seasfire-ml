@@ -78,7 +78,7 @@ def main(args):
     scaler = model_info['scaler']
     model_name = model_info['name']
 
-    test_dataset = GraphDataset(root_dir=args.test_path, transform=scaler, task=args.task)
+    test_dataset = GraphDataset(root_dir=args.test_path, transform=scaler)
     test_loader = torch_geometric.loader.DataLoader(
         test_dataset, batch_size=args.batch_size
     )
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_temp_binary_attention_model.pt",
+        default="best_binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
