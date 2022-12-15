@@ -34,23 +34,11 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, batch_size, task):
+def train(model, train_loader, epochs, val_loader, task):
     current_max_avg = 0
     best_model = model
 
     optimizer = model.optimizer
-
-    criterion = 0
-
-    accuracy_test = 0
-    F1_score_test = 0
-    avprc_test = 0
-    auroc_test = 0
-
-    accuracy_val = 0
-    F1_score_val = 0
-    avprc_val = 0
-    auroc_val = 0
 
     if task == "binary":
         criterion = torch.nn.CrossEntropyLoss()
@@ -76,12 +64,9 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
 
         train_predictions = []
         train_labels = []
-        train_results = []
 
         for _, data in enumerate(tqdm(train_loader)):
             data = data.to(device)
-
-            assert data.x.shape[1] == 14
 
             preds = model(data.x, data.edge_index, None, None, data.batch)
             y = data.y
@@ -97,29 +82,17 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
             optimizer.step()
 
             if task == "binary":
-                accuracy_train.update(
-                    torch.argmax(torch.cat(train_predictions), dim=1),
-                    torch.argmax(torch.cat(train_labels), dim=1),
-                )
-                F1_score_train.update(
-                    torch.argmax(torch.cat(train_predictions), dim=1),
-                    torch.argmax(torch.cat(train_labels), dim=1),
-                )
-                avprc_train.update(
-                    torch.cat(train_predictions),
-                    torch.argmax(torch.cat(train_labels), dim=1),
-                )
-                auroc_train.update(
-                    torch.cat(train_predictions),
-                    torch.argmax(torch.cat(train_labels), dim=1),
-                )
+                y_class = torch.argmax(y, dim=1)
+                accuracy_train.update(preds, y_class)
+                F1_score_train.update(preds, y_class)
+                avprc_train.update(preds, y_class)
+                auroc_train.update(preds, y_class)
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
 
         val_predictions = []
         val_labels = []
-        val_results = []
 
         with torch.no_grad():
             model.eval()
@@ -136,25 +109,15 @@ def train(model, train_loader, epochs, val_loader, batch_size, task):
                 val_labels.append(y)
 
                 if task == "binary":
-                    accuracy_val.update(
-                        torch.argmax(torch.cat(val_predictions), dim=1),
-                        torch.argmax(torch.cat(val_labels), dim=1),
-                    )
-                    F1_score_val.update(
-                        torch.argmax(torch.cat(val_predictions), dim=1),
-                        torch.argmax(torch.cat(val_labels), dim=1),
-                    )
-                    avprc_val.update(
-                        torch.cat(val_predictions),
-                        torch.argmax(torch.cat(val_labels), dim=1),
-                    )
-                    auroc_val.update(
-                        torch.cat(val_predictions),
-                        torch.argmax(torch.cat(val_labels), dim=1),
-                    )
+                    y_class = torch.argmax(y, dim=1)
+                    accuracy_val.update(preds, y_class)
+                    F1_score_val.update(preds, y_class)
+                    avprc_val.update(preds, y_class)
+                    auroc_val.update(preds, y_class)
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+
         logger.info("| Train Loss: {:.4f}".format(train_loss))
         logger.info("| Val Loss: {:.4f}".format(val_loss))
 
@@ -216,12 +179,6 @@ def main(args):
         transform=transform,
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
-    # logger.info("Checking train dataset shape")
-    # for d in train_dataset:
-    #     assert d.x.shape[0] == 178
-    #     assert d.x.shape[1] == 14
-    #     assert d.x.shape[2] == 12
-    # logger.info("Done shapes are ok")
 
     train_loader = torch_geometric.loader.DataLoader(
         train_dataset,
@@ -262,7 +219,11 @@ def main(args):
 
     logger.info("Starting training")
     model, best_model, criterion = train(
-        model, train_loader, args.epochs, val_loader, args.batch_size, args.task
+        model=model,
+        train_loader=train_loader,
+        epochs=args.epochs,
+        val_loader=val_loader,
+        task=args.task,
     )
 
     logger.info("Saving model as {}".format(args.model_path))
