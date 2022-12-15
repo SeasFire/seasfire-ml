@@ -203,7 +203,7 @@ def main(args):
     )
 
     graphs = []
-    number_of_train_samples = len(os.listdir(args.train_path))
+    # number_of_train_samples = int((len(os.listdir(args.train_path))) / 2)
     for idx in range(0, number_of_train_samples):
         graph = torch.load(os.path.join(args.train_path, "graph_{}.pt".format(idx)))
         graphs.append(graph.x)
@@ -383,7 +383,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-4,
+        default=1e-3,
         help="Learning rate",
     )
     parser.add_argument(
