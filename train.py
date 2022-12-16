@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+import pickle as pkl
 
 from models import AttentionGNN
 from graph_dataset import GraphDataset
@@ -33,10 +34,35 @@ def set_seed(seed: int = 42) -> None:
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
+def print_metrics(epochs):
+    # Load the training and validation loss dictionaries
+    train_metrics = pkl.load(open('train_metrics.pkl', 'rb'))
+    val_metrics = pkl.load(open('val_metrics.pkl', 'rb'))
+    
+    # Generate a sequence of integers to represent the epoch numbers
+    epochs = range(1, epochs+1)
+    
+    # Plot and label the training and validation loss values
+    for key in train_metrics.keys():
+        plt.figure()
+        plt.plot(epochs, train_metrics[key], label='Train ' + key, color='red')
+        plt.plot(epochs, val_metrics[key], label='Validation ' + key, color='blue')
+    
+        # Add in a title and axes labels
+        plt.title('Training and Validation ' + key)
+        plt.xlabel('Epochs')
+        plt.ylabel(key)
+    
+        # Set the tick locations
+        plt.xticks(np.arange(0, 21, 2))
+        
+        # Display the plot
+        plt.legend(loc='best')
+        plt.savefig(key + '.png')
 
 def train(model, train_loader, epochs, val_loader, task):
-    train_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
-    val_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
+    train_metrics_dict = {"Loss":[],"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
+    val_metrics_dict = {"Loss":[],"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
 
     current_max_avg = 0
     best_model = model
@@ -47,12 +73,14 @@ def train(model, train_loader, epochs, val_loader, task):
         criterion = torch.nn.CrossEntropyLoss()
 
         accuracy_train = Accuracy(task="multiclass", num_classes=2).to(device)
-        F1_score_train = F1Score(task="multiclass", num_classes=2).to(device)
+        # F1_score_train = F1Score(task="multiclass", num_classes=2).to(device) #micro
+        F1_score_train = F1Score(task="multiclass", num_classes=2, average='macro').to(device) #macro
         avprc_train = AveragePrecision(task="multiclass", num_classes=2).to(device)
         auroc_train = AUROC(task="multiclass", num_classes=2).to(device)
 
         accuracy_val = Accuracy(task="multiclass", num_classes=2).to(device)
-        F1_score_val = F1Score(task="multiclass", num_classes=2).to(device)
+        # F1_score_val = F1Score(task="multiclass", num_classes=2).to(device) #micro
+        F1_score_val = F1Score(task="multiclass", num_classes=2, average='macro').to(device) #macro
         avprc_val = AveragePrecision(task="multiclass", num_classes=2).to(device)
         auroc_val = AUROC(task="multiclass", num_classes=2).to(device)
     elif task == "regression":
@@ -127,8 +155,9 @@ def train(model, train_loader, epochs, val_loader, task):
         if task == "binary":
             temp_accuracy = accuracy_train.compute()
             temp_f1score = F1_score_train.compute()
-            temp_avprc = auroc_train.compute()
+            temp_avprc = avprc_train.compute()
             temp_auroc = auroc_train.compute()
+
             logger.info("| Train Accuracy: {:.4f}".format(temp_accuracy))
             logger.info("| Train F1_score: {:.4f}".format(temp_f1score))
             logger.info(
@@ -136,14 +165,28 @@ def train(model, train_loader, epochs, val_loader, task):
             )
             logger.info("| Train AUROC: {:.4f}".format(temp_auroc))
 
+            
+            train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
+            train_metrics_dict["Accuracy"].append(temp_accuracy.cpu().detach().numpy())
+            train_metrics_dict["F1Score"].append(temp_f1score.cpu().detach().numpy())
+            train_metrics_dict["AveragePrecision"].append(temp_avprc.cpu().detach().numpy())
+            train_metrics_dict["AUROC"].append(temp_auroc.cpu().detach().numpy())
+         
+
             temp_accuracy = accuracy_train.compute()
             temp_f1score = F1_score_train.compute()
             temp_avprc = auroc_train.compute()
             temp_auroc = auroc_train.compute()
-            logger.info("| Val Accuracy: {:.4f}".format(accuracy_val.compute()))
-            logger.info("| Val F1_score: {:.4f}".format(F1_score_val.compute()))
-            logger.info("| Val Average precision: {:.4f}".format(avprc_val.compute()))
-            logger.info("| Val AUROC: {:.4f}".format(auroc_val.compute()))
+            logger.info("| Val Accuracy: {:.4f}".format(temp_accuracy))
+            logger.info("| Val F1_score: {:.4f}".format(temp_f1score))
+            logger.info("| Val Average precision: {:.4f}".format(temp_avprc))
+            logger.info("| Val AUROC: {:.4f}".format(temp_auroc))
+
+            val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
+            val_metrics_dict["Accuracy"].append(temp_accuracy.cpu().detach().numpy())
+            val_metrics_dict["F1Score"].append(temp_f1score.cpu().detach().numpy())
+            val_metrics_dict["AveragePrecision"].append(temp_avprc.cpu().detach().numpy())
+            val_metrics_dict["AUROC"].append(temp_auroc.cpu().detach().numpy())
 
             if avprc_val.compute() > current_max_avg:
                 best_model = model
@@ -157,6 +200,13 @@ def train(model, train_loader, epochs, val_loader, task):
             F1_score_val.reset()
             avprc_val.reset()
             auroc_val.reset()
+
+    with open('train_metrics.pkl', 'wb') as file:
+        pkl.dump(train_metrics_dict, file)
+    with open('val_metrics.pkl', 'wb') as file:
+        pkl.dump(val_metrics_dict, file)
+
+    print_metrics(epochs)
 
     return model, best_model, criterion
 
@@ -298,7 +348,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="regression_attention_model.pt",
+        default="binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -307,7 +357,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="regression",
+        default="binary",
         help="Model task",
     )
     parser.add_argument(
@@ -336,7 +386,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=50,
+        default=10,
         help="Epochs",
     )
     parser.add_argument(
