@@ -83,9 +83,11 @@ def train(model, train_loader, epochs, val_loader, task):
 
             if task == "binary":
                 y_class = torch.argmax(y, dim=1)
-                accuracy_train.update(preds, y_class)
-                F1_score_train.update(preds, y_class)
-                avprc_train.update(preds, y_class)
+                preds_class = torch.argmax(preds, dim=1)
+
+                accuracy_train.update(preds_class, y_class)
+                F1_score_train.update(preds_class, y_class) #needs preds_class 
+                avprc_train.update(preds, y_class) 
                 auroc_train.update(preds, y_class)
 
         # Validation
@@ -345,7 +347,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-3,
+        default=5e-4,
         help="Learning rate",
     )
     parser.add_argument(
