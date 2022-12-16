@@ -34,35 +34,43 @@ def set_seed(seed: int = 42) -> None:
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
-def print_metrics(epochs):
-    # Load the training and validation loss dictionaries
+def print_metrics(epochs, task):
     train_metrics = pkl.load(open('train_metrics.pkl', 'rb'))
     val_metrics = pkl.load(open('val_metrics.pkl', 'rb'))
     
-    # Generate a sequence of integers to represent the epoch numbers
-    epochs = range(1, epochs+1)
+    x_axis = range(1, epochs+1)
     
-    # Plot and label the training and validation loss values
-    for key in train_metrics.keys():
+    if task == 'regression':
         plt.figure()
-        plt.plot(epochs, train_metrics[key], label='Train ' + key, color='red')
-        plt.plot(epochs, val_metrics[key], label='Validation ' + key, color='blue')
+        plt.plot(x_axis, train_metrics['Loss'], label='Train Loss', color='red')
+        plt.plot(x_axis, val_metrics['Loss'], label='Validation Loss', color='blue')
     
-        # Add in a title and axes labels
-        plt.title('Training and Validation ' + key)
+        plt.title('Training and Validation Loss')
         plt.xlabel('Epochs')
-        plt.ylabel(key)
+        plt.ylabel('Loss')
     
-        # Set the tick locations
-        plt.xticks(np.arange(0, 21, 2))
+        plt.xticks(np.arange(0, epochs, 2))
         
-        # Display the plot
         plt.legend(loc='best')
-        plt.savefig(key + '.png')
+        plt.savefig('Loss' + '.png')
+    elif task == 'binary': 
+        for key in train_metrics.keys():
+            plt.figure()
+            plt.plot(x_axis, train_metrics[key], label='Train ' + key, color='red')
+            plt.plot(x_axis, val_metrics[key], label='Validation ' + key, color='blue')
+        
+            plt.title('Training and Validation ' + key)
+            plt.xlabel('Epochs')
+            plt.ylabel(key)
+        
+            plt.xticks(np.arange(0, epochs, 2))
+            
+            plt.legend(loc='best')
+            plt.savefig(key + '.png')
 
 def train(model, train_loader, epochs, val_loader, task):
-    train_metrics_dict = {"Loss":[],"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
-    val_metrics_dict = {"Loss":[],"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
+    train_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
+    val_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
 
     current_max_avg = 0
     best_model = model
@@ -72,17 +80,19 @@ def train(model, train_loader, epochs, val_loader, task):
     if task == "binary":
         criterion = torch.nn.CrossEntropyLoss()
 
-        accuracy_train = Accuracy(task="multiclass", num_classes=2).to(device)
-        # F1_score_train = F1Score(task="multiclass", num_classes=2).to(device) #micro
-        F1_score_train = F1Score(task="multiclass", num_classes=2, average='macro').to(device) #macro
-        avprc_train = AveragePrecision(task="multiclass", num_classes=2).to(device)
-        auroc_train = AUROC(task="multiclass", num_classes=2).to(device)
+        train_metrics = [
+            Accuracy(task="multiclass", num_classes=2).to(device),
+            F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
+            AveragePrecision(task="multiclass", num_classes = 2).to(device),
+            AUROC(task="multiclass", num_classes = 2).to(device)
+        ]
 
-        accuracy_val = Accuracy(task="multiclass", num_classes=2).to(device)
-        # F1_score_val = F1Score(task="multiclass", num_classes=2).to(device) #micro
-        F1_score_val = F1Score(task="multiclass", num_classes=2, average='macro').to(device) #macro
-        avprc_val = AveragePrecision(task="multiclass", num_classes=2).to(device)
-        auroc_val = AUROC(task="multiclass", num_classes=2).to(device)
+        val_metrics = [
+            Accuracy(task="multiclass", num_classes=2).to(device),
+            F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
+            AveragePrecision(task="multiclass", num_classes = 2).to(device),
+            AUROC(task="multiclass", num_classes = 2).to(device)
+        ]
     elif task == "regression":
         criterion = torch.nn.MSELoss()
 
@@ -114,10 +124,8 @@ def train(model, train_loader, epochs, val_loader, task):
 
             if task == "binary":
                 y_class = torch.argmax(y, dim=1)
-                accuracy_train.update(preds, y_class)
-                F1_score_train.update(preds, y_class) #needs preds_class 
-                avprc_train.update(preds, y_class) 
-                auroc_train.update(preds, y_class)
+                for metric in train_metrics: 
+                    metric.update(preds, y_class)
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
@@ -141,10 +149,8 @@ def train(model, train_loader, epochs, val_loader, task):
 
                 if task == "binary":
                     y_class = torch.argmax(y, dim=1)
-                    accuracy_val.update(preds, y_class)
-                    F1_score_val.update(preds, y_class)
-                    avprc_val.update(preds, y_class)
-                    auroc_val.update(preds, y_class)
+                    for metric in val_metrics: 
+                        metric.update(preds, y_class)
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
@@ -153,60 +159,33 @@ def train(model, train_loader, epochs, val_loader, task):
         logger.info("| Val Loss: {:.4f}".format(val_loss))
 
         if task == "binary":
-            temp_accuracy = accuracy_train.compute()
-            temp_f1score = F1_score_train.compute()
-            temp_avprc = avprc_train.compute()
-            temp_auroc = auroc_train.compute()
-
-            logger.info("| Train Accuracy: {:.4f}".format(temp_accuracy))
-            logger.info("| Train F1_score: {:.4f}".format(temp_f1score))
-            logger.info(
-                "| Train Average precision: {:.4f}".format(temp_avprc)
-            )
-            logger.info("| Train AUROC: {:.4f}".format(temp_auroc))
-
+            for metric, key in zip(train_metrics,train_metrics_dict.keys()): 
+                temp = metric.compute()
+                logger.info("| Train " + key + ": {:.4f}".format(temp))
+                train_metrics_dict[key].append(temp.cpu().detach().numpy())
+                metric.reset()
             
-            train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
-            train_metrics_dict["Accuracy"].append(temp_accuracy.cpu().detach().numpy())
-            train_metrics_dict["F1Score"].append(temp_f1score.cpu().detach().numpy())
-            train_metrics_dict["AveragePrecision"].append(temp_avprc.cpu().detach().numpy())
-            train_metrics_dict["AUROC"].append(temp_auroc.cpu().detach().numpy())
          
+            for metric, key in zip(val_metrics,val_metrics_dict.keys()): 
+                temp = metric.compute()
+                logger.info("| Val " + key + ": {:.4f}".format(temp))
+                val_metrics_dict[key].append(temp.cpu().detach().numpy())
+                metric.reset()
+            
 
-            temp_accuracy = accuracy_train.compute()
-            temp_f1score = F1_score_train.compute()
-            temp_avprc = auroc_train.compute()
-            temp_auroc = auroc_train.compute()
-            logger.info("| Val Accuracy: {:.4f}".format(temp_accuracy))
-            logger.info("| Val F1_score: {:.4f}".format(temp_f1score))
-            logger.info("| Val Average precision: {:.4f}".format(temp_avprc))
-            logger.info("| Val AUROC: {:.4f}".format(temp_auroc))
-
-            val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
-            val_metrics_dict["Accuracy"].append(temp_accuracy.cpu().detach().numpy())
-            val_metrics_dict["F1Score"].append(temp_f1score.cpu().detach().numpy())
-            val_metrics_dict["AveragePrecision"].append(temp_avprc.cpu().detach().numpy())
-            val_metrics_dict["AUROC"].append(temp_auroc.cpu().detach().numpy())
-
-            if avprc_val.compute() > current_max_avg:
+            if val_metrics[2] > current_max_avg:
                 best_model = model
+                current_max_avg = val_metrics[2]
 
-            accuracy_train.reset()
-            F1_score_train.reset()
-            avprc_train.reset()
-            auroc_train.reset()
-
-            accuracy_val.reset()
-            F1_score_val.reset()
-            avprc_val.reset()
-            auroc_val.reset()
+        train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
+        val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
     with open('train_metrics.pkl', 'wb') as file:
         pkl.dump(train_metrics_dict, file)
     with open('val_metrics.pkl', 'wb') as file:
         pkl.dump(val_metrics_dict, file)
 
-    print_metrics(epochs)
+    print_metrics(epochs, task)
 
     return model, best_model, criterion
 
@@ -386,7 +365,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=10,
+        default=50,
         help="Epochs",
     )
     parser.add_argument(
