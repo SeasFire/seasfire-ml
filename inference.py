@@ -23,46 +23,37 @@ def test(model, test_loader, criterion, task):
     with torch.no_grad():
         model.eval()
 
-        accuracy_test = Accuracy(task="multiclass", num_classes=2).to(device)
-        # F1_score_test = F1Score(task = 'multiclass', num_classes = 2).to(device) #micro
-        F1_score_test = F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device) #macro
-        avprc_test= AveragePrecision(task="multiclass", num_classes = 2).to(device)
-        auroc_test= AUROC(task="multiclass", num_classes = 2).to(device)
+        metrics = [
+            Accuracy(task="multiclass", num_classes=2).to(device),
+            F1Score(task = 'binary', num_classes = 2).to(device),
+            AveragePrecision(task="multiclass", num_classes = 2).to(device),
+            AUROC(task="multiclass", num_classes = 2).to(device)
+        ]
 
         test_predictions = []
         test_labels = []
-
-        results = []
 
         for data in tqdm(test_loader):
             data = data.to(device)
 
             preds = model(data.x, data.edge_index, task, data.batch)
-            y = data.y #.unsqueeze(1)
+            y = data.y
 
             test_predictions.append(preds)
             test_labels.append(y)
 
             if task == 'binary':
-                accuracy_test.update(torch.argmax(torch.cat(test_predictions), dim=1), torch.argmax(torch.cat(test_labels), dim=1))
-                F1_score_test.update(torch.argmax(torch.cat(test_predictions), dim=1), torch.argmax(torch.cat(test_labels), dim=1))
-                avprc_test.update(torch.cat(test_predictions), torch.argmax(torch.cat(test_labels), dim=1))
-                auroc_test.update(torch.cat(test_predictions), torch.argmax(torch.cat(test_labels), dim=1))
-
+                y_class = torch.argmax(y, dim=1)
+                for metric in metrics: 
+                    metric.update(preds, y_class)
                 
-    test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
-    print(f" | Test Loss: {test_loss}")
+        test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
+        print(f" | Test Loss: {test_loss}")
 
-    if task == 'binary':
-        print(f'Test accuracy: {(accuracy_test.compute()):.4f}')
-        print(f"F1_score: {(F1_score_test.compute()):.4f}")
-        print(f"Average precision: {(avprc_test.compute()):.4f}")
-        print(f"AUROC: {(auroc_test.compute()):.4f}")
-
-        accuracy_test.reset()
-        F1_score_test.reset()
-        avprc_test.reset()
-        auroc_test.reset()
+        if task == 'binary':
+            for metric in metrics: 
+                print(f'Test {metric.__class__.__name}: {(metric.compute()):.4f}')
+                metric.reset()
 
 def main(args):
     FileOutputHandler = logging.FileHandler("logs.log")
