@@ -25,7 +25,7 @@ def test(model, test_loader, criterion, task):
 
         metrics = [
             Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task = 'binary', num_classes = 2).to(device),
+            F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
             AveragePrecision(task="multiclass", num_classes = 2).to(device),
             AUROC(task="multiclass", num_classes = 2).to(device)
         ]
