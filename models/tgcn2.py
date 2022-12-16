@@ -187,7 +187,7 @@ class TGCN2(torch.nn.Module):
         index = index.to(device)
         H_tilde_temp = self.mean_aggr_z(H_tilde_temp, index)  # (b,16)
 
-        H_tilde = torch.cat([H_tilde_temp, H], axis=1)  # (b, 32)
+        H_tilde = torch.cat([H_tilde_temp, H * R], axis=1)  # (b, 32)
 
         H_tilde = self.linear_h(H_tilde)  # (b,16)
         H_tilde = torch.tanh(H_tilde)
@@ -201,9 +201,9 @@ class TGCN2(torch.nn.Module):
         self,
         X: torch.FloatTensor,
         edge_index: torch.LongTensor,
-        readout_batch=None,
         edge_weight: torch.FloatTensor = None,
         H: torch.FloatTensor = None,
+        readout_batch=None,
     ) -> torch.FloatTensor:
         """
         Making a forward pass. If edge weights are not present the forward pass

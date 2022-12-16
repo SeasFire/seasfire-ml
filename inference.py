@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from models import AttentionGNN
 from graph_dataset import GraphDataset
-from scale_dataset import StandardScaling
+from transforms import StandardScaling
 import torch.nn.functional as F
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 

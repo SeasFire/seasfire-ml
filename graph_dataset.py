@@ -5,8 +5,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class GraphDataset(Dataset):
-    def __init__(self, root_dir, transform):
+    def __init__(self, root_dir, transform=None):
         """
         Desc
         ----
@@ -25,18 +26,22 @@ class GraphDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
 
-        # load self._indices 
+        # load self._indices
         length = len([entry for entry in os.listdir(self.root_dir)])
         self._indices = []
-        for idx in range(length): 
-            if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(idx))): 
+        for idx in range(length):
+            if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(idx))):
                 self._indices.append(idx)
 
-        #define number of features per node --> same for all nodes
-        self._num_features = 0
-        if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(0))): 
-            graph = torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(0)))
-            self._num_features = self.transform(graph).x.shape[1]
+        # define number of features per node --> same for all nodes
+        graph = torch.load(
+            os.path.join(self.root_dir, "graph_{}.pt".format(self._indices[0]))
+        )
+        self._num_features = (
+            self.transform(graph).x.shape[1]
+            if self.transform is not None
+            else graph.x.shape[1]
+        )
 
     @property
     def num_features(self) -> int:
