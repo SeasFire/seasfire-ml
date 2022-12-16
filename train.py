@@ -35,6 +35,9 @@ def set_seed(seed: int = 42) -> None:
 
 
 def train(model, train_loader, epochs, val_loader, task):
+    train_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
+    val_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[]}
+
     current_max_avg = 0
     best_model = model
 
@@ -83,10 +86,8 @@ def train(model, train_loader, epochs, val_loader, task):
 
             if task == "binary":
                 y_class = torch.argmax(y, dim=1)
-                preds_class = torch.argmax(preds, dim=1)
-
-                accuracy_train.update(preds_class, y_class)
-                F1_score_train.update(preds_class, y_class) #needs preds_class 
+                accuracy_train.update(preds, y_class)
+                F1_score_train.update(preds, y_class) #needs preds_class 
                 avprc_train.update(preds, y_class) 
                 auroc_train.update(preds, y_class)
 
@@ -124,13 +125,21 @@ def train(model, train_loader, epochs, val_loader, task):
         logger.info("| Val Loss: {:.4f}".format(val_loss))
 
         if task == "binary":
-            logger.info("| Train Accuracy: {:.4f}".format(accuracy_train.compute()))
-            logger.info("| Train F1_score: {:.4f}".format(F1_score_train.compute()))
+            temp_accuracy = accuracy_train.compute()
+            temp_f1score = F1_score_train.compute()
+            temp_avprc = auroc_train.compute()
+            temp_auroc = auroc_train.compute()
+            logger.info("| Train Accuracy: {:.4f}".format(temp_accuracy))
+            logger.info("| Train F1_score: {:.4f}".format(temp_f1score))
             logger.info(
-                "| Train Average precision: {:.4f}".format(avprc_train.compute())
+                "| Train Average precision: {:.4f}".format(temp_avprc)
             )
-            logger.info("| Train AUROC: {:.4f}".format(auroc_train.compute()))
+            logger.info("| Train AUROC: {:.4f}".format(temp_auroc))
 
+            temp_accuracy = accuracy_train.compute()
+            temp_f1score = F1_score_train.compute()
+            temp_avprc = auroc_train.compute()
+            temp_auroc = auroc_train.compute()
             logger.info("| Val Accuracy: {:.4f}".format(accuracy_val.compute()))
             logger.info("| Val F1_score: {:.4f}".format(F1_score_val.compute()))
             logger.info("| Val Average precision: {:.4f}".format(avprc_val.compute()))
@@ -289,7 +298,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="binary_attention_model.pt",
+        default="regression_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -298,7 +307,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="binary",
+        default="regression",
         help="Model task",
     )
     parser.add_argument(
@@ -347,7 +356,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-4,
+        default=1e-3,
         help="Learning rate",
     )
     parser.add_argument(
