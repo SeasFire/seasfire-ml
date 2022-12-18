@@ -12,18 +12,19 @@ import matplotlib.pyplot as plt
 
 from models import AttentionGNN
 from graph_dataset import GraphDataset
-from transforms import StandardScaling
+from transforms import GraphNormalize
 import torch.nn.functional as F
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test(model, test_loader, criterion, task):
+def test(model, loader, criterion, task):
     with torch.no_grad():
         model.eval()
 
-        metrics = [
+        test_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
+        test_metrics = [
             Accuracy(task="multiclass", num_classes=2).to(device),
             F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
             AveragePrecision(task="multiclass", num_classes = 2).to(device),
@@ -33,10 +34,10 @@ def test(model, test_loader, criterion, task):
         test_predictions = []
         test_labels = []
 
-        for data in tqdm(test_loader):
+        for data in tqdm(loader):
             data = data.to(device)
 
-            preds = model(data.x, data.edge_index, task, data.batch)
+            preds = model(data.x, data.edge_index, None, None, data.batch)
             y = data.y
 
             test_predictions.append(preds)
@@ -44,16 +45,20 @@ def test(model, test_loader, criterion, task):
 
             if task == 'binary':
                 y_class = torch.argmax(y, dim=1)
-                for metric in metrics: 
+                for metric in test_metrics: 
                     metric.update(preds, y_class)
                 
         test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
         print(f" | Test Loss: {test_loss}")
 
         if task == 'binary':
-            for metric in metrics: 
-                print(f'Test {metric.__class__.__name}: {(metric.compute()):.4f}')
+            for metric, key in zip(test_metrics,test_metrics_dict.keys()): 
+                temp = metric.compute()
+                print(f'Test {key}: {(temp):.4f}')
+                test_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
+        
+        test_metrics_dict["Loss"].append(test_loss.cpu().detach().numpy())
 
 def main(args):
     FileOutputHandler = logging.FileHandler("logs.log")
@@ -67,15 +72,17 @@ def main(args):
     model_info = torch.load(args.model_path)
     model = model_info['model']
     criterion = model_info['criterion']
-    scaler = model_info['scaler']
+    transform = model_info['transform']
     model_name = model_info['name']
 
-    test_dataset = GraphDataset(root_dir=args.test_path, transform=scaler)
+    test_dataset = GraphDataset(
+        root_dir=args.test_path, 
+        transform=transform,)
     test_loader = torch_geometric.loader.DataLoader(
         test_dataset, batch_size=args.batch_size
     )
     
-    test(model, test_loader, criterion, args.task)
+    test(model=model, loader=test_loader, criterion=criterion, task=args.task)
 
 if __name__ == "__main__":
 
@@ -125,7 +132,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=64,
         help="Batch size",
     )
 
