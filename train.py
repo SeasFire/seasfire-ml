@@ -1,26 +1,17 @@
 #!/usr/bin/env python3
 
-import torch
-from tqdm import tqdm
-import logging
-import os
-import torch_geometric
-import argparse
-import numpy as np
-import random
-import matplotlib.pyplot as plt
-import pickle as pkl
 
+import torch
+import torch_geometric
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 from models import AttentionGNN
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 from utils import compute_mean_std_per_feature
 
+
 logger = logging.getLogger(__name__)
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 def set_seed(seed: int = 42) -> None:
     logger.info("Using random seed={}".format(seed))
@@ -34,45 +25,12 @@ def set_seed(seed: int = 42) -> None:
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
-def print_metrics(epochs, task):
-    train_metrics = pkl.load(open('train_metrics.pkl', 'rb'))
-    val_metrics = pkl.load(open('val_metrics.pkl', 'rb'))
-    
-    x_axis = range(1, epochs+1)
-    
-    if task == 'regression':
-        plt.figure()
-        plt.plot(x_axis, train_metrics['Loss'], label='Train Loss', color='red')
-        plt.plot(x_axis, val_metrics['Loss'], label='Validation Loss', color='blue')
-    
-        plt.title('Training and Validation Loss')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-    
-        plt.xticks(np.arange(0, epochs, 2))
-        
-        plt.legend(loc='best')
-        plt.savefig('Loss' + '.png')
-    elif task == 'binary': 
-        for key in train_metrics.keys():
-            plt.figure()
-            plt.plot(x_axis, train_metrics[key], label='Train ' + key, color='red')
-            plt.plot(x_axis, val_metrics[key], label='Validation ' + key, color='blue')
-        
-            plt.title('Training and Validation ' + key)
-            plt.xlabel('Epochs')
-            plt.ylabel(key)
-        
-            plt.xticks(np.arange(0, epochs, 2))
-            
-            plt.legend(loc='best')
-            plt.savefig(key + '.png')
-
 def train(model, train_loader, epochs, val_loader, task):
     train_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
     val_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
 
     current_max_avg = 0
+    current_best_epoch = 0
     best_model = model
 
     optimizer = model.optimizer
@@ -176,6 +134,7 @@ def train(model, train_loader, epochs, val_loader, task):
             if val_metrics[2] > current_max_avg:
                 best_model = model
                 current_max_avg = val_metrics[2]
+                current_best_epoch = epoch
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
@@ -185,9 +144,7 @@ def train(model, train_loader, epochs, val_loader, task):
     with open('val_metrics.pkl', 'wb') as file:
         pkl.dump(val_metrics_dict, file)
 
-    print_metrics(epochs, task)
-
-    return model, best_model, criterion
+    return model, best_model, criterion, current_best_epoch
 
 
 def main(args):
@@ -258,7 +215,7 @@ def main(args):
         raise ValueError("Invalid model")
 
     logger.info("Starting training")
-    model, best_model, criterion = train(
+    model, best_model, criterion, current_best_epoch = train(
         model=model,
         train_loader=train_loader,
         epochs=args.epochs,
@@ -286,6 +243,8 @@ def main(args):
 
     # Save the entire best model to PATH
     torch.save(best_model_info, "best_" + args.model_path)
+
+    print("Best epoch: ", current_best_epoch)
 
 
 if __name__ == "__main__":
@@ -365,7 +324,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=50,
+        default=150,
         help="Epochs",
     )
     parser.add_argument(
@@ -385,7 +344,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-3,
+        default=5e-4,
         help="Learning rate",
     )
     parser.add_argument(
@@ -395,7 +354,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=5e-4,
+        default=1e-3,
         help="Weight decay",
     )
     args = parser.parse_args()
