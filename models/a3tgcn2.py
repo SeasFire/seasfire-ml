@@ -2,8 +2,8 @@ import torch
 import torch.nn.functional as F
 from .tgcn2 import TGCN2
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class A3TGCN2(torch.nn.Module):
     r"""A version of A3T-GCN with multiple layers.`_
