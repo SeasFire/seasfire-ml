@@ -3,8 +3,8 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.nn import aggr
 import torch.nn.functional as F
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class TGCN2(torch.nn.Module):
     r"""An implementation of the Temporal Graph Convolutional Gated Recurrent Cell.
