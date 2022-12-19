@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-
+import logging
+import os
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import pickle as pkl
+import random
+from tqdm import tqdm
 
 import torch
 import torch_geometric
@@ -123,17 +130,15 @@ def train(model, train_loader, epochs, val_loader, task):
                 train_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
             
-         
             for metric, key in zip(val_metrics,val_metrics_dict.keys()): 
                 temp = metric.compute()
                 logger.info("| Val " + key + ": {:.4f}".format(temp))
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
-            
 
-            if val_metrics[2] > current_max_avg:
+            if val_metrics_dict["AveragePrecision"][epoch-1] > current_max_avg:
                 best_model = model
-                current_max_avg = val_metrics[2]
+                current_max_avg = val_metrics_dict["AveragePrecision"][epoch-1]
                 current_best_epoch = epoch
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
