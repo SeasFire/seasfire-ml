@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-
-import torch
-from tqdm import tqdm
 import logging
 import os
-import torch_geometric
 import argparse
 import numpy as np
-import random
 import matplotlib.pyplot as plt
+import pickle as pkl
+import random
+from tqdm import tqdm
 
+import torch
+import torch_geometric
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
+import torch.nn.functional as F
 from models import AttentionGNN
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize
-import torch.nn.functional as F
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
+
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -23,7 +24,7 @@ def test(model, loader, criterion, task):
     with torch.no_grad():
         model.eval()
 
-        test_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
+        test_metrics_dict = {"Preds":[], "Target":[]}
         test_metrics = [
             Accuracy(task="multiclass", num_classes=2).to(device),
             F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
@@ -52,13 +53,16 @@ def test(model, loader, criterion, task):
         print(f" | Test Loss: {test_loss}")
 
         if task == 'binary':
-            for metric, key in zip(test_metrics,test_metrics_dict.keys()): 
+            for metric, metric_name in zip(test_metrics, ['Accuracy', 'F1Score', 'Average Precision', 'AUROC' ]): 
                 temp = metric.compute()
-                print(f'Test {key}: {(temp):.4f}')
-                test_metrics_dict[key].append(temp.cpu().detach().numpy())
+                print(f'| Test {metric_name}: {(temp):.4f}')
                 metric.reset()
-        
-        test_metrics_dict["Loss"].append(test_loss.cpu().detach().numpy())
+
+        # test_metrics_dict["Preds"].append((torch.argmax(torch.cat(test_predictions), dim=1)).cpu().detach().numpy())
+        # test_metrics_dict["Target"].append((torch.argmax(torch.cat(test_labels), dim=1)).cpu().detach().numpy())
+
+        with open('test_metrics.pkl', 'wb') as file:
+            pkl.dump(test_metrics_dict, file)
 
 def main(args):
     FileOutputHandler = logging.FileHandler("logs.log")
