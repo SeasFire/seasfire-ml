@@ -691,7 +691,7 @@ class DatasetBuilder:
                 ground_truth=ground_truth,
             )
 
-            # self._write_sample_to_disk(graph, idx)
+            self._write_sample_to_disk(graph, idx)
 
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
