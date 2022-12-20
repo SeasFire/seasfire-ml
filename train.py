@@ -300,7 +300,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="binary",
+        default="regression",
         help="Model task",
     )
     parser.add_argument(
@@ -310,7 +310,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=32,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
@@ -359,7 +359,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=1e-3,
+        default=5e-4,
         help="Weight decay",
     )
     args = parser.parse_args()
