@@ -6,8 +6,6 @@ import os
 from tqdm import tqdm
 import xarray as xr
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import torch
 from torch_geometric.data import Data
 
@@ -273,6 +271,7 @@ class DatasetBuilder:
         center_lat,
         center_lon,
         center_time,
+        center_area,        
         ground_truth,
         small_radius=2,
         medium_radius=4,
@@ -410,8 +409,11 @@ class DatasetBuilder:
         graph_level_ground_truth = torch.from_numpy(np.array(ground_truth)).type(
             torch.float32
         )
-
         assert len(graph_level_ground_truth) == self._target_count
+
+        area = torch.from_numpy(np.array(center_area)).type(
+            torch.float32
+        )
 
         # Create edge index tensor
         sources, targets = zip(*edges)
@@ -423,6 +425,7 @@ class DatasetBuilder:
             y=graph_level_ground_truth,
             edge_index=edge_index,
             pos=vertex_positions,
+            area=area,    
         )
 
     def _compute_local_vertices_features(
@@ -630,6 +633,14 @@ class DatasetBuilder:
             + zero_threshold_samples_list
         )
 
+    def _compute_area(self, lat, lon):
+        area = (
+            self._cube["area"]
+            .sel(latitude=lat, longitude=lon)
+        )
+        area_in_hectares = area.values / 10000.0
+        return area_in_hectares
+
     def compute_ground_truth(self, lat, lon, time):
         start_time = time
         end_time = time + np.timedelta64(
@@ -684,10 +695,13 @@ class DatasetBuilder:
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
             )
+            center_area = self._compute_area(center_lat, center_lon)
+
             graph = self.create_sample(
                 center_lat=center_lat,
                 center_lon=center_lon,
                 center_time=center_time,
+                center_area=center_area,
                 ground_truth=ground_truth,
             )
 
