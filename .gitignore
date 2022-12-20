@@ -104,6 +104,7 @@ celerybeat.pid
 # Pt & pickle files
 *.pt
 *.pickle
+*.pkl
 
 # Environments
 .env
