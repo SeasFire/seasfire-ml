@@ -41,6 +41,9 @@ def test(model, loader, criterion, task):
             preds = model(data.x, data.edge_index, None, None, data.batch)
             y = data.y
 
+            if task == "regression":
+                y = y.unsqueeze(1)
+
             test_predictions.append(preds)
             test_labels.append(y)
 
@@ -58,9 +61,12 @@ def test(model, loader, criterion, task):
                 print(f'| Test {metric_name}: {(temp):.4f}')
                 metric.reset()
 
-        # test_metrics_dict["Preds"].append((torch.argmax(torch.cat(test_predictions), dim=1)).cpu().detach().numpy())
-        # test_metrics_dict["Target"].append((torch.argmax(torch.cat(test_labels), dim=1)).cpu().detach().numpy())
-
+            test_metrics_dict["Preds"].append((torch.argmax(torch.cat(test_predictions), dim=1)).cpu().detach().numpy())
+            test_metrics_dict["Target"].append(torch.cat(test_labels).cpu().detach().numpy())
+        elif task == 'regression': 
+            test_metrics_dict["Preds"].append(torch.cat(test_predictions).cpu().detach().numpy())
+            test_metrics_dict["Target"].append(torch.cat(test_labels).cpu().detach().numpy())
+            
         with open('test_metrics.pkl', 'wb') as file:
             pkl.dump(test_metrics_dict, file)
 
@@ -126,7 +132,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="binary",
+        default="regression",
         help="Model task",
     )
     parser.add_argument(
@@ -136,7 +142,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=64,
+        default=16,
         help="Batch size",
     )
 
