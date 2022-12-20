@@ -926,12 +926,12 @@ if __name__ == "__main__":
         help="Positive samples size.",
     )
     parser.add_argument(
-        "--generate-all-samples",
-        dest="generate_all_samples",
-        type=bool,
-        default=False,
-        action=argparse.BooleanOptionalAction,
+        "--generate-all-samples", dest="generate_all_samples", action="store_true"
     )
+    parser.add_argument(
+        "--no-generate-all-samples", dest="generate_all_samples", action="store_false"
+    )
+    parser.set_defaults(generate_all_samples=False)
     parser.add_argument(
         "--seed",
         metavar="INT",
