@@ -90,6 +90,7 @@ class DatasetBuilder:
         split,
         positive_samples_threshold,
         positive_samples_size,
+        generate_all_samples,
         first_sample_index,
         seed,
         target_count,
@@ -185,6 +186,8 @@ class DatasetBuilder:
         self._positive_samples_threshold = positive_samples_threshold
         # How many samples to take above the threshold
         self._positive_samples_size = positive_samples_size
+        # Whether to generate all samples
+        self._generate_all_samples = generate_all_samples
 
         # sample index to start generation from
         self._first_sample_index = first_sample_index
@@ -271,7 +274,7 @@ class DatasetBuilder:
         center_lat,
         center_lon,
         center_time,
-        center_area,        
+        center_area,
         ground_truth,
         small_radius=2,
         medium_radius=4,
@@ -411,9 +414,7 @@ class DatasetBuilder:
         )
         assert len(graph_level_ground_truth) == self._target_count
 
-        area = torch.from_numpy(np.array(center_area)).type(
-            torch.float32
-        )
+        area = torch.from_numpy(np.array(center_area)).type(torch.float32)
 
         # Create edge index tensor
         sources, targets = zip(*edges)
@@ -425,7 +426,7 @@ class DatasetBuilder:
             y=graph_level_ground_truth,
             edge_index=edge_index,
             pos=vertex_positions,
-            area=area,    
+            area=area,
         )
 
     def _compute_local_vertices_features(
@@ -579,14 +580,32 @@ class DatasetBuilder:
             )
         return result
 
-    def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
-        logger.info("Generating sample list for split={}".format(self._split))
-        logger.info(
-            "Generating from week={} to week={}".format(
-                self._start_time, self._end_time
-            )
-        )
+    def _generate_all_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
+        sample_region = self._cube.sel(
+            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+        ).isel(time=slice(self._start_time, self._end_time))
 
+        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
+        sample_region_gwsi_non_nan = sample_region_gwsi_ba_values >= 0.0
+
+        sample_len_non_nan = np.sum(sample_region_gwsi_non_nan)
+        logger.debug("Samples={}".format(sample_len_non_nan))
+
+        result = []
+        all_samples_index = np.argwhere(sample_region_gwsi_non_nan)
+
+        for index in all_samples_index:
+            result.append(
+                (
+                    sample_region.latitude.values[index[1]],
+                    sample_region.longitude.values[index[2]],
+                    sample_region.time.values[index[0]],
+                ),
+            )
+
+        return result
+
+    def _generate_threshold_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         # define sample region
         sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
@@ -633,11 +652,25 @@ class DatasetBuilder:
             + zero_threshold_samples_list
         )
 
-    def _compute_area(self, lat, lon):
-        area = (
-            self._cube["area"]
-            .sel(latitude=lat, longitude=lon)
+    def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
+        logger.info("Generating sample list for split={}".format(self._split))
+        logger.info(
+            "Generating from week={} to week={}".format(
+                self._start_time, self._end_time
+            )
         )
+
+        if self._generate_all_samples:
+            logger.info("Will generate all samples")
+            return self._generate_all_samples_lists(min_lon, min_lat, max_lon, max_lat)
+        else:
+            logger.info("Will samples based on threshold")
+            return self._generate_threshold_samples_lists(
+                min_lon, min_lat, max_lon, max_lat
+            )
+
+    def _compute_area(self, lat, lon):
+        area = self._cube["area"].sel(latitude=lat, longitude=lon)
         area_in_hectares = area.values / 10000.0
         return area_in_hectares
 
@@ -826,6 +859,7 @@ def main(args):
         args.split,
         args.positive_samples_threshold,
         args.positive_samples_size,
+        args.generate_all_samples,
         args.first_sample_index,
         args.seed,
         args.target_count,
@@ -890,6 +924,13 @@ if __name__ == "__main__":
         dest="positive_samples_size",
         default=2500,
         help="Positive samples size.",
+    )
+    parser.add_argument(
+        "--generate-all-samples",
+        dest="generate_all_samples",
+        type=bool,
+        default=False,
+        action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
         "--seed",
