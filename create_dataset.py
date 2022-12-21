@@ -6,8 +6,6 @@ import os
 from tqdm import tqdm
 import xarray as xr
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import torch
 from torch_geometric.data import Data
 
@@ -92,9 +90,10 @@ class DatasetBuilder:
         split,
         positive_samples_threshold,
         positive_samples_size,
+        generate_all_samples,
         first_sample_index,
         seed,
-        target_shift,
+        target_count,
         target_length,
     ):
         self._cube_path = cube_path
@@ -187,44 +186,59 @@ class DatasetBuilder:
         self._positive_samples_threshold = positive_samples_threshold
         # How many samples to take above the threshold
         self._positive_samples_size = positive_samples_size
+        # Whether to generate all samples
+        self._generate_all_samples = generate_all_samples
 
-        # sample index to start generation
+        # sample index to start generation from
         self._first_sample_index = first_sample_index
 
         self._number_of_train_years = 16
         self._days_per_week = 8
         self._timeseries_weeks = 48
         self._aggregation_in_weeks = 4  # aggregate per month
-        self._target_shift = target_shift  # in weeks, e.g. 0
-        self._target_length = target_length  # in weeks, e.g. 4
         self._year_in_weeks = 48
 
+        self._max_week_with_data = 918
         logger.info(
-            "Target period weeks in the future: [{},{}]".format(
-                self._target_shift, self._target_shift + self._target_length
-            )
+            "Maximum week with valid data = {}".format(self._max_week_with_data)
         )
+
+        # how many targets periods to generate in the future
+        # e.g. 6 means the next six months (if target length is 4 weeks)
+        self._target_count = target_count
+        # length of each target period in weeks, e.g. 4
+        self._target_length = target_length
+
+        logger.info("Will generate {} target periods.".format(self._target_count))
+        for p in range(self._target_count):
+            logger.info(
+                "Target period {} is weeks in the future: [{},{}]".format(
+                    p,
+                    p * self._target_length,
+                    (p + 1) * self._target_length,
+                )
+            )
 
         # split time periods
         self._time_train = (
             self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
-            - (self._target_shift + self._target_length),
-        )  # 46 - 778 (782-0-4) week -> 17 years
+            - (self._target_count * self._target_length),
+        )
         logger.info("Train time in weeks: {}".format(self._time_train))
 
         self._time_val = (
             self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
-        )  # 782+46 - 782+2*46 week -> 2 years
+        )
         logger.info("Val time in weeks: {}".format(self._time_val))
 
         self._time_test = (
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
-            918 - (self._target_shift + self._target_length),
-        )  # 828 (782+46) - 914 (918-0-4) week -> 2 years
+            self._max_week_with_data - (self._target_count * self._target_length),
+        )
         logger.info("Test time in weeks: {}".format(self._time_test))
 
         if self._split == "train":
@@ -260,6 +274,7 @@ class DatasetBuilder:
         center_lat,
         center_lon,
         center_time,
+        center_area,
         ground_truth,
         small_radius=2,
         medium_radius=4,
@@ -394,9 +409,12 @@ class DatasetBuilder:
         vertex_positions = np.array(vertex_positions)
         vertex_positions = torch.from_numpy(vertex_positions).type(torch.float32)
 
-        graph_level_ground_truth = torch.from_numpy(np.array([ground_truth])).type(
+        graph_level_ground_truth = torch.from_numpy(np.array(ground_truth)).type(
             torch.float32
         )
+        assert len(graph_level_ground_truth) == self._target_count
+
+        area = torch.from_numpy(np.array(center_area)).type(torch.float32)
 
         # Create edge index tensor
         sources, targets = zip(*edges)
@@ -408,6 +426,7 @@ class DatasetBuilder:
             y=graph_level_ground_truth,
             edge_index=edge_index,
             pos=vertex_positions,
+            area=area,
         )
 
     def _compute_local_vertices_features(
@@ -529,7 +548,7 @@ class DatasetBuilder:
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= 0.0
             )
-            size = 2* self._positive_samples_size
+            size = 2 * self._positive_samples_size
         else:
             raise ValueError("Invalid strategy")
 
@@ -544,7 +563,7 @@ class DatasetBuilder:
         )
         if size > len(all_wrt_threshold_samples_index):
             raise ValueError("Not enough samples to sample from.")
-        
+
         wrt_threshold_samples_index = self._rng.choice(
             all_wrt_threshold_samples_index,
             size=size,
@@ -561,14 +580,32 @@ class DatasetBuilder:
             )
         return result
 
-    def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
-        logger.info("Generating sample list for split={}".format(self._split))
-        logger.info(
-            "Generating from week={} to week={}".format(
-                self._start_time, self._end_time
-            )
-        )
+    def _generate_all_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
+        sample_region = self._cube.sel(
+            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+        ).isel(time=slice(self._start_time, self._end_time))
 
+        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
+        sample_region_gwsi_non_nan = sample_region_gwsi_ba_values >= 0.0
+
+        sample_len_non_nan = np.sum(sample_region_gwsi_non_nan)
+        logger.debug("Samples={}".format(sample_len_non_nan))
+
+        result = []
+        all_samples_index = np.argwhere(sample_region_gwsi_non_nan)
+
+        for index in all_samples_index:
+            result.append(
+                (
+                    sample_region.latitude.values[index[1]],
+                    sample_region.longitude.values[index[2]],
+                    sample_region.time.values[index[0]],
+                ),
+            )
+
+        return result
+
+    def _generate_threshold_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         # define sample region
         sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
@@ -615,34 +652,51 @@ class DatasetBuilder:
             + zero_threshold_samples_list
         )
 
-    def compute_ground_truth(self, lat, lon, time):
-        start_time = time + np.timedelta64(
-            self._target_shift * self._days_per_week, "D"
+    def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
+        logger.info("Generating sample list for split={}".format(self._split))
+        logger.info(
+            "Generating from week={} to week={}".format(
+                self._start_time, self._end_time
+            )
         )
+
+        if self._generate_all_samples:
+            logger.info("Will generate all samples")
+            return self._generate_all_samples_lists(min_lon, min_lat, max_lon, max_lat)
+        else:
+            logger.info("Will samples based on threshold")
+            return self._generate_threshold_samples_lists(
+                min_lon, min_lat, max_lon, max_lat
+            )
+
+    def _compute_area(self, lat, lon):
+        area = self._cube["area"].sel(latitude=lat, longitude=lon)
+        area_in_hectares = area.values / 10000.0
+        return area_in_hectares
+
+    def compute_ground_truth(self, lat, lon, time):
+        start_time = time
         end_time = time + np.timedelta64(
-            (self._target_shift + self._target_length) * self._days_per_week, "D"
+            (self._target_count * self._target_length) * self._days_per_week, "D"
         )
         logger.debug(
             "Computing ground truth for lat={}, lon={}, time=[{},{}]".format(
                 lat, lon, start_time, end_time
             )
         )
-
-        values = (
-            self._cube["gwis_ba"]
-            .sel(
-                latitude=lat,
-                longitude=lon,
-                time=slice(
-                    start_time,
-                    end_time,
-                ),
-            )
-            .values
+        values = self._cube["gwis_ba"].sel(
+            latitude=lat,
+            longitude=lon,
+            time=slice(
+                start_time,
+                end_time,
+            ),
         )
-        ground_truth = sum(values)
-
-        return ground_truth
+        aggregation_in_days = "{}D".format(self._target_length * self._days_per_week)
+        aggregated_values = values.resample(
+            time=aggregation_in_days, closed="left"
+        ).sum(skipna=True)
+        return aggregated_values.values[: self._target_count]
 
     def run(self):
         ##Africa
@@ -674,10 +728,13 @@ class DatasetBuilder:
             ground_truth = self.compute_ground_truth(
                 center_lat, center_lon, center_time
             )
+            center_area = self._compute_area(center_lat, center_lon)
+
             graph = self.create_sample(
                 center_lat=center_lat,
                 center_lon=center_lon,
                 center_time=center_time,
+                center_area=center_area,
                 ground_truth=ground_truth,
             )
 
@@ -802,9 +859,10 @@ def main(args):
         args.split,
         args.positive_samples_threshold,
         args.positive_samples_size,
+        args.generate_all_samples,
         args.first_sample_index,
         args.seed,
-        args.target_shift,
+        args.target_count,
         args.target_length,
     )
     builder.run()
@@ -868,6 +926,13 @@ if __name__ == "__main__":
         help="Positive samples size.",
     )
     parser.add_argument(
+        "--generate-all-samples", dest="generate_all_samples", action="store_true"
+    )
+    parser.add_argument(
+        "--no-generate-all-samples", dest="generate_all_samples", action="store_false"
+    )
+    parser.set_defaults(generate_all_samples=False)
+    parser.add_argument(
         "--seed",
         metavar="INT",
         type=int,
@@ -886,13 +951,13 @@ if __name__ == "__main__":
         help="Generate samples starting from a specific sample index. Allows to resume dataset creation.",
     )
     parser.add_argument(
-        "--target-shift",
+        "--target-count",
         metavar="KEY",
         type=int,
         action="store",
-        dest="target_shift",
-        default=0,
-        help="Target shift. How far in the future does the target period start. Measured in weeks.",
+        dest="target_count",
+        default=6,
+        help="Target count. How many targets in the future to generate.",
     )
     parser.add_argument(
         "--target-length",
