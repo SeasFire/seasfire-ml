@@ -48,6 +48,7 @@ class GraphNormalize:
 
         return graph
 
+
 class ToCentralNodeAndNormalize:
     def __init__(
         self, model, task, mean_std_per_feature, append_position_as_feature=True
@@ -85,15 +86,13 @@ class ToCentralNodeAndNormalize:
             raise ValueError("Invalid task")
 
         graph.x = torch.nan_to_num(graph.x, nan=-1.0)
-        print(graph.x)
 
         # Concatenate positions with features
         if self._append_position_as_feature:
             graph.pos = graph.pos[0,:]
-            print(graph.pos)
             positions = graph.pos.unsqueeze(1).expand(-1, graph.x.shape[1])
-            print(positions)
             graph.x = torch.cat((graph.x, positions), dim=0)
-            print(graph.x)
+
+        graph.edge_index = None
 
         return graph

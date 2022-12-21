@@ -27,20 +27,24 @@ class GRUModel(torch.nn.Module):
     def forward(
         self,
         X: torch.FloatTensor,
+        edge_index: torch.LongTensor,
+        edge_weight: torch.FloatTensor = None,
         H: torch.FloatTensor = None,
+        readout_batch=None,        
     ) -> torch.FloatTensor:
         """
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
 
-        h = self.gru(X, H)
+        out, h = self.gru(X, H)
         h.to(device)
-        h = F.relu(h)
+        out.to(device)
+        out = F.relu(out)
 
-        h = self.linear(h)
+        out = self.linear(out)
         if self.task == "binary":
-            h = torch.softmax(h, dim=1)
+            out = torch.softmax(out, dim=1)
 
-        return h
+        return out, h
 
