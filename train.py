@@ -197,7 +197,7 @@ def main(args):
     )
 
     logger.info("Building model {}".format(args.model_name))
-
+    
     if args.task == "binary":
         linear_out_channels = 2
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
