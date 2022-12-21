@@ -87,10 +87,12 @@ def main(args):
 
     test_dataset = GraphDataset(
         root_dir=args.test_path, 
-        transform=transform,)
+        transform=transform,
+        )
     test_loader = torch_geometric.loader.DataLoader(
-        test_dataset, batch_size=args.batch_size
-    )
+        test_dataset, 
+        batch_size=args.batch_size,
+        )
     
     test(model=model, loader=test_loader, criterion=criterion, task=args.task)
 
@@ -123,7 +125,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_binary_attention_model.pt",
+        default="best_regression_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(

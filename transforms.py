@@ -35,7 +35,8 @@ class GraphNormalize:
             graph.y = torch.where(graph.y > 0.0, 1, 0)
             graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
         elif self._task == "regression":
-            graph.y = graph.y / 1000.0
+            # graph.y = graph.y / 1000.0
+            graph.y = (graph.y * 100) / (717448.7552)
         else:
             raise ValueError("Invalid task")
 
