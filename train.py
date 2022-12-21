@@ -3,7 +3,6 @@ import logging
 import os
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 import pickle as pkl
 import random
 from tqdm import tqdm
@@ -11,7 +10,7 @@ from tqdm import tqdm
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRU
+from models import AttentionGNN, GRUModel
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -242,7 +241,14 @@ def main(args):
             task=args.task,
         ).to(device)
     elif args.model_name == "GRU":
-        model = GRU(input_size=num_features, hidden_size=32, dropout=0.3)
+        model = GRUModel(
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        )
     else:
         raise ValueError("Invalid model")
 
@@ -304,7 +310,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-m",
-        "--model_name",
+        "--model-name",
         metavar="KEY",
         type=str,
         action="store",
