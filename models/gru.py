@@ -10,9 +10,7 @@ class GRUModel(torch.nn.Module):
         self, node_features, output_channels, periods, learning_rate, weight_decay, task
     ):
         super(GRUModel, self).__init__()
-        self.gru = GRU(
-            input_size=node_features, hidden_size=output_channels[1], dropout=0.3
-        )
+        self.gru = GRU(input_size=node_features, hidden_size=output_channels[1])
 
         # Equals single-shot prediction
         self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
@@ -30,7 +28,7 @@ class GRUModel(torch.nn.Module):
         edge_index: torch.LongTensor,
         edge_weight: torch.FloatTensor = None,
         H: torch.FloatTensor = None,
-        readout_batch=None,        
+        readout_batch=None,
     ) -> torch.FloatTensor:
         """
         x = Node features for T time steps
@@ -46,5 +44,4 @@ class GRUModel(torch.nn.Module):
         if self.task == "binary":
             out = torch.softmax(out, dim=1)
 
-        return out, h
-
+        return out

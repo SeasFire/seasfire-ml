@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 import torch
 import torch_geometric
+from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
 from models import AttentionGNN, GRUModel
 from graph_dataset import GraphDataset
@@ -85,10 +86,20 @@ def train(model, train_loader, epochs, val_loader, task):
         train_labels = []
 
         for _, data in enumerate(tqdm(train_loader)):
-            data = data.to(device)
 
-            preds = model(data.x, data.edge_index, None, None, data.batch)
-            y = data.y
+            if isinstance(data, Data):
+                data = data.to(device)
+                x = data.x
+                y = data.y
+                edge_index = data.edge_index
+                batch = data.batch
+            else:
+                x = data[0].to(device)
+                y = data[1].to(device)
+                edge_index = None
+                batch = None
+
+            preds = model(x, edge_index, None, None, batch)
             if task == "regression":
                 y = y.unsqueeze(1)
 
@@ -115,10 +126,19 @@ def train(model, train_loader, epochs, val_loader, task):
             model.eval()
 
             for _, data in enumerate(tqdm(val_loader)):
-                data = data.to(device)
+                if isinstance(data, Data):
+                    data = data.to(device)
+                    x = data.x
+                    y = data.y
+                    edge_index = data.edge_index
+                    batch = data.batch
+                else:
+                    x = data[0].to(device)
+                    y = data[1].to(device)
+                    edge_index = None
+                    batch = None
 
-                preds = model(data.x, data.edge_index, None, None, data.batch)
-                y = data.y
+                preds = model(x, edge_index, None, None, batch)
                 if task == "regression":
                     y = y.unsqueeze(1)
 
@@ -183,6 +203,7 @@ def main(args):
     logger.info("Statistics: {}".format(mean_std_per_feature))
 
     if args.model_name == "AttentionGNN":
+        loader_class = torch_geometric.loader.DataLoader
         transform = GraphNormalize(
             args.model_name,
             task=args.task,
@@ -190,6 +211,7 @@ def main(args):
             append_position_as_feature=True,
         )
     elif args.model_name == "GRU":
+        loader_class = torch.utils.data.DataLoader
         transform = ToCentralNodeAndNormalize(
             args.model_name,
             task=args.task,
@@ -205,7 +227,7 @@ def main(args):
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
 
-    train_loader = torch_geometric.loader.DataLoader(
+    train_loader = loader_class(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
@@ -215,9 +237,7 @@ def main(args):
         root_dir=args.val_path,
         transform=transform,
     )
-    val_loader = torch_geometric.loader.DataLoader(
-        val_dataset, batch_size=args.batch_size
-    )
+    val_loader = loader_class(val_dataset, batch_size=args.batch_size)
 
     logger.info("Building model {}".format(args.model_name))
 
