@@ -37,12 +37,10 @@ class GRUModel(torch.nn.Module):
         edge_index = Graph edge indices
         """
 
-        print(X.shape)
         out, h = self.gru(X, H)
-        print(out.shape)
         h.to(device)
         out.to(device)
-        out = F.relu(out)
+        out = F.relu(out[:,-1,:])
 
         out = self.linear(out)
         if self.task == "binary":
