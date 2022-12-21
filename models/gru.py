@@ -10,7 +10,9 @@ class GRUModel(torch.nn.Module):
         self, node_features, output_channels, periods, learning_rate, weight_decay, task
     ):
         super(GRUModel, self).__init__()
-        self.gru = GRU(input_size=node_features, hidden_size=output_channels[1])
+        self.gru = GRU(
+            input_size=node_features, hidden_size=output_channels[1], batch_first=True
+        )
 
         # Equals single-shot prediction
         self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
@@ -35,7 +37,9 @@ class GRUModel(torch.nn.Module):
         edge_index = Graph edge indices
         """
 
+        print(X.shape)
         out, h = self.gru(X, H)
+        print(out.shape)
         h.to(device)
         out.to(device)
         out = F.relu(out)

@@ -93,4 +93,6 @@ class ToCentralNodeAndNormalize:
             positions = graph.pos.unsqueeze(1).expand(-1, graph.x.shape[1])
             graph.x = torch.cat((graph.x, positions), dim=0)
 
+        graph.x = graph.x.permute(1,0)
+
         return graph.x, graph.y
