@@ -67,7 +67,6 @@ def test(model, loader, criterion, task):
                 temp = metric.compute()
                 print(f'| Test {metric_name}: {(temp):.4f}')
                 metric.reset()
-
             test_metrics_dict["Preds"].append((torch.argmax(torch.cat(test_predictions), dim=1)).cpu().detach().numpy())
             test_metrics_dict["Target"].append(torch.cat(test_labels).cpu().detach().numpy())
         elif task == 'regression': 
