@@ -75,6 +75,8 @@ def train(model, train_loader, epochs, val_loader, task):
     elif task == "regression":
         criterion = torch.nn.MSELoss()
 
+    model = model.to(device)
+
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
 
