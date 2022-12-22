@@ -274,6 +274,7 @@ def main(args):
     else:
         raise ValueError("Invalid model")
 
+
     logger.info("Starting training")
     model, best_model, criterion, current_best_epoch = train(
         model=model,
