@@ -198,7 +198,8 @@ def main(args):
 
     logger.info("Extracting dataset statistics")
     mean_std_per_feature = compute_mean_std_per_feature(
-        GraphDataset(root_dir=args.train_path)
+        GraphDataset(root_dir=args.train_path),
+        cache_filename="dataset_mean_std_cached_stats.pk"
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
 
