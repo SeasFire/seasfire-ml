@@ -44,7 +44,13 @@ class GraphNormalize:
 
         elif self._task == "regression":
             # graph.y = graph.y / 1000.0
-            graph.y = (graph.y * 100) / (717448.7552)
+            if graph.y.shape[0] == 1:
+                graph.y = (graph.y * 100) / (717448.7552)    
+            elif graph.y.shape[0] > 1:
+                y = (graph.y)[self._target_month-1]
+                y = (y * 100) / (717448.7552) 
+                graph.y = y.unsqueeze(0)
+            
         else:
             raise ValueError("Invalid task")
 
@@ -87,10 +93,22 @@ class ToCentralNodeAndNormalize:
 
         # Define label
         if self._task == "binary":
-            graph.y = torch.where(graph.y > 0.0, 1, 0)
-            graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
+            if graph.y.shape[0] == 1:
+                graph.y = torch.where(graph.y > 0.0, 1, 0)
+                graph.y = torch.nn.functional.one_hot(graph.y, 2).float()    
+            elif graph.y.shape[0] > 1:
+                y = (graph.y)[self._target_month-1]
+                y = torch.where(y > 0.0, 1, 0)
+                y = torch.nn.functional.one_hot(y, 2).float()
+                graph.y = y.unsqueeze(0)
         elif self._task == "regression":
-            graph.y = graph.y / 1000.0
+            # graph.y = graph.y / 1000.0
+            if graph.y.shape[0] == 1:
+                graph.y = (graph.y * 100) / (717448.7552)    
+            elif graph.y.shape[0] > 1:
+                y = (graph.y)[self._target_month-1]
+                y = (y * 100) / (717448.7552) 
+                graph.y = y.unsqueeze(0)
         else:
             raise ValueError("Invalid task")
 
