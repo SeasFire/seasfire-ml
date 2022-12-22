@@ -86,6 +86,7 @@ class DatasetBuilder:
         self,
         cube_path,
         cube_resolution,
+        load_cube_in_memory,
         output_folder,
         split,
         positive_samples_threshold,
@@ -152,6 +153,9 @@ class DatasetBuilder:
         # open zarr and display basic info
         logger.info("Opening zarr file: {}".format(self._cube_path))
         self._cube = xr.open_zarr(self._cube_path, consolidated=False)
+        if load_cube_in_memory: 
+            logger.info("Loading the whole cube in memory.")
+            self._cube.load()
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
 
@@ -855,6 +859,7 @@ def main(args):
     builder = DatasetBuilder(
         args.cube_path,
         args.cube_resolution,
+        args.load_cube_in_memory,
         args.output_folder,
         args.split,
         args.positive_samples_threshold,
@@ -932,6 +937,13 @@ if __name__ == "__main__":
         "--no-generate-all-samples", dest="generate_all_samples", action="store_false"
     )
     parser.set_defaults(generate_all_samples=False)
+    parser.add_argument(
+        "--load-cube-in-memory", dest="load_cube_in_memory", action="store_true"
+    )
+    parser.add_argument(
+        "--no-load-cube-in-memory", dest="load_cube_in_memory", action="store_false"
+    )
+    parser.set_defaults(load_cube_in_memory=False)    
     parser.add_argument(
         "--seed",
         metavar="INT",
