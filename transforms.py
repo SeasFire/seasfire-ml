@@ -66,11 +66,12 @@ class GraphNormalize:
 
 class ToCentralNodeAndNormalize:
     def __init__(
-        self, model, task, mean_std_per_feature, append_position_as_feature=True
+        self, model, task, target_month, mean_std_per_feature, append_position_as_feature=True
     ):
         self._model = model
         self._mean_std_tuples = None
         self._task = task
+        self._target_month = target_month
         self._mean_std_per_feature = mean_std_per_feature
         self._append_position_as_feature = append_position_as_feature
 
