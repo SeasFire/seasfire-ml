@@ -75,6 +75,8 @@ def train(model, train_loader, epochs, val_loader, task):
     elif task == "regression":
         criterion = torch.nn.MSELoss()
 
+    model = model.to(device)
+
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
 
@@ -198,7 +200,8 @@ def main(args):
 
     logger.info("Extracting dataset statistics")
     mean_std_per_feature = compute_mean_std_per_feature(
-        GraphDataset(root_dir=args.train_path)
+        GraphDataset(root_dir=args.train_path),
+        cache_filename="dataset_mean_std_cached_stats.pk"
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
 
@@ -207,7 +210,7 @@ def main(args):
         transform = GraphNormalize(
             args.model_name,
             task=args.task,
-            target_month = args.target_month,
+            target_month=args.target_month,
             mean_std_per_feature=mean_std_per_feature,
             append_position_as_feature=True,
         )
@@ -216,7 +219,7 @@ def main(args):
         transform = ToCentralNodeAndNormalize(
             args.model_name,
             task=args.task,
-            target_month = args.target_month,
+            target_month=args.target_month,
             mean_std_per_feature=mean_std_per_feature,
             append_position_as_feature=True,
         )
@@ -274,7 +277,6 @@ def main(args):
     else:
         raise ValueError("Invalid model")
 
-
     logger.info("Starting training")
     model, best_model, criterion, current_best_epoch = train(
         model=model,
@@ -305,7 +307,7 @@ def main(args):
     # Save the entire best model to PATH
     torch.save(best_model_info, "best_" + args.model_path)
 
-    print("Best epoch: ", current_best_epoch)
+    logger.info("Best epoch: {}".format(current_best_epoch))
 
 
 if __name__ == "__main__":
@@ -318,7 +320,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/test2",
+        default="data/test",
         help="Train set path",
     )
     parser.add_argument(
@@ -356,7 +358,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="regression",
+        default="binary",
         help="Model task",
     )
     parser.add_argument(
