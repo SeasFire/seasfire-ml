@@ -27,11 +27,12 @@ class GraphDataset(Dataset):
         self.transform = transform
 
         # load self._indices
-        length = len([entry for entry in os.listdir(self.root_dir)])
-        self._indices = []
-        for idx in range(length):
-            if os.path.exists(os.path.join(self.root_dir, "graph_{}.pt".format(idx))):
-                self._indices.append(idx)
+        filenames = [entry for entry in os.listdir(self.root_dir)]
+        # initializing substrings
+        sub1 = "_"
+        sub2 = "."
+        
+        self._indices = [filename[filename.index(sub1) + len(sub1): filename.index(sub2)] for filename in filenames]
 
         # define number of features per node --> same for all nodes
         graph = torch.load(
@@ -56,5 +57,4 @@ class GraphDataset(Dataset):
 
     def get(self, idx: int) -> Data:
         r"""Gets the data object at index :obj:`idx`."""
-
         return torch.load(os.path.join(self.root_dir, "graph_{}.pt".format(idx)))
