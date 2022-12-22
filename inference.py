@@ -140,7 +140,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="binary",
+        default="regression",
         help="Model task",
     )
     parser.add_argument(
