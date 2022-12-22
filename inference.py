@@ -1,59 +1,66 @@
 #!/usr/bin/env python3
 import logging
-import os
 import argparse
-import numpy as np
-import matplotlib.pyplot as plt
 import pickle as pkl
-import random
 from tqdm import tqdm
 
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-import torch.nn.functional as F
-from models import AttentionGNN
 from graph_dataset import GraphDataset
-from transforms import GraphNormalize
+from torch_geometric.data import Data
 
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def test(model, loader, criterion, task):
+
+    model = model.to(device)
+
     with torch.no_grad():
         model.eval()
 
-        test_metrics_dict = {"Preds":[], "Target":[]}
+        test_metrics_dict = {"Preds": [], "Target": []}
         test_metrics = [
             Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
-            AveragePrecision(task="multiclass", num_classes = 2).to(device),
-            AUROC(task="multiclass", num_classes = 2).to(device)
+            F1Score(task="multiclass", num_classes=2, average="macro").to(device),
+            AveragePrecision(task="multiclass", num_classes=2).to(device),
+            AUROC(task="multiclass", num_classes=2).to(device),
         ]
 
         test_predictions = []
         test_labels = []
 
         for data in tqdm(loader):
-            data = data.to(device)
+            if isinstance(data, Data):
+                data = data.to(device)
+                x = data.x
+                y = data.y
+                edge_index = data.edge_index
+                batch = data.batch
+            else:
+                x = data[0].to(device)
+                y = data[1].to(device)
+                edge_index = None
+                batch = None
 
-            preds = model(data.x, data.edge_index, None, None, data.batch)
-            y = data.y
-    
+            preds = model(x, edge_index, None, None, batch)
+
             if task == "regression":
                 y = y.unsqueeze(1)
 
             test_predictions.append(preds)
             test_labels.append(y)
 
-            if task == 'binary':
+            if task == "binary":
                 y_class = torch.argmax(y, dim=1)
-                for metric in test_metrics: 
+                for metric in test_metrics:
                     metric.update(preds, y_class)
-                
+
         test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
-        print(f" | Test Loss: {test_loss}")
+        logger.info(f" | Test Loss: {test_loss}")
 
         # #Count zeros and ones in predictions and true values
         # pred_new = torch.argmax(torch.cat(test_predictions), dim=1)
@@ -61,46 +68,70 @@ def test(model, loader, criterion, task):
         # y_new = torch.argmax(torch.cat(test_labels), dim=1)
         # print("Count zeros and ones in y_true: ", torch.bincount(y_new))
 
-
-        if task == 'binary':
-            for metric, metric_name in zip(test_metrics, ['Accuracy', 'F1Score', 'Average Precision', 'AUROC' ]): 
+        if task == "binary":
+            for metric, metric_name in zip(
+                test_metrics, ["Accuracy", "F1Score", "Average Precision", "AUROC"]
+            ):
                 temp = metric.compute()
-                print(f'| Test {metric_name}: {(temp):.4f}')
+                logger.info(f"| Test {metric_name}: {(temp):.4f}")
                 metric.reset()
-            test_metrics_dict["Preds"].append((torch.argmax(torch.cat(test_predictions), dim=1)).cpu().detach().numpy())
-            test_metrics_dict["Target"].append(torch.cat(test_labels).cpu().detach().numpy())
-        elif task == 'regression': 
-            test_metrics_dict["Preds"].append(torch.cat(test_predictions).cpu().detach().numpy())
-            test_metrics_dict["Target"].append(torch.cat(test_labels).cpu().detach().numpy())
-            
-        with open('test_metrics.pkl', 'wb') as file:
+            test_metrics_dict["Preds"].append(
+                (torch.argmax(torch.cat(test_predictions), dim=1))
+                .cpu()
+                .detach()
+                .numpy()
+            )
+            test_metrics_dict["Target"].append(
+                torch.cat(test_labels).cpu().detach().numpy()
+            )
+        elif task == "regression":
+            test_metrics_dict["Preds"].append(
+                torch.cat(test_predictions).cpu().detach().numpy()
+            )
+            test_metrics_dict["Target"].append(
+                torch.cat(test_labels).cpu().detach().numpy()
+            )
+
+        with open("test_metrics.pkl", "wb") as file:
             pkl.dump(test_metrics_dict, file)
 
-def main(args):
-    FileOutputHandler = logging.FileHandler("logs.log")
-    logger.addHandler(FileOutputHandler)
 
-    logger.debug("Torch version: {}".format(torch.__version__))
-    logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
+def main(args):
+    logging.basicConfig(level=logging.INFO)
+    logger.addHandler(logging.FileHandler("logs.log"))
+
+    logger.info("Torch version: {}".format(torch.__version__))
+    logger.info("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
-        logger.debug("Torch cuda version: {}".format(torch.version.cuda))
+        logger.info("Torch cuda version: {}".format(torch.version.cuda))
 
     model_info = torch.load(args.model_path)
-    model = model_info['model']
-    criterion = model_info['criterion']
-    transform = model_info['transform']
-    model_name = model_info['name']
+    model = model_info["model"]
+    criterion = model_info["criterion"]
+    transform = model_info["transform"]
+    model_name = model_info["name"]
+
+    logger.info("Using model {}".format(model_name))
 
     test_dataset = GraphDataset(
-        root_dir=args.test_path, 
+        root_dir=args.test_path,
         transform=transform,
-        )
-    test_loader = torch_geometric.loader.DataLoader(
-        test_dataset, 
+    )
+
+    if model_name == "AttentionGNN":
+        loader_class = torch_geometric.loader.DataLoader
+    elif args.model_name == "GRU":
+        loader_class = torch.utils.data.DataLoader
+    else:
+        raise ValueError("Invalid model")
+
+    loader = loader_class(
+        test_dataset,
         batch_size=args.batch_size,
-        )
-    
-    test(model=model, loader=test_loader, criterion=criterion, task=args.task)
+    )
+
+    test(model=model, loader=loader, criterion=criterion, task=args.task)
+
 
 if __name__ == "__main__":
 
@@ -112,7 +143,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data/test2/",
+        default="data/test",
         help="Test set path",
     )
     parser.add_argument(
