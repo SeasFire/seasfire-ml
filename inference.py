@@ -40,7 +40,7 @@ def test(model, loader, criterion, task):
 
             preds = model(data.x, data.edge_index, None, None, data.batch)
             y = data.y
-
+    
             if task == "regression":
                 y = y.unsqueeze(1)
 
@@ -54,6 +54,13 @@ def test(model, loader, criterion, task):
                 
         test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
         print(f" | Test Loss: {test_loss}")
+
+        # #Count zeros and ones in predictions and true values
+        # pred_new = torch.argmax(torch.cat(test_predictions), dim=1)
+        # print("Count zeros and ones in y_pred: ", torch.bincount(pred_new))
+        # y_new = torch.argmax(torch.cat(test_labels), dim=1)
+        # print("Count zeros and ones in y_true: ", torch.bincount(y_new))
+
 
         if task == 'binary':
             for metric, metric_name in zip(test_metrics, ['Accuracy', 'F1Score', 'Average Precision', 'AUROC' ]): 
@@ -106,7 +113,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data/test/",
+        default="data/test2/",
         help="Test set path",
     )
     parser.add_argument(
@@ -125,7 +132,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_regression_attention_model.pt",
+        default="best_binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -144,7 +151,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=32,
         help="Batch size",
     )
 
