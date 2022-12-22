@@ -111,7 +111,10 @@ def main(args):
     transform = model_info["transform"]
     model_name = model_info["name"]
 
-    logger.info("Using model {}".format(model_name))
+    logger.info("Using model={}".format(model_name))
+
+    logger.info("Using target month={}".format(args.target_month))
+    transform.target_month = args.target_month
 
     test_dataset = GraphDataset(
         root_dir=args.test_path,
@@ -184,6 +187,14 @@ if __name__ == "__main__":
         default=32,
         help="Batch size",
     )
-
+    parser.add_argument(
+        "--target-month",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="target_month",
+        default=1,
+        help="Target month",
+    )
     args = parser.parse_args()
     main(args)
