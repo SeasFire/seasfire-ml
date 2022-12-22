@@ -20,7 +20,6 @@ from utils import compute_mean_std_per_feature
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 def set_seed(seed: int = 42) -> None:
     logger.info("Using random seed={}".format(seed))
     np.random.seed(seed)
