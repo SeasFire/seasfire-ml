@@ -172,6 +172,7 @@ def main(args):
     transform = GraphNormalize(
         args.model_name,
         task=args.task,
+        target_month = args.target_month,
         mean_std_per_feature=mean_std_per_feature,
         append_position_as_feature=True,
     )
@@ -197,7 +198,7 @@ def main(args):
     )
 
     logger.info("Building model {}".format(args.model_name))
-    
+
     if args.task == "binary":
         linear_out_channels = 2
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
@@ -262,7 +263,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train",
+        default="data/test2",
         help="Train set path",
     )
     parser.add_argument(
@@ -310,7 +311,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=32,
         help="Batch size",
     )
     parser.add_argument(
@@ -331,6 +332,15 @@ if __name__ == "__main__":
         dest="epochs",
         default=150,
         help="Epochs",
+    )
+    parser.add_argument(
+        "--target-month",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="target_month",
+        default=1,
+        help="Target month",
     )
     parser.add_argument(
         "-ts",
