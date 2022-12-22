@@ -3,22 +3,23 @@ import logging
 import os
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 import pickle as pkl
 import random
 from tqdm import tqdm
 
 import torch
 import torch_geometric
+from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN
+from models import AttentionGNN, GRUModel
 from graph_dataset import GraphDataset
-from transforms import GraphNormalize
+from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
 
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def set_seed(seed: int = 42) -> None:
     logger.info("Using random seed={}".format(seed))
@@ -32,9 +33,22 @@ def set_seed(seed: int = 42) -> None:
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
+
 def train(model, train_loader, epochs, val_loader, task):
-    train_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
-    val_metrics_dict = {"Accuracy":[],"F1Score":[],"AveragePrecision":[], "AUROC":[], "Loss":[]}
+    train_metrics_dict = {
+        "Accuracy": [],
+        "F1Score": [],
+        "AveragePrecision": [],
+        "AUROC": [],
+        "Loss": [],
+    }
+    val_metrics_dict = {
+        "Accuracy": [],
+        "F1Score": [],
+        "AveragePrecision": [],
+        "AUROC": [],
+        "Loss": [],
+    }
 
     current_max_avg = 0
     current_best_epoch = 0
@@ -47,16 +61,16 @@ def train(model, train_loader, epochs, val_loader, task):
 
         train_metrics = [
             Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
-            AveragePrecision(task="multiclass", num_classes = 2).to(device),
-            AUROC(task="multiclass", num_classes = 2).to(device)
+            F1Score(task="multiclass", num_classes=2, average="macro").to(device),
+            AveragePrecision(task="multiclass", num_classes=2).to(device),
+            AUROC(task="multiclass", num_classes=2).to(device),
         ]
 
         val_metrics = [
             Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task = 'multiclass', num_classes = 2, average='macro').to(device),
-            AveragePrecision(task="multiclass", num_classes = 2).to(device),
-            AUROC(task="multiclass", num_classes = 2).to(device)
+            F1Score(task="multiclass", num_classes=2, average="macro").to(device),
+            AveragePrecision(task="multiclass", num_classes=2).to(device),
+            AUROC(task="multiclass", num_classes=2).to(device),
         ]
     elif task == "regression":
         criterion = torch.nn.MSELoss()
@@ -72,10 +86,20 @@ def train(model, train_loader, epochs, val_loader, task):
         train_labels = []
 
         for _, data in enumerate(tqdm(train_loader)):
-            data = data.to(device)
 
-            preds = model(data.x, data.edge_index, None, None, data.batch)
-            y = data.y
+            if isinstance(data, Data):
+                data = data.to(device)
+                x = data.x
+                y = data.y
+                edge_index = data.edge_index
+                batch = data.batch
+            else:
+                x = data[0].to(device)
+                y = data[1].to(device)
+                edge_index = None
+                batch = None
+
+            preds = model(x, edge_index, None, None, batch)
             if task == "regression":
                 y = y.unsqueeze(1)
 
@@ -89,7 +113,7 @@ def train(model, train_loader, epochs, val_loader, task):
 
             if task == "binary":
                 y_class = torch.argmax(y, dim=1)
-                for metric in train_metrics: 
+                for metric in train_metrics:
                     metric.update(preds, y_class)
 
         # Validation
@@ -102,10 +126,19 @@ def train(model, train_loader, epochs, val_loader, task):
             model.eval()
 
             for _, data in enumerate(tqdm(val_loader)):
-                data = data.to(device)
+                if isinstance(data, Data):
+                    data = data.to(device)
+                    x = data.x
+                    y = data.y
+                    edge_index = data.edge_index
+                    batch = data.batch
+                else:
+                    x = data[0].to(device)
+                    y = data[1].to(device)
+                    edge_index = None
+                    batch = None
 
-                preds = model(data.x, data.edge_index, None, None, data.batch)
-                y = data.y
+                preds = model(x, edge_index, None, None, batch)
                 if task == "regression":
                     y = y.unsqueeze(1)
 
@@ -114,7 +147,7 @@ def train(model, train_loader, epochs, val_loader, task):
 
                 if task == "binary":
                     y_class = torch.argmax(y, dim=1)
-                    for metric in val_metrics: 
+                    for metric in val_metrics:
                         metric.update(preds, y_class)
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
@@ -124,29 +157,29 @@ def train(model, train_loader, epochs, val_loader, task):
         logger.info("| Val Loss: {:.4f}".format(val_loss))
 
         if task == "binary":
-            for metric, key in zip(train_metrics,train_metrics_dict.keys()): 
+            for metric, key in zip(train_metrics, train_metrics_dict.keys()):
                 temp = metric.compute()
                 logger.info("| Train " + key + ": {:.4f}".format(temp))
                 train_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
-            
-            for metric, key in zip(val_metrics,val_metrics_dict.keys()): 
+
+            for metric, key in zip(val_metrics, val_metrics_dict.keys()):
                 temp = metric.compute()
                 logger.info("| Val " + key + ": {:.4f}".format(temp))
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
-            if val_metrics_dict["AveragePrecision"][epoch-1] > current_max_avg:
+            if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
                 best_model = model
-                current_max_avg = val_metrics_dict["AveragePrecision"][epoch-1]
+                current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
                 current_best_epoch = epoch
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
-    with open('train_metrics.pkl', 'wb') as file:
+    with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
-    with open('val_metrics.pkl', 'wb') as file:
+    with open("val_metrics.pkl", "wb") as file:
         pkl.dump(val_metrics_dict, file)
 
     return model, best_model, criterion, current_best_epoch
@@ -169,13 +202,26 @@ def main(args):
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
 
-    transform = GraphNormalize(
-        args.model_name,
-        task=args.task,
-        target_month = args.target_month,
-        mean_std_per_feature=mean_std_per_feature,
-        append_position_as_feature=True,
-    )
+    if args.model_name == "AttentionGNN":
+        loader_class = torch_geometric.loader.DataLoader
+        transform = GraphNormalize(
+            args.model_name,
+            task=args.task,
+            target_month = args.target_month,
+            mean_std_per_feature=mean_std_per_feature,
+            append_position_as_feature=True,
+        )
+    elif args.model_name == "GRU":
+        loader_class = torch.utils.data.DataLoader
+        transform = ToCentralNodeAndNormalize(
+            args.model_name,
+            task=args.task,
+            target_month = args.target_month,
+            mean_std_per_feature=mean_std_per_feature,
+            append_position_as_feature=True,
+        )
+    else:
+        raise ValueError("Invalid model")
 
     train_dataset = GraphDataset(
         root_dir=args.train_path,
@@ -183,7 +229,7 @@ def main(args):
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
 
-    train_loader = torch_geometric.loader.DataLoader(
+    train_loader = loader_class(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
@@ -193,9 +239,7 @@ def main(args):
         root_dir=args.val_path,
         transform=transform,
     )
-    val_loader = torch_geometric.loader.DataLoader(
-        val_dataset, batch_size=args.batch_size
-    )
+    val_loader = loader_class(val_dataset, batch_size=args.batch_size)
 
     logger.info("Building model {}".format(args.model_name))
 
@@ -206,9 +250,10 @@ def main(args):
         linear_out_channels = 1
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
 
+    num_features = train_dataset.num_node_features
+    timesteps = args.timesteps
+
     if args.model_name == "AttentionGNN":
-        num_features = train_dataset.num_node_features
-        timesteps = args.timesteps
         model = AttentionGNN(
             num_features,
             args.hidden_channels,
@@ -217,6 +262,15 @@ def main(args):
             args.weight_decay,
             task=args.task,
         ).to(device)
+    elif args.model_name == "GRU":
+        model = GRUModel(
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        )
     else:
         raise ValueError("Invalid model")
 
@@ -278,7 +332,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-m",
-        "--model_name",
+        "--model-name",
         metavar="KEY",
         type=str,
         action="store",

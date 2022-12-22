@@ -38,11 +38,15 @@ class GraphDataset(Dataset):
         graph = torch.load(
             os.path.join(self.root_dir, "graph_{}.pt".format(self._indices[0]))
         )
-        self._num_features = (
-            self.transform(graph).x.shape[1]
-            if self.transform is not None
-            else graph.x.shape[1]
-        )
+
+        if self.transform is not None: 
+            t_graph = self.transform(graph)
+            if isinstance(t_graph , Data):
+                self._num_features = t_graph.x.shape[1]
+            else: 
+                self._num_features = t_graph[0].shape[1]
+        else: 
+            self._num_features = graph.x.shape[1]
 
     @property
     def num_features(self) -> int:

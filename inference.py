@@ -117,7 +117,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-m",
-        "--model_name",
+        "--model-name",
         metavar="KEY",
         type=str,
         action="store",
