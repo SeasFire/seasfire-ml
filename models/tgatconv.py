@@ -1,19 +1,16 @@
 import torch
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GATv2Conv
 from torch_geometric.nn import aggr
 import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class TGCN2(torch.nn.Module):
-    r"""An implementation of the Temporal Graph Convolutional Gated Recurrent Cell.
-    For details see this paper: `"T-GCN: A Temporal Graph ConvolutionalNetwork for
-    Traffic Prediction." <https://arxiv.org/abs/1811.05320>`_
+class TGatConv(torch.nn.Module):
+    r"""An implementation of a Temporal Graph Attention Gated Recurrent Cell.
 
     Args:
         in_channels (int): Number of input features.
         out_channels (int): Number of output features.
-        improved (bool): Stronger self loops. Default is False.
         cached (bool): Caching the message weights. Default is False.
         add_self_loops (bool): Adding self-loops for smoothing. Default is True.
     """
@@ -22,35 +19,35 @@ class TGCN2(torch.nn.Module):
         self,
         in_channels: int,
         out_channels: tuple,
-        improved: bool = False,
-        cached: bool = False,
+        heads: int = 4,
+        concat: bool = False,
         add_self_loops: bool = True,
     ):
-        super(TGCN2, self).__init__()
+        super(TGatConv, self).__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.improved = improved
-        self.cached = cached
+        self.heads = heads 
+        self.concat = concat
         self.add_self_loops = add_self_loops
 
         self._create_parameters_and_layers()
 
     def _create_update_gate_parameters_and_layers(self):
 
-        self.conv_z = GCNConv(
+        self.conv_z = GATv2Conv(
             in_channels=self.in_channels,
             out_channels=self.out_channels[0],
-            improved=self.improved,
-            cached=self.cached,
+            heads=self.heads,
+            concat=self.concat,
             add_self_loops=self.add_self_loops,
         )
 
-        self.conv_z_2 = GCNConv(
+        self.conv_z_2 = GATv2Conv(
             in_channels=self.out_channels[0],
             out_channels=self.out_channels[1],
-            improved=self.improved,
-            cached=self.cached,
+            heads=self.heads,
+            concat=self.concat,
             add_self_loops=self.add_self_loops,
         )
 
@@ -59,19 +56,19 @@ class TGCN2(torch.nn.Module):
 
     def _create_reset_gate_parameters_and_layers(self):
 
-        self.conv_r = GCNConv(
+        self.conv_r = GATv2Conv(
             in_channels=self.in_channels,
             out_channels=self.out_channels[0],
-            improved=self.improved,
-            cached=self.cached,
+            heads=self.heads,
+            concat=self.concat,
             add_self_loops=self.add_self_loops,
         )
 
-        self.conv_r_2 = GCNConv(
+        self.conv_r_2 = GATv2Conv(
             in_channels=self.out_channels[0],
             out_channels=self.out_channels[1],
-            improved=self.improved,
-            cached=self.cached,
+            heads=self.heads,
+            concat=self.concat,
             add_self_loops=self.add_self_loops,
         )
 
@@ -80,19 +77,19 @@ class TGCN2(torch.nn.Module):
 
     def _create_candidate_state_parameters_and_layers(self):
 
-        self.conv_h = GCNConv(
+        self.conv_h = GATv2Conv(
             in_channels=self.in_channels,
             out_channels=self.out_channels[0],
-            improved=self.improved,
-            cached=self.cached,
+            heads=self.heads,
+            concat=self.concat,
             add_self_loops=self.add_self_loops,
         )
 
-        self.conv_h_2 = GCNConv(
+        self.conv_h_2 = GATv2Conv(
             in_channels=self.out_channels[0],
             out_channels=self.out_channels[1],
-            improved=self.improved,
-            cached=self.cached,
+            heads=self.heads,
+            concat=self.concat,
             add_self_loops=self.add_self_loops,
         )
 
@@ -111,12 +108,12 @@ class TGCN2(torch.nn.Module):
         return H
 
     def _calculate_update_gate(self, X, edge_index, edge_weight, H, readout_batch):
-        # GCN layer1
+        # layer1
         Z_temp = self.conv_z(X, edge_index, edge_weight)  # (num_nodes, 32)
         Z_temp = Z_temp.relu()
         Z_temp = F.dropout(Z_temp, p=0.3, training=self.training)
 
-        # GCN layer2
+        # layer2
         Z_temp = self.conv_z_2(Z_temp, edge_index, edge_weight)  # (num_nodes, 16)
         Z_temp = Z_temp.relu()
         Z_temp = F.dropout(Z_temp, p=0.2, training=self.training)
@@ -137,12 +134,12 @@ class TGCN2(torch.nn.Module):
         return Z
 
     def _calculate_reset_gate(self, X, edge_index, edge_weight, H, readout_batch):
-        # GCN layer1
+        # layer1
         R_temp = self.conv_r(X, edge_index, edge_weight)  # (num_nodes, 32)
         R_temp = R_temp.relu()
         R_temp = F.dropout(R_temp, p=0.3, training=self.training)
 
-        # GCN layer2
+        # layer2
         R_temp = self.conv_r_2(R_temp, edge_index, edge_weight)  # (num_nodes, 16)
         R_temp = R_temp.relu()
         R_temp = F.dropout(R_temp, p=0.2, training=self.training)
@@ -165,15 +162,15 @@ class TGCN2(torch.nn.Module):
     def _calculate_candidate_state(
         self, X, edge_index, edge_weight, H, R, readout_batch
     ):
-        # GCN layer1
+        # layer1
         H_tilde_temp = self.conv_h(X, edge_index, edge_weight)  # (num_nodes, 32)
         H_tilde_temp = H_tilde_temp.relu()
         H_tilde_temp = F.dropout(H_tilde_temp, p=0.3, training=self.training)
 
-        # GCN layer2
+        # layer2
         H_tilde_temp = self.conv_h_2(
             H_tilde_temp, edge_index, edge_weight
-        )  # (num_nodes, 16)
+        ) # (num_nodes, 16)
         H_tilde_temp = H_tilde_temp.relu()
         H_tilde_temp = F.dropout(H_tilde_temp, p=0.2, training=self.training)
 

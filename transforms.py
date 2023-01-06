@@ -26,7 +26,11 @@ class GraphNormalize:
         mu = torch.Tensor(list(tmp[0]))
         std = torch.Tensor(list(tmp[1]))
 
-        if self._model == "AttentionGNN":
+        if self._model in [
+            "AttentionGNN",
+            "AttentionGNN-TGCN2",
+            "AttentionGNN-TGatConv",
+        ]:
             mu = mu.unsqueeze(1)
             mu = mu.expand(mu.shape[0], graph.x.shape[2])
             std = std.unsqueeze(1)

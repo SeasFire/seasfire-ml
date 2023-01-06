@@ -121,9 +121,13 @@ def main(args):
         transform=transform,
     )
 
-    if model_name == "AttentionGNN":
+    if model_name in [
+        "AttentionGNN",
+        "AttentionGNN-TGCN2",
+        "AttentionGNN-TGatConv",
+    ]:
         loader_class = torch_geometric.loader.DataLoader
-    elif args.model_name == "GRU":
+    elif model_name == "GRU":
         loader_class = torch.utils.data.DataLoader
     else:
         raise ValueError("Invalid model")

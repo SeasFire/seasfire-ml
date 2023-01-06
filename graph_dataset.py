@@ -28,6 +28,7 @@ class GraphDataset(Dataset):
 
         # load self._indices
         filenames = [entry for entry in os.listdir(self.root_dir)]
+
         # initializing substrings
         sub1 = "_"
         sub2 = "."

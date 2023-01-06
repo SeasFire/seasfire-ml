@@ -11,7 +11,7 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel
+from models import AttentionGNN, GRUModel, TGatConv, TGCN2
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -19,6 +19,7 @@ from utils import compute_mean_std_per_feature
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def set_seed(seed: int = 42) -> None:
     logger.info("Using random seed={}".format(seed))
@@ -200,11 +201,15 @@ def main(args):
     logger.info("Extracting dataset statistics")
     mean_std_per_feature = compute_mean_std_per_feature(
         GraphDataset(root_dir=args.train_path),
-        cache_filename="dataset_mean_std_cached_stats.pk"
+        cache_filename="dataset_mean_std_cached_stats.pk",
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
 
-    if args.model_name == "AttentionGNN":
+    if args.model_name in [
+        "AttentionGNN",
+        "AttentionGNN-TGCN2",
+        "AttentionGNN-TGatConv",
+    ]:
         loader_class = torch_geometric.loader.DataLoader
         transform = GraphNormalize(
             args.model_name,
@@ -255,8 +260,19 @@ def main(args):
     num_features = train_dataset.num_node_features
     timesteps = args.timesteps
 
-    if args.model_name == "AttentionGNN":
+    if args.model_name == "AttentionGNN" or args.model_name == "AttentionGNN-TGCN2":
         model = AttentionGNN(
+            TGCN2,
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        ).to(device)
+    elif args.model_name == "AttentionGNN-TGatConv":
+        model = AttentionGNN(
+            TGatConv,
             num_features,
             args.hidden_channels,
             timesteps,
@@ -319,7 +335,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/test",
+        default="data/train",
         help="Train set path",
     )
     parser.add_argument(
