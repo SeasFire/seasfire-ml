@@ -59,6 +59,9 @@ def plot_train_metrics(train_metrics, val_metrics, task):
         #val
         plot_target_vs_preds(val_metrics, split='val')
     elif task == 'binary': 
+        x_axis_len = len(train_metrics['Loss'])
+        x_axis = range(1, x_axis_len+1)
+
         for key in train_metrics.keys():
             plt.figure(figsize=(20,10))
             plt.plot(x_axis, train_metrics[key], 'o',label='Train ' + key, color='red')
@@ -125,7 +128,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="split",
-        default="test",
+        default="train",
         help="Split: train, test",
     )
     parser.add_argument(
@@ -134,7 +137,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="regression",
+        default="binary",
         help="binary or regression",
     )
 
