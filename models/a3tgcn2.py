@@ -1,50 +1,32 @@
 import torch
 import torch.nn.functional as F
 from .tgcn2 import TGCN2
+from .tgatconv import TGatConv
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 class A3TGCN2(torch.nn.Module):
     r"""A version of A3T-GCN with multiple layers.`_
     Args:
+        tgcn_model: Basic TGCN model constructor
         in_channels (int): Number of input features.
         out_channels (int): Number of output features.
         periods (int): Number of time periods.
-        improved (bool): Stronger self loops (default :obj:`False`).
-        cached (bool): Caching the message weights (default :obj:`False`).
-        add_self_loops (bool): Adding self-loops for smoothing (default :obj:`True`).
     """
 
     def __init__(
-        self,
-        in_channels: int,
-        out_channels: tuple,
-        periods: int,
-        improved: bool = False,
-        cached: bool = False,
-        add_self_loops: bool = True,
+        self, tgcn_model, in_channels: int, out_channels: tuple, periods: int, **kwargs
     ):
         super(A3TGCN2, self).__init__()
 
-        self.in_channels = in_channels
-        self.out_channels = out_channels
         self.periods = periods
-        self.improved = improved
-        self.cached = cached
-        self.add_self_loops = add_self_loops
-        self._setup_layers()
-
-    def _setup_layers(self):
-        self._base_tgcn = TGCN2(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            improved=self.improved,
-            cached=self.cached,
-            add_self_loops=self.add_self_loops,
+        self._base_tgcn = tgcn_model(
+            in_channels=in_channels, out_channels=out_channels, **kwargs
         )
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.attention = torch.nn.Parameter(torch.empty(self.periods, device=device))
+        self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
         torch.nn.init.uniform_(self.attention)
 
     def forward(
@@ -78,12 +60,24 @@ class A3TGCN2(torch.nn.Module):
 
 class AttentionGNN(torch.nn.Module):
     def __init__(
-        self, node_features, output_channels, periods, learning_rate, weight_decay, task
+        self,
+        tgcn_model,
+        node_features,
+        output_channels,
+        periods,
+        learning_rate,
+        weight_decay,
+        task,
+        **kwargs
     ):
         super(AttentionGNN, self).__init__()
         # Attention Temporal Graph Convolutional Cell with 2 layers
         self.tgnn = A3TGCN2(
-            in_channels=node_features, out_channels=output_channels, periods=periods
+            tgcn_model=tgcn_model,
+            in_channels=node_features,
+            out_channels=output_channels,
+            periods=periods,
+            **kwargs
         )
         # Equals single-shot prediction
         self.linear = torch.nn.Linear(output_channels[1], output_channels[2])

@@ -347,6 +347,7 @@ class DatasetBuilder:
                     edges.append((cur_idx, neighbor_idx))
 
         # Create medium radius periphery
+        logger.debug("Creating mid-range periphery")
         periphery_vertices = self._create_periphery_neighbors(
             (center_lat, center_lon), radius=medium_radius, normalize=True
         )
@@ -463,7 +464,7 @@ class DatasetBuilder:
 
         points_input_vars = self._cube[self._input_vars].sel(
             latitude=lat_slice, longitude=lon_slice, time=slice(first_week, center_time)
-        )
+        ).load()
 
         points_input_vars = points_input_vars.resample(
             time=aggregation_in_days, closed="left"
@@ -514,7 +515,7 @@ class DatasetBuilder:
             latitude=vertex_lat,
             longitude=vertex_lon,
             time=slice(first_week, vertex_time),
-        )
+        ).load()
 
         points_input_vars = points_input_vars.resample(
             time=aggregation_in_days, closed="left"
@@ -882,7 +883,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../1d_SeasFireCube.zarr",
+        default="../seasfire.zarr",
         help="Cube path",
     )
     parser.add_argument(
@@ -891,7 +892,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_resolution",
-        default="100km",
+        default="25km",
         help="Cube resolution. Can be 100km or 25km.",
     )
     parser.add_argument(
@@ -918,7 +919,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.001,
+        default=0.01,
         help="Positive sample threshold",
     )
     parser.add_argument(
