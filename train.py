@@ -11,7 +11,7 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel, TGatConv, TGCN2
+from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -206,9 +206,10 @@ def main(args):
     logger.info("Statistics: {}".format(mean_std_per_feature))
 
     if args.model_name in [
-        "AttentionGNN",
         "AttentionGNN-TGCN2",
         "AttentionGNN-TGatConv",
+        "Attention2GNN-TGCN2",
+        "Attention2GNN-TGatConv",
     ]:
         loader_class = torch_geometric.loader.DataLoader
         transform = GraphNormalize(
@@ -260,7 +261,7 @@ def main(args):
     num_features = train_dataset.num_node_features
     timesteps = args.timesteps
 
-    if args.model_name == "AttentionGNN" or args.model_name == "AttentionGNN-TGCN2":
+    if args.model_name == "AttentionGNN-TGCN2":
         model = AttentionGNN(
             TGCN2,
             num_features,
@@ -280,6 +281,27 @@ def main(args):
             args.weight_decay,
             task=args.task,
         ).to(device)
+    elif args.model_name == "Attention2GNN-TGCN2":
+        model = Attention2GNN(
+            TGCN2,
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        ).to(device)
+    elif args.model_name == "Attention2GNN-TGatConv":
+        model = Attention2GNN(
+            TGatConv,
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        ).to(device)
+
     elif args.model_name == "GRU":
         model = GRUModel(
             num_features,
@@ -355,7 +377,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="AttentionGNN",
+        default="AttentionGNN-TGatConv",
         help="Model name",
     )
     parser.add_argument(

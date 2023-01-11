@@ -109,8 +109,11 @@ class TGatConv(torch.nn.Module):
 
     def _set_hidden_state(self, X, H, readout_batch):
         if H is None:
-            dim_0 = (readout_batch.unique(return_counts=True))[0].shape[0]
-            H = torch.zeros(dim_0, self.out_channels[1]).to(X.device)  # (b,16)
+            if self.add_graph_aggregation_layer:
+                dim_0 = (readout_batch.unique(return_counts=True))[0].shape[0]
+                H = torch.zeros(dim_0, self.out_channels[1]).to(X.device)  # (b,16)
+            else: 
+                H = torch.zeros(X.shape[0], self.out_channels[1]).to(X.device)  #
         return H
 
     def _calculate_update_gate(self, X, edge_index, edge_weight, H, readout_batch):
@@ -133,7 +136,7 @@ class TGatConv(torch.nn.Module):
             )
             index = index.to(device)
             Z_temp = self.mean_aggr_z(Z_temp, index)  # (b,16)
-
+        
         Z = torch.cat([Z_temp, H], axis=1)  # (b, 32)
 
         Z = self.linear_z(Z)  # (b,16)
@@ -160,7 +163,6 @@ class TGatConv(torch.nn.Module):
             )
             index = index.to(device)
             R_temp = self.mean_aggr_r(R_temp, index)  # (b,16)
-
         R = torch.cat([R_temp, H], axis=1)  # (b, 32)
 
         R = self.linear_r(R)  # (b,16)
@@ -191,7 +193,6 @@ class TGatConv(torch.nn.Module):
             )
             index = index.to(device)
             H_tilde_temp = self.mean_aggr_z(H_tilde_temp, index)  # (b,16)
-
         H_tilde = torch.cat([H_tilde_temp, H * R], axis=1)  # (b, 32)
 
         H_tilde = self.linear_h(H_tilde)  # (b,16)
