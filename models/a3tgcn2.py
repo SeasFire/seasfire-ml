@@ -17,13 +17,22 @@ class A3TGCN2(torch.nn.Module):
     """
 
     def __init__(
-        self, tgcn_model, in_channels: int, out_channels: tuple, periods: int, **kwargs
+        self,
+        tgcn_model,
+        in_channels: int,
+        out_channels: tuple,
+        periods: int,
+        add_graph_aggregation_layer: bool,
+        **kwargs
     ):
         super(A3TGCN2, self).__init__()
 
         self.periods = periods
         self._base_tgcn = tgcn_model(
-            in_channels=in_channels, out_channels=out_channels, **kwargs
+            in_channels=in_channels,
+            out_channels=out_channels,
+            add_graph_aggregation_layer=add_graph_aggregation_layer,
+            **kwargs
         )
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
@@ -77,6 +86,7 @@ class AttentionGNN(torch.nn.Module):
             in_channels=node_features,
             out_channels=output_channels,
             periods=periods,
+            add_graph_aggregation_layer=True,
             **kwargs
         )
         # Equals single-shot prediction

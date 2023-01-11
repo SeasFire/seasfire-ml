@@ -22,6 +22,7 @@ class TGatConv(torch.nn.Module):
         heads: int = 4,
         concat: bool = False,
         add_self_loops: bool = True,
+        add_graph_aggregation_layer: bool = True
     ):
         super(TGatConv, self).__init__()
 
@@ -30,6 +31,7 @@ class TGatConv(torch.nn.Module):
         self.heads = heads 
         self.concat = concat
         self.add_self_loops = add_self_loops
+        self.add_graph_aggregation_layer = add_graph_aggregation_layer 
 
         self._create_parameters_and_layers()
 
@@ -51,7 +53,8 @@ class TGatConv(torch.nn.Module):
             add_self_loops=self.add_self_loops,
         )
 
-        self.mean_aggr_z = aggr.MeanAggregation()
+        if self.add_graph_aggregation_layer:
+            self.mean_aggr_z = aggr.MeanAggregation()
         self.linear_z = torch.nn.Linear(2 * self.out_channels[1], self.out_channels[1])
 
     def _create_reset_gate_parameters_and_layers(self):
@@ -72,7 +75,8 @@ class TGatConv(torch.nn.Module):
             add_self_loops=self.add_self_loops,
         )
 
-        self.mean_aggr_r = aggr.MeanAggregation()
+        if self.add_graph_aggregation_layer:
+            self.mean_aggr_r = aggr.MeanAggregation()
         self.linear_r = torch.nn.Linear(2 * self.out_channels[1], self.out_channels[1])
 
     def _create_candidate_state_parameters_and_layers(self):
@@ -93,7 +97,9 @@ class TGatConv(torch.nn.Module):
             add_self_loops=self.add_self_loops,
         )
 
-        self.mean_aggr_h = aggr.MeanAggregation()
+        if self.add_graph_aggregation_layer:
+            self.mean_aggr_h = aggr.MeanAggregation()
+        
         self.linear_h = torch.nn.Linear(2 * self.out_channels[1], self.out_channels[1])
 
     def _create_parameters_and_layers(self):
@@ -118,14 +124,15 @@ class TGatConv(torch.nn.Module):
         Z_temp = Z_temp.relu()
         Z_temp = F.dropout(Z_temp, p=0.2, training=self.training)
 
-        # Readout layer
-        index = (
-            torch.zeros(X.shape[0], dtype=int)
-            if readout_batch is None
-            else readout_batch
-        )
-        index = index.to(device)
-        Z_temp = self.mean_aggr_z(Z_temp, index)  # (b,16)
+        if self.add_graph_aggregation_layer:
+            # Readout layer
+            index = (
+                torch.zeros(X.shape[0], dtype=int)
+                if readout_batch is None
+                else readout_batch
+            )
+            index = index.to(device)
+            Z_temp = self.mean_aggr_z(Z_temp, index)  # (b,16)
 
         Z = torch.cat([Z_temp, H], axis=1)  # (b, 32)
 
@@ -144,14 +151,15 @@ class TGatConv(torch.nn.Module):
         R_temp = R_temp.relu()
         R_temp = F.dropout(R_temp, p=0.2, training=self.training)
 
-        # Readout layer
-        index = (
-            torch.zeros(X.shape[0], dtype=int)
-            if readout_batch is None
-            else readout_batch
-        )
-        index = index.to(device)
-        R_temp = self.mean_aggr_r(R_temp, index)  # (b,16)
+        if self.add_graph_aggregation_layer:
+            # Readout layer
+            index = (
+                torch.zeros(X.shape[0], dtype=int)
+                if readout_batch is None
+                else readout_batch
+            )
+            index = index.to(device)
+            R_temp = self.mean_aggr_r(R_temp, index)  # (b,16)
 
         R = torch.cat([R_temp, H], axis=1)  # (b, 32)
 
@@ -174,14 +182,15 @@ class TGatConv(torch.nn.Module):
         H_tilde_temp = H_tilde_temp.relu()
         H_tilde_temp = F.dropout(H_tilde_temp, p=0.2, training=self.training)
 
-        # Readout layer
-        index = (
-            torch.zeros(X.shape[0], dtype=int)
-            if readout_batch is None
-            else readout_batch
-        )
-        index = index.to(device)
-        H_tilde_temp = self.mean_aggr_z(H_tilde_temp, index)  # (b,16)
+        if self.add_graph_aggregation_layer:
+            # Readout layer
+            index = (
+                torch.zeros(X.shape[0], dtype=int)
+                if readout_batch is None
+                else readout_batch
+            )
+            index = index.to(device)
+            H_tilde_temp = self.mean_aggr_z(H_tilde_temp, index)  # (b,16)
 
         H_tilde = torch.cat([H_tilde_temp, H * R], axis=1)  # (b, 32)
 
