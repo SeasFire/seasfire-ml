@@ -29,7 +29,7 @@ class GraphNormalize:
         if self._model in [
             "AttentionGNN-TGCN2",
             "AttentionGNN-TGatConv",
-            "Attention2GNN-TGCN2"
+            "Attention2GNN-TGCN2",
             "Attention2GNN-TGatConv"
         ]:
             mu = mu.unsqueeze(1)
