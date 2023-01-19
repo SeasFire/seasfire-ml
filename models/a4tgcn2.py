@@ -1,14 +1,12 @@
 import torch
 import torch.nn.functional as F
-from .tgcn2 import TGCN2
-from .tgatconv import TGatConv
-
+from torch_geometric.nn import aggr
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class A3TGCN2(torch.nn.Module):
-    r"""A version of A3T-GCN with multiple layers.`_
+class A4TGCN2(torch.nn.Module):
+    r"""A new model.`_
     Args:
         tgcn_model: Basic TGCN model constructor
         in_channels (int): Number of input features.
@@ -17,25 +15,20 @@ class A3TGCN2(torch.nn.Module):
     """
 
     def __init__(
-        self,
-        tgcn_model,
-        in_channels: int,
-        out_channels: tuple,
-        periods: int,
-        add_graph_aggregation_layer: bool,
-        **kwargs
+        self, tgcn_model, in_channels: int, out_channels: tuple, periods: int, **kwargs
     ):
-        super(A3TGCN2, self).__init__()
+        super(A4TGCN2, self).__init__()
 
         self.periods = periods
         self._base_tgcn = tgcn_model(
             in_channels=in_channels,
             out_channels=out_channels,
-            add_graph_aggregation_layer=add_graph_aggregation_layer,
+            add_graph_aggregation_layer=False,
             **kwargs
         )
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
+        self.mean_aggr_z = aggr.MeanAggregation()
         torch.nn.init.uniform_(self.attention)
 
     def forward(
@@ -61,13 +54,24 @@ class A3TGCN2(torch.nn.Module):
         H_accum = 0
         probs = torch.nn.functional.softmax(self.attention, dim=0)
         for period in range(self.periods):
-            H_accum = H_accum + probs[period] * self._base_tgcn(
+            res = self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
+            H_accum = H_accum + probs[period] * res
+
+        # Readout layer
+        index = (
+            torch.zeros(X.shape[0], dtype=int)
+            if readout_batch is None
+            else readout_batch
+        )
+        index = index.to(device)
+        H_accum = self.mean_aggr_z(H_accum, index)  # (b,16)
+
         return H_accum
 
 
-class AttentionGNN(torch.nn.Module):
+class Attention2GNN(torch.nn.Module):
     def __init__(
         self,
         tgcn_model,
@@ -79,14 +83,12 @@ class AttentionGNN(torch.nn.Module):
         task,
         **kwargs
     ):
-        super(AttentionGNN, self).__init__()
-        # Attention Temporal Graph Convolutional Cell with 2 layers
-        self.tgnn = A3TGCN2(
+        super(Attention2GNN, self).__init__()
+        self.tgnn = A4TGCN2(
             tgcn_model=tgcn_model,
             in_channels=node_features,
             out_channels=output_channels,
             periods=periods,
-            add_graph_aggregation_layer=True,
             **kwargs
         )
         # Equals single-shot prediction
