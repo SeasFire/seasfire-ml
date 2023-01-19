@@ -110,7 +110,7 @@ def main(args):
     criterion = model_info["criterion"]
     transform = model_info["transform"]
     model_name = model_info["name"]
-
+    
     logger.info("Using model={}".format(model_name))
 
     logger.info("Using target month={}".format(args.target_month))
@@ -124,7 +124,7 @@ def main(args):
     if model_name in [
         "AttentionGNN",
         "AttentionGNN-TGCN2",
-        "AttentionGNN-TGatConv",
+        "best_AttentionGNN-TGatConv",
     ]:
         loader_class = torch_geometric.loader.DataLoader
     elif model_name == "GRU":
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="AttentionGNN",
+        default="AttentionGNN-TGatConv",
         help="Model name",
     )
     parser.add_argument(
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_binary_attention_model.pt",
+        default="best_AttentionGNN-TGatConv-month3.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="task",
-        default="regression",
+        default="binary",
         help="Model task",
     )
     parser.add_argument(
@@ -197,7 +197,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_month",
-        default=1,
+        default=2,
         help="Target month",
     )
     args = parser.parse_args()
