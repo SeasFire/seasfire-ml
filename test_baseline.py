@@ -15,7 +15,7 @@ timeseries_weeks = 48
 aggregation_in_weeks = 4  # aggregate per month
 year_in_weeks = 48
 max_week_with_data = 918
-target_count = 6
+target_count = 1
 target_length = 4
 
 # Europe
@@ -109,8 +109,6 @@ for idx in tqdm(range(0, len(samples))):
             month = 12
         elif month == 10:
             month = 10
-        elif month == 7:
-            month = 6
         else:
             month = month - 1
 
@@ -166,11 +164,9 @@ ground_truth = torch.from_numpy(ground_truth)
 
 torch.save(ground_truth, 'ground_truth.pt')
 
-###################### LOADING AND PRINTING ###############################
+###################### LOADING AND PRINTING RESULTS ###############################
 
 mean_truth = torch.load("ground_truth_mean.pt")
-print(mean_truth)
-print(mean_truth)
 
 truth = torch.load("ground_truth.pt")
 truth = truth[:, [0]]
@@ -178,12 +174,11 @@ truth = truth[:, [0]]
 for i in range(0, mean_truth.shape[0]):
     mean_truth[i] = torch.where(mean_truth[i] > 0.0, 1, 0)
 
-
 for i in range(0, truth.shape[0]):
     truth[i] = torch.where(truth[i] > 0.0, 1, 0)
 truth = truth.squeeze(1)
 
-acc = Accuracy(task="multiclass", num_classes=2)
+acc = Accuracy(task="binary")
 prec = acc(mean_truth, truth)
 print("Accuracy: ", prec)
 
@@ -191,14 +186,10 @@ average_precision = AveragePrecision(task="binary")
 prec = average_precision(mean_truth, truth)
 print("AveragePrecision: ", prec)
 
-f1 = F1Score(task="multiclass", num_classes=2)
+f1 = F1Score(task="binary", average="macro")
 prec = f1(mean_truth, truth)
 print("F1Score: ", prec)
 
 auroc = AUROC(task="binary")
 prec = auroc(mean_truth, truth)
 print("AUROC: ", prec)
-
-
-
-
