@@ -15,7 +15,7 @@ class A4TGCN2(torch.nn.Module):
     """
 
     def __init__(
-        self, tgcn_model, in_channels: int, out_channels: tuple, periods: int, **kwargs
+        self, tgcn_model, in_channels: int, out_channels: tuple, periods: int, aggregator, **kwargs
     ):
         super(A4TGCN2, self).__init__()
 
@@ -26,9 +26,15 @@ class A4TGCN2(torch.nn.Module):
             add_graph_aggregation_layer=False,
             **kwargs
         )
+        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
-        self.mean_aggr_z = aggr.MeanAggregation()
+        
+        if aggregator == "Mean":
+            self.mean_aggr_z = aggr.MeanAggregation()
+        else:
+            self.mean_aggr_z = aggr.set_transformer.SetTransformerAggregation(channels=out_channels[1])
+            self.mean_aggr_z.reset_parameters()
         torch.nn.init.uniform_(self.attention)
 
     def forward(
@@ -67,7 +73,6 @@ class A4TGCN2(torch.nn.Module):
         )
         index = index.to(device)
         H_accum = self.mean_aggr_z(H_accum, index)  # (b,16)
-
         return H_accum
 
 
@@ -81,6 +86,7 @@ class Attention2GNN(torch.nn.Module):
         learning_rate,
         weight_decay,
         task,
+        aggregator,
         **kwargs
     ):
         super(Attention2GNN, self).__init__()
@@ -89,6 +95,7 @@ class Attention2GNN(torch.nn.Module):
             in_channels=node_features,
             out_channels=output_channels,
             periods=periods,
+            aggregator=aggregator,
             **kwargs
         )
         # Equals single-shot prediction
@@ -96,7 +103,7 @@ class Attention2GNN(torch.nn.Module):
 
         # print(self.parameters)
         self.optimizer = torch.optim.Adam(
-            self.parameters(), lr=learning_rate, weight_decay=weight_decay
+            self.parameters(), lr=learning_rate         #, weight_decay=weight_decay
         )
 
         self.task = task
