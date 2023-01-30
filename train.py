@@ -34,7 +34,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, task):
+def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     train_metrics_dict = {
         "Accuracy": [],
         "F1Score": [],
@@ -171,10 +171,24 @@ def train(model, train_loader, epochs, val_loader, task):
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
+            
             if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
+                print(val_metrics_dict["AveragePrecision"][epoch - 1])
                 best_model = model
                 current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
                 current_best_epoch = epoch
+
+                logger.info("Saving model as {}".format(args.model_path))
+                model_info = {
+                    "model": best_model,
+                    "criterion": criterion,
+                    "transform": transform,
+                    "name": model_name,
+                }
+                # Save the entire best model to PATH
+                torch.save(model_info, "best_" + args.model_path)
+
+                logger.info("Best epoch: {}".format(current_best_epoch))
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
@@ -270,6 +284,7 @@ def main(args):
             args.learning_rate,
             args.weight_decay,
             task=args.task,
+            aggregator=args.aggregate,
         ).to(device)
     elif args.model_name == "AttentionGNN-TGatConv":
         model = AttentionGNN(
@@ -290,6 +305,7 @@ def main(args):
             args.learning_rate,
             args.weight_decay,
             task=args.task,
+            aggregator=args.aggregator,
         ).to(device)
     elif args.model_name == "Attention2GNN-TGatConv":
         model = Attention2GNN(
@@ -300,6 +316,7 @@ def main(args):
             args.learning_rate,
             args.weight_decay,
             task=args.task,
+            aggregator=args.aggregator,
         ).to(device)
 
     elif args.model_name == "GRU":
@@ -321,6 +338,8 @@ def main(args):
         epochs=args.epochs,
         val_loader=val_loader,
         task=args.task,
+        model_name = args.model_name,
+        transform = transform,
     )
 
     logger.info("Saving model as {}".format(args.model_path))
@@ -332,7 +351,7 @@ def main(args):
     }
 
     best_model_info = {
-        "model": model,
+        "model": best_model,
         "criterion": criterion,
         "transform": transform,
         "name": args.model_name,
@@ -377,7 +396,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="AttentionGNN-TGatConv",
+        default="Attention2GNN-TGCN2",
         help="Model name",
     )
     parser.add_argument(
@@ -397,6 +416,15 @@ if __name__ == "__main__":
         dest="task",
         default="binary",
         help="Model task",
+    )
+    parser.add_argument(
+        "--aggregator",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="aggregator",
+        default="SetTransformerAggregation",
+        help="Aggregation operator: Mean, SetTransformerAggregation",
     )
     parser.add_argument(
         "-b",
@@ -424,7 +452,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=1,
+        default=50,
         help="Epochs",
     )
     parser.add_argument(
@@ -453,7 +481,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-4,
+        default=5e-3,
         help="Learning rate",
     )
     parser.add_argument(
