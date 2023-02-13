@@ -33,8 +33,8 @@ class A4TGCN2(torch.nn.Module):
         if aggregator == "Mean":
             self.mean_aggr_z = aggr.MeanAggregation()
         else:
-            self.mean_aggr_z = aggr.set_transformer.SetTransformerAggregation(channels=out_channels[1])
-            self.mean_aggr_z.reset_parameters()
+            self.mean_aggr_z = aggr.set_transformer.SetTransformerAggregation(channels=out_channels[1], heads=4)
+            # self.mean_aggr_z.reset_parameters()
         torch.nn.init.uniform_(self.attention)
 
     def forward(
@@ -58,21 +58,28 @@ class A4TGCN2(torch.nn.Module):
             * **H** (PyTorch Float Tensor): Hidden state matrix for all nodes.
         """
         H_accum = 0
-        probs = torch.nn.functional.softmax(self.attention, dim=0)
+        # probs = torch.nn.functional.softmax(self.attention, dim=0)
+        # for period in range(self.periods):
+        #     res = self._base_tgcn(
+        #         X[:, :, period], edge_index, edge_weight, H, readout_batch
+        #     )
+        #     H_accum = H_accum + probs[period] * res
         for period in range(self.periods):
-            res = self._base_tgcn(
+            H = self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
-            H_accum = H_accum + probs[period] * res
-
-        # Readout layer
+            H_accum = H_accum + H
+            
+        # Readout layer02
         index = (
             torch.zeros(X.shape[0], dtype=int)
             if readout_batch is None
             else readout_batch
         )
+        
         index = index.to(device)
         H_accum = self.mean_aggr_z(H_accum, index)  # (b,16)
+        
         return H_accum
 
 
@@ -123,7 +130,7 @@ class Attention2GNN(torch.nn.Module):
 
         h = self.tgnn(X, edge_index, edge_weight, H, readout_batch)
         h.to(device)
-        h = F.relu(h)
+        # h = F.relu(h)
 
         h = self.linear(h)
         if self.task == "binary":
