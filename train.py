@@ -92,6 +92,8 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             if isinstance(data, Data):
                 data = data.to(device)
                 x = data.x
+                print(x[:][9:][1])
+                print(x.shape)
                 y = data.y
                 edge_index = data.edge_index
                 batch = data.batch
@@ -193,6 +195,15 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
+        logger.info("Saving model as {}".format(args.model_path))
+        model_info = {
+            "model": best_model,
+            "criterion": criterion,
+            "transform": transform,
+            "name": model_name,
+        }
+        # Save the entire best model to PATH
+        torch.save(model_info, str(epoch) + "_" + args.model_path)
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
@@ -376,7 +387,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train",
+        default="data25/data/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -386,7 +397,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val",
+        default="data25/data/val",
         help="Validation set path",
     )
     parser.add_argument(
@@ -481,7 +492,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-3,
+        default=1e-4,
         help="Learning rate",
     )
     parser.add_argument(
