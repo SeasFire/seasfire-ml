@@ -151,7 +151,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data/test",
+        default="data25/data/test",
         help="Test set path",
     )
     parser.add_argument(
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="Attention2GNN-TGatConv",
+        default="Attention2GNN-TGCN2",
         help="Model name",
     )
     parser.add_argument(
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_AttentionGNN-TGatConv-month3.pt",
+        default="36_binary_attention_model.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_month",
-        default=2,
+        default=1,
         help="Target month",
     )
     args = parser.parse_args()
