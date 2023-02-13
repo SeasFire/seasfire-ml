@@ -15,7 +15,7 @@ timeseries_weeks = 48
 aggregation_in_weeks = 4  # aggregate per month
 year_in_weeks = 48
 max_week_with_data = 918
-target_count = 1
+target_count = 6
 target_length = 4
 
 # Europe
