@@ -9,10 +9,9 @@ from tqdm import tqdm
 
 import torch
 import torch_geometric
-import models
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN , TransformerAggregationGNN
+from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN, TransformerAggregationGNN
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -393,7 +392,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data25/data/train",
+        default="data/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -403,7 +402,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data25/data/val",
+        default="data/val",
         help="Validation set path",
     )
     parser.add_argument(
