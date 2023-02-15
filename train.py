@@ -441,7 +441,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=32,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
