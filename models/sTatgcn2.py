@@ -50,21 +50,28 @@ class STATGCN2(torch.nn.Module):
         Return types:
             * **H** (PyTorch Float Tensor): Hidden state matrix for all nodes.
         """
-        H_accum = 0
+
+       
+        # H_accum = 0
+        H_accum_list = []
         for period in range(self.periods):
             H_temp = self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
-            H_accum = H_accum + H_temp
-            
-        # Readout layer02
+            H_accum_list.append(H_temp)
+        
+        H_accum = torch.stack(H_accum_list, dim=1)
+        H_accum = torch.flatten(H_accum, end_dim=1)
+
+         # Readout layer02
         index = (
             torch.zeros(X.shape[0], dtype=int)
             if readout_batch is None
             else readout_batch
         )
-        
+        index = (torch.sort(index.repeat(12)))[0]
         index = index.to(device)
+
         H_accum = self.transformer_aggr(H_accum, index)  # (b,16)
         
         return H_accum
