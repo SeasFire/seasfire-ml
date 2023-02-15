@@ -9,9 +9,10 @@ from tqdm import tqdm
 
 import torch
 import torch_geometric
+import models
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN
+from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN , TransformerAggregationGNN
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -92,8 +93,6 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             if isinstance(data, Data):
                 data = data.to(device)
                 x = data.x
-                print(x[:][9:][1])
-                print(x.shape)
                 y = data.y
                 edge_index = data.edge_index
                 batch = data.batch
@@ -229,12 +228,13 @@ def main(args):
         cache_filename="dataset_mean_std_cached_stats.pk",
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
-
+    print(args.model_name)
     if args.model_name in [
         "AttentionGNN-TGCN2",
         "AttentionGNN-TGatConv",
         "Attention2GNN-TGCN2",
         "Attention2GNN-TGatConv",
+        "Transformer_Aggregation-TGCN2",
     ]:
         loader_class = torch_geometric.loader.DataLoader
         transform = GraphNormalize(
@@ -295,7 +295,6 @@ def main(args):
             args.learning_rate,
             args.weight_decay,
             task=args.task,
-            aggregator=args.aggregate,
         ).to(device)
     elif args.model_name == "AttentionGNN-TGatConv":
         model = AttentionGNN(
@@ -316,7 +315,6 @@ def main(args):
             args.learning_rate,
             args.weight_decay,
             task=args.task,
-            aggregator=args.aggregator,
         ).to(device)
     elif args.model_name == "Attention2GNN-TGatConv":
         model = Attention2GNN(
@@ -327,9 +325,17 @@ def main(args):
             args.learning_rate,
             args.weight_decay,
             task=args.task,
-            aggregator=args.aggregator,
         ).to(device)
-
+    elif args.model_name == "Transformer_Aggregation-TGCN2":
+        model = TransformerAggregationGNN(
+            TGCN2,
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        ).to(device)
     elif args.model_name == "GRU":
         model = GRUModel(
             num_features,
@@ -407,7 +413,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="Attention2GNN-TGCN2",
+        default="Transformer_Aggregation-TGCN2",
         help="Model name",
     )
     parser.add_argument(
@@ -427,15 +433,6 @@ if __name__ == "__main__":
         dest="task",
         default="binary",
         help="Model task",
-    )
-    parser.add_argument(
-        "--aggregator",
-        metavar="KEY",
-        type=str,
-        action="store",
-        dest="aggregator",
-        default="SetTransformerAggregation",
-        help="Aggregation operator: Mean, SetTransformerAggregation",
     )
     parser.add_argument(
         "-b",
