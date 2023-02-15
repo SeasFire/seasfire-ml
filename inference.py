@@ -126,6 +126,7 @@ def main(args):
         "AttentionGNN-TGatConv",
         "Attention2GNN-TGCN2",
         "Attention2GNN-TGatConv",
+        "Transformer_Aggregation-TGCN2",
     ]:
         loader_class = torch_geometric.loader.DataLoader
     elif model_name == "GRU":
@@ -161,7 +162,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="Attention2GNN-TGCN2",
+        default="Transformer_Aggregation-TGCN2",
         help="Model name",
     )
     parser.add_argument(
