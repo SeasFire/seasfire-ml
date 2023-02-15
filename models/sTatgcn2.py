@@ -5,7 +5,7 @@ from torch_geometric.nn import aggr
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class A4TGCN2(torch.nn.Module):
+class STATGCN2(torch.nn.Module):
     r"""A new model.`_
     Args:
         tgcn_model: Basic TGCN model constructor
@@ -17,7 +17,7 @@ class A4TGCN2(torch.nn.Module):
     def __init__(
         self, tgcn_model, in_channels: int, out_channels: tuple, periods: int, **kwargs
     ):
-        super(A4TGCN2, self).__init__()
+        super(STATGCN2, self).__init__()
 
         self.periods = periods
         self._base_tgcn = tgcn_model(
@@ -28,11 +28,7 @@ class A4TGCN2(torch.nn.Module):
         )
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
-        
-        self.mean_aggr_z = aggr.MeanAggregation()
-        
-        torch.nn.init.uniform_(self.attention)
+        self.transformer_aggr = aggr.set_transformer.SetTransformerAggregation(channels=out_channels[1], heads=4)
 
     def forward(
         self,
@@ -55,17 +51,11 @@ class A4TGCN2(torch.nn.Module):
             * **H** (PyTorch Float Tensor): Hidden state matrix for all nodes.
         """
         H_accum = 0
-        # probs = torch.nn.functional.softmax(self.attention, dim=0)
-        # for period in range(self.periods):
-        #     res = self._base_tgcn(
-        #         X[:, :, period], edge_index, edge_weight, H, readout_batch
-        #     )
-        #     H_accum = H_accum + probs[period] * res
         for period in range(self.periods):
-            H = self._base_tgcn(
+            H_temp = self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
-            H_accum = H_accum + H
+            H_accum = H_accum + H_temp
             
         # Readout layer02
         index = (
@@ -75,12 +65,12 @@ class A4TGCN2(torch.nn.Module):
         )
         
         index = index.to(device)
-        H_accum = self.mean_aggr_z(H_accum, index)  # (b,16)
+        H_accum = self.transformer_aggr(H_accum, index)  # (b,16)
         
         return H_accum
 
 
-class Attention2GNN(torch.nn.Module):
+class TransformerAggregationGNN(torch.nn.Module):
     def __init__(
         self,
         tgcn_model,
@@ -92,8 +82,8 @@ class Attention2GNN(torch.nn.Module):
         task,
         **kwargs
     ):
-        super(Attention2GNN, self).__init__()
-        self.tgnn = A4TGCN2(
+        super(TransformerAggregationGNN, self).__init__()
+        self.tgnn = STATGCN2(
             tgcn_model=tgcn_model,
             in_channels=node_features,
             out_channels=output_channels,

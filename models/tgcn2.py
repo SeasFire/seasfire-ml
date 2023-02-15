@@ -37,7 +37,6 @@ class TGCN2(torch.nn.Module):
         self.add_graph_aggregation_layer = add_graph_aggregation_layer 
 
         self._create_parameters_and_layers()
-
     def _create_update_gate_parameters_and_layers(self):
 
         self.conv_z = GCNConv(

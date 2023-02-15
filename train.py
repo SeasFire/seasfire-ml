@@ -9,9 +9,10 @@ from tqdm import tqdm
 
 import torch
 import torch_geometric
+import models
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN
+from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN , TransformerAggregationGNN
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -34,7 +35,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, task):
+def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     train_metrics_dict = {
         "Accuracy": [],
         "F1Score": [],
@@ -171,14 +172,37 @@ def train(model, train_loader, epochs, val_loader, task):
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
+            
             if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
+                print(val_metrics_dict["AveragePrecision"][epoch - 1])
                 best_model = model
                 current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
                 current_best_epoch = epoch
 
+                logger.info("Saving model as {}".format(args.model_path))
+                model_info = {
+                    "model": best_model,
+                    "criterion": criterion,
+                    "transform": transform,
+                    "name": model_name,
+                }
+                # Save the entire best model to PATH
+                torch.save(model_info, "best_" + args.model_path)
+
+                logger.info("Best epoch: {}".format(current_best_epoch))
+
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
+        logger.info("Saving model as {}".format(args.model_path))
+        model_info = {
+            "model": best_model,
+            "criterion": criterion,
+            "transform": transform,
+            "name": model_name,
+        }
+        # Save the entire best model to PATH
+        torch.save(model_info, str(epoch) + "_" + args.model_path)
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
@@ -204,12 +228,13 @@ def main(args):
         cache_filename="dataset_mean_std_cached_stats.pk",
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
-
+    print(args.model_name)
     if args.model_name in [
         "AttentionGNN-TGCN2",
         "AttentionGNN-TGatConv",
         "Attention2GNN-TGCN2",
         "Attention2GNN-TGatConv",
+        "Transformer_Aggregation-TGCN2",
     ]:
         loader_class = torch_geometric.loader.DataLoader
         transform = GraphNormalize(
@@ -301,7 +326,16 @@ def main(args):
             args.weight_decay,
             task=args.task,
         ).to(device)
-
+    elif args.model_name == "Transformer_Aggregation-TGCN2":
+        model = TransformerAggregationGNN(
+            TGCN2,
+            num_features,
+            args.hidden_channels,
+            timesteps,
+            args.learning_rate,
+            args.weight_decay,
+            task=args.task,
+        ).to(device)
     elif args.model_name == "GRU":
         model = GRUModel(
             num_features,
@@ -321,6 +355,8 @@ def main(args):
         epochs=args.epochs,
         val_loader=val_loader,
         task=args.task,
+        model_name = args.model_name,
+        transform = transform,
     )
 
     logger.info("Saving model as {}".format(args.model_path))
@@ -332,7 +368,7 @@ def main(args):
     }
 
     best_model_info = {
-        "model": model,
+        "model": best_model,
         "criterion": criterion,
         "transform": transform,
         "name": args.model_name,
@@ -357,7 +393,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train",
+        default="data25/data/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -367,7 +403,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val",
+        default="data25/data/val",
         help="Validation set path",
     )
     parser.add_argument(
@@ -377,7 +413,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="AttentionGNN-TGatConv",
+        default="Transformer_Aggregation-TGCN2",
         help="Model name",
     )
     parser.add_argument(
@@ -424,7 +460,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=1,
+        default=50,
         help="Epochs",
     )
     parser.add_argument(
@@ -453,7 +489,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-4,
+        default=1e-4,
         help="Learning rate",
     )
     parser.add_argument(

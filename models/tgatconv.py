@@ -19,7 +19,7 @@ class TGatConv(torch.nn.Module):
         self,
         in_channels: int,
         out_channels: tuple,
-        heads: int = 4,
+        heads: int = 1,
         concat: bool = False,
         add_self_loops: bool = True,
         add_graph_aggregation_layer: bool = True

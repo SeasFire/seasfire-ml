@@ -30,7 +30,8 @@ class GraphNormalize:
             "AttentionGNN-TGCN2",
             "AttentionGNN-TGatConv",
             "Attention2GNN-TGCN2",
-            "Attention2GNN-TGatConv"
+            "Attention2GNN-TGatConv",
+            "Transformer_Aggregation-TGCN2",
         ]:
             mu = mu.unsqueeze(1)
             mu = mu.expand(mu.shape[0], graph.x.shape[2])
