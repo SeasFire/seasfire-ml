@@ -96,6 +96,7 @@ class DatasetBuilder:
         seed,
         target_count,
         target_length,
+        include_oci_variables
     ):
         self._cube_path = cube_path
         self._input_vars = [
@@ -171,6 +172,7 @@ class DatasetBuilder:
             "oci_soi",
             "oci_wp",
         ]
+        self._include_oci_variables = include_oci_variables
         self._oci_locations = self._vertices_per_oci()
 
         # for oci_var in self._oci_input_vars:
@@ -462,7 +464,10 @@ class DatasetBuilder:
             center_lon + max_radius * self._sp_res,
         )
 
-        points_input_vars = self._cube[self._input_vars].sel(
+        input_vars = self._input_vars
+        if self._include_oci_variables: 
+            input_vars += self._oci_input_vars
+        points_input_vars = self._cube[input_vars].sel(
             latitude=lat_slice, longitude=lon_slice, time=slice(first_week, center_time)
         ).load()
 
@@ -511,7 +516,10 @@ class DatasetBuilder:
         )
         logger.debug("Using aggregation period in days: {}".format(aggregation_in_days))
 
-        points_input_vars = self._cube[self._input_vars].sel(
+        input_vars = self._input_vars
+        if self._include_oci_variables: 
+            input_vars += self._oci_input_vars
+        points_input_vars = self._cube[input_vars].sel(
             latitude=vertex_lat,
             longitude=vertex_lon,
             time=slice(first_week, vertex_time),
@@ -871,6 +879,7 @@ def main(args):
         args.seed,
         args.target_count,
         args.target_length,
+        args.include_oci_variables
     )
     builder.run()
 
@@ -884,7 +893,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../seasfire.zarr",
+        default="../1d_SeasFireCube.zarr",
         help="Cube path",
     )
     parser.add_argument(
@@ -893,7 +902,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_resolution",
-        default="25km",
+        default="100km",
         help="Cube resolution. Can be 100km or 25km.",
     )
     parser.add_argument(
@@ -982,5 +991,13 @@ if __name__ == "__main__":
         default=4,
         help="Target length. How long does the target period last. Measured in weeks.",
     )
+    parser.add_argument(
+        "--include-oci-variables", dest="include_oci_variables", action="store_true"
+    )
+    parser.add_argument(
+        "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
+    )
+    parser.set_defaults(include_oci_variables=False)
+
     args = parser.parse_args()
     main(args)

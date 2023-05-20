@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import aggr
+from .aggr import set_transformer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -28,7 +29,7 @@ class STATGCN2(torch.nn.Module):
         )
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.transformer_aggr = aggr.set_transformer.SetTransformerAggregation(channels=out_channels[1], heads=4)
+        self.transformer_aggr = set_transformer.SetTransformerAggregation(channels=out_channels[1], heads=4)
 
     def forward(
         self,
