@@ -161,16 +161,16 @@ class DatasetBuilder:
         logger.info("Vars: {}".format(self._cube.data_vars))
 
         self._oci_input_vars = [
-            "oci_censo",
-            "oci_ea",
-            "oci_epo",
-            "oci_gmsst",
+            # "oci_censo",
+            # "oci_ea",
+            # "oci_epo",
+            # "oci_gmsst",
             "oci_nao",
-            "oci_nina34_anom",
-            "oci_pdo",
-            "oci_pna",
-            "oci_soi",
-            "oci_wp",
+            # "oci_nina34_anom",
+            # "oci_pdo",
+            # "oci_pna",
+            # "oci_soi",
+            # "oci_wp",
         ]
         self._include_oci_variables = include_oci_variables
         self._oci_locations = self._vertices_per_oci()
@@ -200,8 +200,8 @@ class DatasetBuilder:
 
         self._number_of_train_years = 16
         self._days_per_week = 8
-        self._timeseries_weeks = 48
-        self._aggregation_in_weeks = 4  # aggregate per month
+        self._timeseries_weeks = 24
+        self._aggregation_in_weeks = 1  # aggregate per month
         self._year_in_weeks = 48
 
         self._max_week_with_data = 918
@@ -988,7 +988,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_length",
-        default=4,
+        default=1,
         help="Target length. How long does the target period last. Measured in weeks.",
     )
     parser.add_argument(
@@ -997,7 +997,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
     )
-    parser.set_defaults(include_oci_variables=False)
+    parser.set_defaults(include_oci_variables=True)
 
     args = parser.parse_args()
     main(args)
