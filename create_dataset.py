@@ -89,6 +89,8 @@ class DatasetBuilder:
         load_cube_in_memory,
         output_folder,
         split,
+        small_radius,
+        medium_radius,
         positive_samples_threshold,
         positive_samples_size,
         generate_all_samples,
@@ -188,6 +190,13 @@ class DatasetBuilder:
         # for x in self._cube.longitude.values:
         #     print(x)
 
+        # Small radius for grid graph
+        self._small_radius = small_radius
+        self._medium_radius = medium_radius
+        logger.info(
+            "Using small={} and medium={} radius".format(self._small_radius, self._medium_radius)
+        )        
+
         # Threshold for fires
         self._positive_samples_threshold = positive_samples_threshold
         # How many samples to take above the threshold
@@ -282,8 +291,8 @@ class DatasetBuilder:
         center_time,
         center_area,
         ground_truth,
-        small_radius=2,
-        medium_radius=4,
+        small_radius,
+        medium_radius,
     ):
         logger.info(
             "Creating sample for center_lat={}, center_lon={}, center_time={}".format(
@@ -428,13 +437,17 @@ class DatasetBuilder:
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.debug("Computed edge tensor= {}".format(edge_index))
 
-        return Data(
+        data = Data(
             x=vertex_features,
             y=graph_level_ground_truth,
             edge_index=edge_index,
             pos=vertex_positions,
             area=area,
         )
+
+        logger.debug("Computed sample={}".format(data))
+
+        return data
 
     def _compute_local_vertices_features(
         self,
@@ -750,6 +763,8 @@ class DatasetBuilder:
                 center_time=center_time,
                 center_area=center_area,
                 ground_truth=ground_truth,
+                small_radius=self._small_radius, 
+                medium_radius=self._medium_radius
             )
 
             self._write_sample_to_disk(graph, idx)
@@ -859,7 +874,8 @@ class DatasetBuilder:
 
 
 def main(args):
-    logging.basicConfig(level=logging.INFO)
+    level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=level)    
 
     logger.debug("Torch version: {}".format(torch.__version__))
     logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
@@ -872,6 +888,8 @@ def main(args):
         args.load_cube_in_memory,
         args.output_folder,
         args.split,
+        args.small_radius,
+        args.medium_radius,
         args.positive_samples_threshold,
         args.positive_samples_size,
         args.generate_all_samples,
@@ -923,6 +941,24 @@ if __name__ == "__main__":
         default="train",
         help="Split type. Can be train, test, val.",
     )
+    parser.add_argument(
+        "--small-radius",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="small_radius",
+        default=3,
+        help="Small radius of grid graph",
+    )    
+    parser.add_argument(
+        "--medium-radius",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="medium_radius",
+        default=5,
+        help="Medium radius of grid graph",
+    )        
     parser.add_argument(
         "--positive-samples-threshold",
         metavar="KEY",
@@ -991,6 +1027,12 @@ if __name__ == "__main__":
         default=1,
         help="Target length. How long does the target period last. Measured in weeks.",
     )
+    parser.add_argument(
+        "--debug", dest="debug", action="store_true"
+    )
+    parser.add_argument(
+        "--no-debug", dest="debug", action="store_false"
+    )    
     parser.add_argument(
         "--include-oci-variables", dest="include_oci_variables", action="store_true"
     )
