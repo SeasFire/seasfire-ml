@@ -455,8 +455,8 @@ class DatasetBuilder:
         center_lat,
         center_lon,
         center_time,
-        small_radius=2,
-        medium_radius=4,
+        small_radius,
+        medium_radius
     ):
         first_week = center_time - np.timedelta64(
             self._timeseries_weeks * self._days_per_week, "D"
