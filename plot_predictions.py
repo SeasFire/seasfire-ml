@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import logging
 import os
 import argparse
@@ -262,7 +264,7 @@ class DatasetBuilder:
         self._number_of_train_years = 16
         self._days_per_week = 8
         self._timeseries_weeks = 48
-        self._aggregation_in_weeks = 4  # aggregate per month
+        self._aggregation_in_weeks = 1  # aggregation
         self._year_in_weeks = 48
 
         self._max_week_with_data = 918
@@ -1244,13 +1246,13 @@ if __name__ == "__main__":
 #         help="Epochs",
 #     )
 #     parser.add_argument(
-#         "--target-month",
+#         "--target-week",
 #         metavar="KEY",
 #         type=int,
 #         action="store",
 #         dest="target_week",
 #         default=1,
-#         help="Target month",
+#         help="Target week",
 #     )
 #     parser.add_argument(
 #         "-ts",

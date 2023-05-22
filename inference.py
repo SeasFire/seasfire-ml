@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import logging
 import argparse
 import pickle as pkl
@@ -113,7 +114,7 @@ def main(args):
     
     logger.info("Using model={}".format(model_name))
 
-    logger.info("Using target month={}".format(args.target_week))
+    logger.info("Using target week={}".format(args.target_week))
     transform.target_week = args.target_week
 
     test_dataset = GraphDataset(
@@ -194,13 +195,13 @@ if __name__ == "__main__":
         help="Batch size",
     )
     parser.add_argument(
-        "--target-month",
+        "--target-week",
         metavar="KEY",
         type=int,
         action="store",
         dest="target_week",
         default=1,
-        help="Target month",
+        help="Target week",
     )
     args = parser.parse_args()
     main(args)

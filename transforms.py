@@ -18,6 +18,8 @@ class GraphNormalize:
         self._mean_std_tuples = None
         self._task = task
         self._target_week = target_week
+        if target_week < 1 or target_week > 24:
+            raise ValueError("Target week is not valid")        
         self._mean_std_per_feature = mean_std_per_feature
         self._append_position_as_feature = append_position_as_feature
 
@@ -88,8 +90,8 @@ class ToCentralNodeAndNormalize:
         self._mean_std_tuples = None
         self._task = task
         self._target_week = target_week
-        if target_week < 1 or target_week > 6:
-            raise ValueError("Target month is not valid")
+        if target_week < 1 or target_week > 24:
+            raise ValueError("Target week is not valid")
         self._mean_std_per_feature = mean_std_per_feature
         self._append_position_as_feature = append_position_as_feature
 
@@ -99,8 +101,8 @@ class ToCentralNodeAndNormalize:
 
     @target_week.setter
     def target_week(self, value):
-        if value < 1 or value > 6:
-            raise ValueError("Target month is not valid")
+        if value < 1 or value > 24:
+            raise ValueError("Target week is not valid")
         self._target_week = value
 
     def __call__(self, graph):
