@@ -96,6 +96,7 @@ class DatasetBuilder:
         generate_all_samples,
         first_sample_index,
         seed,
+        timeseries_weeks,
         target_count,
         target_length,
         include_oci_variables
@@ -209,8 +210,8 @@ class DatasetBuilder:
 
         self._number_of_train_years = 16
         self._days_per_week = 8
-        self._timeseries_weeks = 24
-        self._aggregation_in_weeks = 1  # aggregate per month
+        self._timeseries_weeks = timeseries_weeks #12 months before = 48 weeks
+        self._aggregation_in_weeks = 1  # aggregate per month = 4 vs no aggregation = 1
         self._year_in_weeks = 48
 
         self._max_week_with_data = 918
@@ -220,8 +221,10 @@ class DatasetBuilder:
 
         # how many targets periods to generate in the future
         # e.g. 6 means the next six months (if target length is 4 weeks)
+        # e.g. 24 means the next six months (if target length is 1)
         self._target_count = target_count
-        # length of each target period in weeks, e.g. 4
+        # length of each target period in weeks, e.g. 4 
+        # length of the target period is now 1 week (8 days) 
         self._target_length = target_length
 
         logger.info("Will generate {} target periods.".format(self._target_count))
@@ -446,7 +449,8 @@ class DatasetBuilder:
         )
 
         logger.debug("Computed sample={}".format(data))
-
+        print(data.x.shape)
+        print(data.y.shape)
         return data
 
     def _compute_local_vertices_features(
@@ -895,6 +899,7 @@ def main(args):
         args.generate_all_samples,
         args.first_sample_index,
         args.seed,
+        args.timeseries_weeks,
         args.target_count,
         args.target_length,
         args.include_oci_variables
@@ -1010,6 +1015,15 @@ if __name__ == "__main__":
         help="Generate samples starting from a specific sample index. Allows to resume dataset creation.",
     )
     parser.add_argument(
+        "--timeseries-weeks",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="timeseries_weeks",
+        default=48,
+        help="How many weeks will contain the timeseries.",
+    )
+    parser.add_argument(
         "--target-count",
         metavar="KEY",
         type=int,
@@ -1024,7 +1038,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_length",
-        default=1,
+        default=4,
         help="Target length. How long does the target period last. Measured in weeks.",
     )
     parser.add_argument(
