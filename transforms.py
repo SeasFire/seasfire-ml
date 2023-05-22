@@ -10,14 +10,14 @@ class GraphNormalize:
         self,
         model,
         task,
-        target_month,
+        target_week,
         mean_std_per_feature,
         append_position_as_feature=True,
     ):
         self._model = model
         self._mean_std_tuples = None
         self._task = task
-        self._target_month = target_month
+        self._target_week = target_week
         self._mean_std_per_feature = mean_std_per_feature
         self._append_position_as_feature = append_position_as_feature
 
@@ -48,7 +48,7 @@ class GraphNormalize:
                 graph.y = torch.where(graph.y > 0.0, 1, 0)
                 graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
             elif graph.y.shape[0] > 1:
-                y = (graph.y)[self._target_month - 1]
+                y = (graph.y)[self._target_week - 1]
                 y = torch.where(y > 0.0, 1, 0)
                 y = torch.nn.functional.one_hot(y, 2).float()
                 graph.y = y.unsqueeze(0)
@@ -58,7 +58,7 @@ class GraphNormalize:
             if graph.y.shape[0] == 1:
                 graph.y = (graph.y * 100) / (717448.7552)
             elif graph.y.shape[0] > 1:
-                y = (graph.y)[self._target_month - 1]
+                y = (graph.y)[self._target_week - 1]
                 y = (y * 100) / (717448.7552)
                 graph.y = y.unsqueeze(0)
 
@@ -80,28 +80,28 @@ class ToCentralNodeAndNormalize:
         self,
         model,
         task,
-        target_month,
+        target_week,
         mean_std_per_feature,
         append_position_as_feature=True,
     ):
         self._model = model
         self._mean_std_tuples = None
         self._task = task
-        self._target_month = target_month
-        if target_month < 1 or target_month > 6:
+        self._target_week = target_week
+        if target_week < 1 or target_week > 6:
             raise ValueError("Target month is not valid")
         self._mean_std_per_feature = mean_std_per_feature
         self._append_position_as_feature = append_position_as_feature
 
     @property
-    def target_month(self):
-        return self._target_month
+    def target_week(self):
+        return self._target_week
 
-    @target_month.setter
-    def target_month(self, value):
+    @target_week.setter
+    def target_week(self, value):
         if value < 1 or value > 6:
             raise ValueError("Target month is not valid")
-        self._target_month = value
+        self._target_week = value
 
     def __call__(self, graph):
         tmp = list(zip(*self._mean_std_per_feature))
@@ -126,7 +126,7 @@ class ToCentralNodeAndNormalize:
                 graph.y = torch.where(graph.y > 0.0, 1, 0)
                 graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
             elif graph.y.shape[0] > 1:
-                y = (graph.y)[self._target_month - 1]
+                y = (graph.y)[self._target_week - 1]
                 y = torch.where(y > 0.0, 1, 0)
                 y = torch.nn.functional.one_hot(y, 2).float()
                 graph.y = y.unsqueeze(0)
@@ -135,7 +135,7 @@ class ToCentralNodeAndNormalize:
             if graph.y.shape[0] == 1:
                 graph.y = (graph.y * 100) / (717448.7552)
             elif graph.y.shape[0] > 1:
-                y = (graph.y)[self._target_month - 1]
+                y = (graph.y)[self._target_week - 1]
                 y = (y * 100) / (717448.7552)
                 graph.y = y.unsqueeze(0)
         else:

@@ -1091,7 +1091,7 @@ if __name__ == "__main__":
 #         transform = GraphNormalize(
 #             args.model_name,
 #             task=args.task,
-#             target_month=args.target_month,
+#             target_week=args.target_week,
 #             mean_std_per_feature=mean_std_per_feature,
 #             append_position_as_feature=True,
 #         )
@@ -1100,7 +1100,7 @@ if __name__ == "__main__":
 #         transform = ToCentralNodeAndNormalize(
 #             args.model_name,
 #             task=args.task,
-#             target_month=args.target_month,
+#             target_week=args.target_week,
 #             mean_std_per_feature=mean_std_per_feature,
 #             append_position_as_feature=True,
 #         )
@@ -1248,7 +1248,7 @@ if __name__ == "__main__":
 #         metavar="KEY",
 #         type=int,
 #         action="store",
-#         dest="target_month",
+#         dest="target_week",
 #         default=1,
 #         help="Target month",
 #     )

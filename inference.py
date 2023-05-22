@@ -113,8 +113,8 @@ def main(args):
     
     logger.info("Using model={}".format(model_name))
 
-    logger.info("Using target month={}".format(args.target_month))
-    transform.target_month = args.target_month
+    logger.info("Using target month={}".format(args.target_week))
+    transform.target_week = args.target_week
 
     test_dataset = GraphDataset(
         root_dir=args.test_path,
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         metavar="KEY",
         type=int,
         action="store",
-        dest="target_month",
+        dest="target_week",
         default=1,
         help="Target month",
     )

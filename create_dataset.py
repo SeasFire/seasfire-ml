@@ -449,8 +449,6 @@ class DatasetBuilder:
         )
 
         logger.debug("Computed sample={}".format(data))
-        print(data.x.shape)
-        print(data.y.shape)
         return data
 
     def _compute_local_vertices_features(
