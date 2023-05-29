@@ -446,6 +446,8 @@ class DatasetBuilder:
             edge_index=edge_index,
             pos=vertex_positions,
             area=area,
+            center_lat=center_lat,
+            center_lon=center_lon
         )
 
         logger.debug("Computed sample={}".format(data))
