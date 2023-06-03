@@ -1,6 +1,10 @@
 import torch
+import logging
 import torch.nn.functional as F
 from torch.nn import GRU
+
+
+logger = logging.getLogger(__name__)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -18,10 +22,12 @@ class GRUModel(torch.nn.Module):
         self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
 
         # print(self.parameters)
-        self.optimizer = torch.optim.Adam(
-            self.parameters(), lr=learning_rate, weight_decay=weight_decay
-        )
-
+        # self.optimizer = torch.optim.Adam(
+        #     self.parameters(), lr=learning_rate, weight_decay=weight_decay
+        # )
+        self.optimizer = torch.optim.Adadelta(self.parameters(), lr=1.0, rho=0.9, eps=1e-06, weight_decay=0, foreach=None, maximize=False)
+        logger.info("Optimizer={}".format(self.optimizer))
+        
         self.task = task
 
     def forward(

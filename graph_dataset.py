@@ -48,6 +48,10 @@ class GraphDataset(Dataset):
                 self._num_features = t_graph[0].shape[1]
         else: 
             self._num_features = graph.x.shape[1]
+    
+    @property
+    def len(self):
+        return len(self._indices)
 
     @property
     def num_features(self) -> int:

@@ -108,12 +108,14 @@ class ToCentralNodeAndNormalize:
     def __call__(self, graph):
         tmp = list(zip(*self._mean_std_per_feature))
         mu = torch.Tensor(list(tmp[0]))
+        mu = mu[:10]
         std = torch.Tensor(list(tmp[1]))
-
+        std = std[:10]
         if self._model == "GRU":
             # keep only first node of graph
             # assume that it is the central node
-            graph.x = graph.x[0, :, :]
+            
+            graph.x = graph.x[0, :10, :]
             mu = mu.unsqueeze(1)
             mu = mu.expand(-1, graph.x.shape[1])
             std = std.unsqueeze(1)
@@ -145,11 +147,11 @@ class ToCentralNodeAndNormalize:
 
         graph.x = torch.nan_to_num(graph.x, nan=-1.0)
 
-        # Concatenate positions with features
-        if self._append_position_as_feature:
-            graph.pos = graph.pos[0, :]
-            positions = graph.pos.unsqueeze(1).expand(-1, graph.x.shape[1])
-            graph.x = torch.cat((graph.x, positions), dim=0)
+        # # Concatenate positions with features
+        # if self._append_position_as_feature:
+        #     graph.pos = graph.pos[0, :]
+        #     positions = graph.pos.unsqueeze(1).expand(-1, graph.x.shape[1])
+        #     graph.x = torch.cat((graph.x, positions), dim=0)
 
         graph.x = graph.x.permute(1, 0)
         graph.y = graph.y.squeeze(0)
