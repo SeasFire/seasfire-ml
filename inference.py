@@ -1,8 +1,14 @@
-#!/usr/bin/env python3
+######### COMMENTS ###########
+# NEEDS FIX FOR DATES #
+# RUNS ONLY FOR BATCH SIZE 1 #
+# python3 inference_map.py --test-path "weekly_data/test/" --model-name "AttentionGNN-TGCN2" --model-path "gru.pt" #
 
+#!/usr/bin/env python3
+import numpy
 import logging
 import argparse
 import pickle as pkl
+import numpy as np
 from tqdm import tqdm
 
 import torch
@@ -34,11 +40,17 @@ def test(model, loader, criterion, task):
         test_predictions = []
         test_labels = []
 
+        preds_map_dict = {}
+        true_map_dict = {}
+
         for data in tqdm(loader):
             if isinstance(data, Data):
                 data = data.to(device)
                 x = data.x
                 y = data.y
+                time = data.center_time
+                lon = data.center_lon
+                lat = data.center_lat
                 edge_index = data.edge_index
                 batch = data.batch
             else:
@@ -47,7 +59,25 @@ def test(model, loader, criterion, task):
                 edge_index = None
                 batch = None
 
-            preds = model(x, edge_index, None, None, batch)
+            ############# PRINT PREDICTION MAP FOR ONE SPECIFIC TIME PERIOD ################
+
+            if data.center_time == numpy.datetime64('2020-01-01T00:00:00.000000000'):
+                preds = model(x, edge_index, None, None, batch)
+                dict_preds = torch.argmax(preds, dim=1)
+                dict_y = torch.argmax(y, dim=1)
+                preds_map_dict[((data.center_lon).item(),(data.center_lat).item())] = (dict_preds.item())
+                true_map_dict[((data.center_lon).item(),(data.center_lat).item())] = (dict_y.item())
+            # print(data.center_lon, data.center.lat)
+            # preds = model(x, edge_index, None, None, batch)
+
+            # dict_preds = torch.argmax(preds, dim=1)
+            # dict_y = torch.argmax(y, dim=1)
+            # map_dict = {}
+            # for i in range(0, len(dict_y)):
+            #     if data.center_time[i] == numpy.datetime64('2020-01-01T00:00:00.000000000'):
+            #         map_dict[(data.center_lon[i],data.center_lat[i])] = (dict_preds[i],dict_y[i])
+
+            ############# END OF PRINTING PREDICTION MAP FOR ONE SPECIFIC TIME PERIOD ################
 
             if task == "regression":
                 y = y.unsqueeze(1)
@@ -60,14 +90,58 @@ def test(model, loader, criterion, task):
                 for metric in test_metrics:
                     metric.update(preds, y_class)
 
+        ################ SAVE PREDICTIONS IN PKL FILE #######################
+        with open('preds_map_dict.pkl', 'wb') as handle:
+            pkl.dump(preds_map_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
+        with open('preds_map_dict.pkl', 'rb') as handle:
+            preds_map_dict = pkl.load(handle)
+        
+        with open('true_map_dict.pkl', 'wb') as handle:
+            pkl.dump(true_map_dict, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
+        with open('true_map_dict.pkl', 'rb') as handle:
+            true_map_dict = pkl.load(handle)
+
+        print(preds_map_dict)
+        print(true_map_dict)
+        ################ END OF SAVING PREDICTIONS IN PKL FILE #######################
+
+        ################## PRINT PREDICTIONS IN MAP ##########################
+        lon_list = [-24.5, -23.5, -22.5, -21.5, -20.5, -19.5, -18.5, -17.5, -16.5, -15.5, -14.5, -13.5, -12.5,
+                    -11.5, -10.5, -9.5, -8.5, -7.5, -6.5, -5.5, -4.5, -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5,
+                    4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5, 18.5, 19.5,
+                    20.5, 21.5, 22.5, 23.5, 24.5, 25.5, 26.5, 27.5, 28.5, 29.5, 30.5, 31.5, 32.5, 33.5, 34.5,
+                    35.5, 36.5, 37.5, 38.5, 39.5, 40.5, 41.5, 42.5, 43.5, 44.5, 45.5, 46.5, 47.5, 48.5, 49.5]
+
+        lat_list = [36.5, 37.5, 38.5, 39.5, 40.5, 41.5, 42.5, 43.5, 44.5, 45.5, 46.5, 47.5, 48.5, 49.5, 50.5,
+                    51.5, 52.5, 53.5, 54.5, 55.5, 56.5, 57.5, 58.5, 59.5, 60.5, 61.5, 62.5, 63.5, 64.5, 65.5, 
+                    66.5, 67.5, 68.5, 69.5, 70.5, 71.5]
+
+        preds_map = np.empty([75,36])
+        true_map = np.empty([75,36])
+
+        for i, lon in enumerate(lon_list):
+            for j, lat in enumerate(lat_list):
+                if (lon,lat) in list(preds_map_dict.keys()):
+                    preds_map[i,j] = (preds_map_dict[(lon,lat)])
+                    true_map[i,j] = (true_map_dict[(lon,lat)])
+                else:
+                    preds_map[i,j] = 0
+                    true_map[i,j] = 0
+                
+        plt.figure()
+        #subplot(r,c) provide the no. of rows and columns
+        f, axarr = plt.subplots(1,2) 
+        # use the created array to output your multiple images
+        axarr[0].imshow(preds_map)
+        axarr[1].imshow(true_map)
+        plt.savefig("preds2.png")
+        plt.show()
+        ################## END OF PRINTING PREDICTIONS IN MAP ######################
+
         test_loss = criterion(torch.cat(test_labels), torch.cat(test_predictions))
         logger.info(f" | Test Loss: {test_loss}")
-
-        # #Count zeros and ones in predictions and true values
-        # pred_new = torch.argmax(torch.cat(test_predictions), dim=1)
-        # print("Count zeros and ones in y_pred: ", torch.bincount(pred_new))
-        # y_new = torch.argmax(torch.cat(test_labels), dim=1)
-        # print("Count zeros and ones in y_true: ", torch.bincount(y_new))
 
         if task == "binary":
             for metric, metric_name in zip(
@@ -191,7 +265,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=32,
+        default=1,
         help="Batch size",
     )
     parser.add_argument(
@@ -200,8 +274,11 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_week",
-        default=1,
+        default=4,
         help="Target week",
     )
     args = parser.parse_args()
     main(args)
+
+
+#python3 inference_map.py --test-path "weekly_data/test/" --model-name "AttentionGNN-TGCN2" --model-path "random_best_gru.pt" 
