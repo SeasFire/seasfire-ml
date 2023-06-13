@@ -9,6 +9,7 @@ import logging
 import argparse
 import pickle as pkl
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 import torch
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def test(model, loader, criterion, task):
+def test(model, loader, criterion, task, date):
 
     model = model.to(device)
 
@@ -60,22 +61,15 @@ def test(model, loader, criterion, task):
                 batch = None
 
             ############# PRINT PREDICTION MAP FOR ONE SPECIFIC TIME PERIOD ################
+            preds = model(x, edge_index, None, None, batch)
 
-            if data.center_time == numpy.datetime64('2020-01-01T00:00:00.000000000'):
-                preds = model(x, edge_index, None, None, batch)
-                dict_preds = torch.argmax(preds, dim=1)
-                dict_y = torch.argmax(y, dim=1)
-                preds_map_dict[((data.center_lon).item(),(data.center_lat).item())] = (dict_preds.item())
-                true_map_dict[((data.center_lon).item(),(data.center_lat).item())] = (dict_y.item())
-            # print(data.center_lon, data.center.lat)
-            # preds = model(x, edge_index, None, None, batch)
-
-            # dict_preds = torch.argmax(preds, dim=1)
-            # dict_y = torch.argmax(y, dim=1)
-            # map_dict = {}
-            # for i in range(0, len(dict_y)):
-            #     if data.center_time[i] == numpy.datetime64('2020-01-01T00:00:00.000000000'):
-            #         map_dict[(data.center_lon[i],data.center_lat[i])] = (dict_preds[i],dict_y[i])
+            dict_preds = torch.argmax(preds, dim=1)
+            dict_y = torch.argmax(y, dim=1)
+            
+            for i in range(0, len(dict_y)):
+                if data.center_time[i] == numpy.datetime64(date):
+                    preds_map_dict[((data.center_lon[i]).item(),(data.center_lat[i]).item())] = (dict_preds[i].item())
+                    true_map_dict[((data.center_lon[i]).item(),(data.center_lat[i]).item())] = (dict_y[i].item())
 
             ############# END OF PRINTING PREDICTION MAP FOR ONE SPECIFIC TIME PERIOD ################
 
@@ -103,8 +97,6 @@ def test(model, loader, criterion, task):
         with open('true_map_dict.pkl', 'rb') as handle:
             true_map_dict = pkl.load(handle)
 
-        print(preds_map_dict)
-        print(true_map_dict)
         ################ END OF SAVING PREDICTIONS IN PKL FILE #######################
 
         ################## PRINT PREDICTIONS IN MAP ##########################
@@ -133,7 +125,7 @@ def test(model, loader, criterion, task):
         plt.figure()
         #subplot(r,c) provide the no. of rows and columns
         f, axarr = plt.subplots(1,2) 
-        # use the created array to output your multiple images
+        # use the created array to output our multiple images
         axarr[0].imshow(preds_map)
         axarr[1].imshow(true_map)
         plt.savefig("preds2.png")
@@ -214,7 +206,8 @@ def main(args):
         batch_size=args.batch_size,
     )
 
-    test(model=model, loader=loader, criterion=criterion, task=args.task)
+    date  = args.date + "T00:00:00.000000000"
+    test(model=model, loader=loader, criterion=criterion, task=args.task, date = date)
 
 
 if __name__ == "__main__":
@@ -265,7 +258,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=1,
+        default=64,
         help="Batch size",
     )
     parser.add_argument(
@@ -276,6 +269,15 @@ if __name__ == "__main__":
         dest="target_week",
         default=4,
         help="Target week",
+    )
+    parser.add_argument(
+        "--date",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="date",
+        default="2020-01-01",
+        help="Predicted date",
     )
     args = parser.parse_args()
     main(args)
