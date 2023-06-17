@@ -213,11 +213,7 @@ class DatasetBuilder:
         input_vars = self._input_vars
         if self._include_oci_variables:
             input_vars += self._oci_input_vars
-        points_input_vars = (
-            self._cube[input_vars]
-            .isel(time=time_slice)
-            .load()
-        )
+        points_input_vars = self._cube[input_vars].isel(time=time_slice).load()
 
         timeseries_len = len(points_input_vars.coords["time"])
         if timeseries_len != self._timeseries_weeks:
@@ -240,7 +236,6 @@ class DatasetBuilder:
                 vertices_idx[cur_vertex] = len(vertices)
                 vertices.append(cur_vertex)
 
-
         # Create vertex feature tensors
         vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude"))
         vertex_features = []
@@ -261,9 +256,7 @@ class DatasetBuilder:
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
-        grid = np.meshgrid(
-            lat_coords, lon_coords
-        )
+        grid = np.meshgrid(lat_coords, lon_coords)
         result = (grid, vertices, vertices_idx, vertex_features, vertex_positions)
 
         return result
@@ -404,7 +397,16 @@ class DatasetBuilder:
             radius=radius,
         )
 
+        # figure out index of center vertex
         center_vertex_idx = local_vertices_idx[(center_lat, center_lon)]
+
+        # compute grid edges for local vertices
+        local_edges = self._create_local_edges(
+            center_lat=center_lat,
+            center_lon=center_lon,
+            radius=radius,
+            vertices_idx=local_vertices_idx,
+        )
 
         # compute global vertices
         (
@@ -415,14 +417,12 @@ class DatasetBuilder:
             global_vertices_positions,
         ) = self._create_global_vertices(time=center_time)
 
-        # local_edges = self._create_local_edges(
-        #     center_lat=center_lat,
-        #     center_lon=center_lon,
-        #     radius=radius,
-        #     vertices_idx=local_vertices_idx,
-        # )
+        # renumber global vertices based on number of local vertices
+        num_local_vertices = len(local_vertices)
+        global_vertices_idx = {
+            k: v + num_local_vertices for k, v in global_vertices_idx.items()
+        }
 
-        # TODO: combine local and global vertices
         # TODO: add edges
 
         # logger.info("Local vertices features={}".format(local_vertices_features))
@@ -443,15 +443,15 @@ class DatasetBuilder:
         area = torch.from_numpy(np.array(center_area)).type(torch.float32)
 
         # Create edge index tensor
-        # edges = local_edges
-        # sources, targets = zip(*edges)
-        # edge_index = torch.tensor([sources, targets], dtype=torch.long)
-        # logger.debug("Computed edge tensor= {}".format(edge_index))
+        edges = local_edges
+        sources, targets = zip(*edges)
+        edge_index = torch.tensor([sources, targets], dtype=torch.long)
+        logger.debug("Computed edge tensor= {}".format(edge_index))
 
         data = Data(
             x=vertices_features,
             y=graph_level_ground_truth,
-            # edge_index=edge_index,
+            edge_index=edge_index,
             pos=vertices_positions,
             area=area,
             center_lat=center_lat,
@@ -786,7 +786,7 @@ class DatasetBuilder:
             radius=radius,
             normalize=normalize,
         )
-        
+
         grid_lat, grid_lon = np.meshgrid(lat_range, lon_range)
         return grid_lat, grid_lon
 
