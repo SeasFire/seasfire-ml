@@ -33,28 +33,28 @@ class DatasetBuilder:
     ):
         self._cube_path = cube_path
         self._input_vars = [
-            "lst_day",
             "mslp",
-            "ndvi",
-            "pop_dens",
-            "rel_hum",
-            "ssrd",
+            "tp", # TODO: log
+            "vpd",
             "sst",
             "t2m_mean",
-            "tp",
-            "vpd",
+            "ssrd",
+            "swvl1",
+            "lst_day",
+            "ndvi",
+            "pop_dens", # TODO: log
         ]
         self._oci_input_vars = [
-            # "oci_censo",
-            # "oci_ea",
-            # "oci_epo",
-            # "oci_gmsst",
+            "oci_wp",
+            "oci_pna",
             "oci_nao",
-            # "oci_nina34_anom",
-            # "oci_pdo",
-            # "oci_pna",
-            # "oci_soi",
-            # "oci_wp",
+            "oci_soi",
+            "oci_gmsst",
+            "oci_pdo",
+            "oci_ea",
+            "oci_epo",
+            "oci_nina34_anom",
+            "oci_censo",
         ]
         self._include_oci_variables = include_oci_variables
 
@@ -113,12 +113,19 @@ class DatasetBuilder:
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
 
-        # for oci_var in self._oci_input_vars:
-        #     logger.debug(
-        #         "Oci name {}, description: {}".format(
-        #             oci_var, self._cube[oci_var].description
-        #         )
-        #     )
+        for input_var in self._input_vars:
+            logger.info(
+                "Var name {}, description: {}".format(
+                    input_var, self._cube[input_var].description
+                )
+            )
+
+        for oci_var in self._oci_input_vars:
+            logger.info(
+                "Oci name {}, description: {}".format(
+                    oci_var, self._cube[oci_var].description
+                )
+            )
         # print(self._cube.longitude.values)
         # for x in self._cube.longitude.values:
         #     print(x)
