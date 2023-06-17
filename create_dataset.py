@@ -28,7 +28,6 @@ class DatasetBuilder:
         seed,
         timeseries_weeks,
         target_count,
-        target_length,
         include_oci_variables,
         global_scale_factor,
     ):
@@ -154,29 +153,16 @@ class DatasetBuilder:
             "Maximum week with valid data = {}".format(self._max_week_with_data)
         )
 
-        # how many targets periods to generate in the future
-        # e.g. 6 means the next six months (if target length is 4 weeks)
-        # e.g. 24 means the next six months (if target length is 1)
+        # how many targets periods to generate in the future, each period is one week
         self._target_count = target_count
-        # length of each target period in weeks, e.g. 4
-        # length of the target period is now 1 week (8 days)
-        self._target_length = target_length
 
-        logger.info("Will generate {} target periods.".format(self._target_count))
-        for p in range(self._target_count):
-            logger.info(
-                "Target period {} is weeks in the future: [{},{}]".format(
-                    p,
-                    p * self._target_length,
-                    (p + 1) * self._target_length,
-                )
-            )
+        logger.info("Will generate {} target periods (weeks).".format(self._target_count))
 
         # split time periods
         self._time_train = (
             self._timeseries_weeks,
             self._year_in_weeks * self._number_of_train_years
-            - (self._target_count * self._target_length),
+            - self._target_count,
         )
         logger.info("Train time in weeks: {}".format(self._time_train))
 
@@ -190,7 +176,7 @@ class DatasetBuilder:
         self._time_test = (
             self._year_in_weeks * self._number_of_train_years
             + 2 * self._timeseries_weeks,
-            self._max_week_with_data - (self._target_count * self._target_length),
+            self._max_week_with_data - self._target_count,
         )
         logger.info("Test time in weeks: {}".format(self._time_test))
 
@@ -628,8 +614,7 @@ class DatasetBuilder:
         center_time_idx = np.where(self._cube["time"] == center_time)[0][0]
         time_slice = slice(
             center_time_idx + 1,
-            center_time_idx + 1 + self._target_length * self._target_count,
-            self._target_length,
+            center_time_idx + 1 + self._target_count
         )
         logger.debug(
             "Computing ground truth for lat={}, lon={}, time={}, time_slice={}".format(
@@ -833,7 +818,6 @@ def main(args):
         args.seed,
         args.timeseries_weeks,
         args.target_count,
-        args.target_length,
         args.include_oci_variables,
         args.global_scale_factor,
     )
@@ -903,7 +887,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.01,
+        default=0.002,
         help="Positive sample threshold",
     )
     parser.add_argument(
@@ -912,7 +896,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="positive_samples_size",
-        default=2500,
+        default=100,
         help="Positive samples size.",
     )
     parser.add_argument(
@@ -962,17 +946,8 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_count",
-        default=6,
+        default=24,
         help="Target count. How many targets in the future to generate.",
-    )
-    parser.add_argument(
-        "--target-length",
-        metavar="KEY",
-        type=int,
-        action="store",
-        dest="target_length",
-        default=4,
-        help="Target length. How long does the target period last. Measured in weeks.",
     )
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
