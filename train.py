@@ -251,6 +251,7 @@ def main(args):
             task=args.task,
             target_week=args.target_week,
             mean_std_per_feature=mean_std_per_feature,
+            use_first_number_of_variables=10,
             append_position_as_feature=True,
         )
     else:
