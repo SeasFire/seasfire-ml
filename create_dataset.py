@@ -341,7 +341,7 @@ class DatasetBuilder:
                 # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
 
                 # 1-hop neighbors
-                cur_neighbors = self._create_neighbors(
+                cur_neighbors = self._create_all_neighbors(
                     cur, radius=1, include_self=False
                 )
                 # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
@@ -400,6 +400,11 @@ class DatasetBuilder:
         # figure out index of center vertex
         center_vertex_idx = local_vertices_idx[(center_lat, center_lon)]
 
+        # map local grid to indexes
+        # local_grid_lat, local_grid_lon = local_grid
+        # local_lat_lon_to_idx = np.vectorize(lambda lat, lon: local_vertices_idx[(lat, lon)])
+        # local_grid_idx = local_lat_lon_to_idx(local_grid_lat, local_grid_lon)
+
         # compute grid edges for local vertices
         local_edges = self._create_local_edges(
             center_lat=center_lat,
@@ -423,8 +428,19 @@ class DatasetBuilder:
             k: v + num_local_vertices for k, v in global_vertices_idx.items()
         }
 
-        # TODO: add edges
+        # map global grid to indexes
+        # global_grid_lat, global_grid_lon = global_grid
+        # global_lat_lon_to_idx = np.vectorize(lambda lat, lon: global_vertices_idx[(lat, lon)])
+        # global_grid_idx = global_lat_lon_to_idx(global_grid_lat, global_grid_lon)
 
+        # link all global nodes to the central one
+        global_to_local_edges = [] 
+        for g_idx in global_vertices_idx.values(): 
+            e = (g_idx, center_vertex_idx)
+            global_to_local_edges.append(e)
+            e_rev = (center_vertex_idx, g_idx)
+            global_to_local_edges.append(e_rev)
+        
         # logger.info("Local vertices features={}".format(local_vertices_features))
         # logger.info("Global vertices features={}".format(global_vertices_features))
 
@@ -443,7 +459,7 @@ class DatasetBuilder:
         area = torch.from_numpy(np.array(center_area)).type(torch.float32)
 
         # Create edge index tensor
-        edges = local_edges
+        edges = local_edges + global_to_local_edges
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
         logger.debug("Computed edge tensor= {}".format(edge_index))
@@ -460,7 +476,7 @@ class DatasetBuilder:
             center_vertex_idx=center_vertex_idx,
         )
 
-        logger.info("Computed sample={}".format(data))
+        logger.debug("Computed sample={}".format(data))
         return data
 
     def _sample_wrt_threshold(
@@ -715,7 +731,7 @@ class DatasetBuilder:
             and lon <= center_lon + radius * self._sp_res
         )
 
-    def _create_neighbors(self, lat_lon, radius=1, include_self=False, normalize=False):
+    def _create_all_neighbors(self, lat_lon, radius=1, include_self=False, normalize=False):
         """Create list of all neighbors inside a radius. Radius is measured in multiples of
         the spatial resolution.
         """
