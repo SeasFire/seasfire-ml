@@ -11,7 +11,14 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN, TransformerAggregationGNN
+from models import (
+    AttentionGNN,
+    GRUModel,
+    TGatConv,
+    TGCN2,
+    Attention2GNN,
+    TransformerAggregationGNN,
+)
 from graph_dataset import GraphDataset
 from transforms import GraphNormalize, ToCentralNodeAndNormalize
 from utils import compute_mean_std_per_feature
@@ -35,6 +42,8 @@ def set_seed(seed: int = 42) -> None:
 
 
 def train(model, train_loader, epochs, val_loader, task, model_name, transform):
+    logger.info("Starting training")
+
     train_metrics_dict = {
         "Accuracy": [],
         "F1Score": [],
@@ -52,7 +61,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
 
     current_max_avg = 0
     current_best_epoch = 0
-    best_model = model
+    current_best_model = None
 
     optimizer = model.optimizer
 
@@ -171,43 +180,35 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
-            
             if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
-                print(val_metrics_dict["AveragePrecision"][epoch - 1])
-                best_model = model
                 current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
-                current_best_epoch = epoch
-
-                logger.info("Saving model as {}".format(args.model_path))
-                model_info = {
-                    "model": best_model,
+                logger.info("Found new best model in epoch {}".format(epoch))
+                logger.info("Saving best model as best_{}.pt".format(model_name))
+                torch.save({
+                    "model": model,
                     "criterion": criterion,
                     "transform": transform,
                     "name": model_name,
-                }
-                # Save the entire best model to PATH
-                torch.save(model_info, "best_" + args.model_path)
-
-                logger.info("Best epoch: {}".format(current_best_epoch))
+                }, "best_{}.pt".format(model_name))
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
-        logger.info("Saving model as {}".format(args.model_path))
-        model_info = {
-            "model": best_model,
+    logger.info("Saving model as {}.pt".format(model_name))
+    torch.save(
+        {
+            "model": model,
             "criterion": criterion,
             "transform": transform,
             "name": model_name,
-        }
-        # Save the entire best model to PATH
-        torch.save(model_info, str(epoch) + "_" + args.model_path)
+        },
+        "{}.pt".format(model_name)
+    )
+
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
         pkl.dump(val_metrics_dict, file)
-
-    return model, best_model, criterion, current_best_epoch
 
 
 def main(args):
@@ -265,6 +266,8 @@ def main(args):
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
+        num_workers=8,
+        pin_memory=True,
     )
 
     val_dataset = GraphDataset(
@@ -347,39 +350,15 @@ def main(args):
     else:
         raise ValueError("Invalid model")
 
-    logger.info("Starting training")
-    model, best_model, criterion, current_best_epoch = train(
+    train(
         model=model,
         train_loader=train_loader,
         epochs=args.epochs,
         val_loader=val_loader,
         task=args.task,
-        model_name = args.model_name,
-        transform = transform,
+        model_name=args.model_name,
+        transform=transform,
     )
-
-    logger.info("Saving model as {}".format(args.model_path))
-    model_info = {
-        "model": model,
-        "criterion": criterion,
-        "transform": transform,
-        "name": args.model_name,
-    }
-
-    best_model_info = {
-        "model": best_model,
-        "criterion": criterion,
-        "transform": transform,
-        "name": args.model_name,
-    }
-
-    # Save the entire model to PATH
-    torch.save(model_info, args.model_path)
-
-    # Save the entire best model to PATH
-    torch.save(best_model_info, "best_" + args.model_path)
-
-    logger.info("Best epoch: {}".format(current_best_epoch))
 
 
 if __name__ == "__main__":
@@ -412,7 +391,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="GRU",
+        default="AttentionGNN-TGCN2",
         help="Model name",
     )
     parser.add_argument(
@@ -421,7 +400,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="gru.pt",
+        default="AttentionGNN-TGCN2.pt",
         help="Path to save the trained model",
     )
     parser.add_argument(
@@ -440,7 +419,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=64,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
