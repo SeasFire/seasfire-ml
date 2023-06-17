@@ -12,75 +12,6 @@ from torch_geometric.data import Data
 
 logger = logging.getLogger(__name__)
 
-OCI_BOUNDING_BOXES = {
-    "oci_nao": [
-        {
-            "min_lat": 20.0,
-            "max_lat": 55.0,
-            "min_lon": -90,
-            "max_lon": 60.0,
-        },
-        {
-            "min_lat": 55.0,
-            "max_lat": 90.0,
-            "min_lon": -90.0,
-            "max_lon": 60.0,
-        },
-    ],
-    "oci_nina34_anom": [
-        {
-            "min_lat": -170.0,
-            "max_lat": 120.0,
-            "min_lon": -5.0,
-            "max_lon": 5.0,
-        }
-    ],
-    "oci_pdo": [
-        {
-            "min_lat": 20.0,
-            "max_lat": 70.0,
-            "min_lon": 115.0,
-            "max_lon": 250.0,
-        }
-    ],
-    "oci_pna": [
-        {
-            "min_lat": 20.0,
-            "max_lat": 80.0,
-            "min_lon": -60.0,
-            "max_lon": 120.0,
-        }
-    ],
-    "oci_soi": [
-        {
-            "min_lat": -18.625,
-            "max_lat": -16.375,
-            "min_lon": -150.875,
-            "max_lon": -148.625,
-        },
-        {
-            "min_lat": -13.625,
-            "max_lat": -11.375,
-            "min_lon": -132.125,
-            "max_lon": -129.875,
-        },
-    ],
-    "oci_wp": [
-        {
-            "min_lat": 50.0,
-            "max_lat": 70.0,
-            "min_lon": -150.0,
-            "max_lon": 140.0,
-        },
-        {
-            "min_lat": 25.0,
-            "max_lat": 40.0,
-            "min_lon": -150.0,
-            "max_lon": 140.0,
-        },
-    ],
-}
-
 
 class DatasetBuilder:
     def __init__(
@@ -90,8 +21,7 @@ class DatasetBuilder:
         load_cube_in_memory,
         output_folder,
         split,
-        small_radius,
-        medium_radius,
+        radius,
         positive_samples_threshold,
         positive_samples_size,
         generate_all_samples,
@@ -178,7 +108,6 @@ class DatasetBuilder:
             # "oci_wp",
         ]
         self._include_oci_variables = include_oci_variables
-        self._oci_locations = self._vertices_per_oci()
 
         # for oci_var in self._oci_input_vars:
         #     logger.debug(
@@ -193,14 +122,9 @@ class DatasetBuilder:
         # for x in self._cube.longitude.values:
         #     print(x)
 
-        # Small radius for grid graph
-        self._small_radius = small_radius
-        self._medium_radius = medium_radius
-        logger.info(
-            "Using small={} and medium={} radius".format(
-                self._small_radius, self._medium_radius
-            )
-        )
+        # Radius for grid graph
+        self._radius = radius
+        logger.info("Using radius={} for grid graph".format(self._radius))
 
         self._global_scale_factor = global_scale_factor
         logger.info("Using global scale factor={}".format(self._global_scale_factor))
@@ -274,19 +198,6 @@ class DatasetBuilder:
         else:
             raise ValueError("Invalid split type")
 
-    def _get_oci_features(
-        self,
-        center_time,
-    ):
-        """Get the OCI features for a certain timerange"""
-        first_week = center_time - np.timedelta64(
-            self._timeseries_weeks * self._days_per_week, "D"
-        )
-        points_oci_vars = self._cube[self._oci_input_vars].sel(
-            time=slice(first_week, center_time)
-        )
-        return points_oci_vars
-
     def _create_local_vertices(self, center_lat, center_lon, center_time, radius):
         # Create a grid graph around the center vertex.
         grid = list(
@@ -307,7 +218,9 @@ class DatasetBuilder:
 
         # find center_time in time coords
         center_time_idx = np.where(self._cube["time"] == center_time)[0][0]
-        time_slice = slice(center_time_idx - self._timeseries_weeks + 1, center_time_idx+1)
+        time_slice = slice(
+            center_time_idx - self._timeseries_weeks + 1, center_time_idx + 1
+        )
         lat_slice = slice(
             center_lat + (radius + 1) * self._sp_res,
             center_lat - (radius + 1) * self._sp_res,
@@ -318,8 +231,8 @@ class DatasetBuilder:
         )
 
         input_vars = self._input_vars
-        # if self._include_oci_variables:
-        #     input_vars += self._oci_input_vars
+        if self._include_oci_variables:
+            input_vars += self._oci_input_vars
         points_input_vars = (
             self._cube[input_vars]
             .sel(
@@ -330,8 +243,12 @@ class DatasetBuilder:
             .load()
         )
         timeseries_len = len(points_input_vars.coords["time"])
-        if timeseries_len != self._timeseries_weeks: 
-            logger.warning("Invalid time series length {} != {}".format(timeseries_len, self._timeseries_weeks))
+        if timeseries_len != self._timeseries_weeks:
+            logger.warning(
+                "Invalid time series length {} != {}".format(
+                    timeseries_len, self._timeseries_weeks
+                )
+            )
             raise ValueError("Invalid time series length")
 
         # Create vertex feature tensors
@@ -409,20 +326,22 @@ class DatasetBuilder:
 
         # find center_time in time coords
         center_time_idx = np.where(global_region["time"] == center_time)[0][0]
-        time_slice = slice(center_time_idx - self._timeseries_weeks + 1, center_time_idx+1)
-
-        input_vars = self._input_vars
-        # if self._include_oci_variables:
-        #     input_vars += self._oci_input_vars
-        points_input_vars = (
-            global_agg[input_vars]
-            .isel(time=time_slice)
-            .load()
+        time_slice = slice(
+            center_time_idx - self._timeseries_weeks + 1, center_time_idx + 1
         )
 
+        input_vars = self._input_vars
+        if self._include_oci_variables:
+            input_vars += self._oci_input_vars
+        points_input_vars = global_agg[input_vars].isel(time=time_slice).load()
+
         timeseries_len = len(points_input_vars.coords["time"])
-        if timeseries_len != self._timeseries_weeks: 
-            logger.warning("Invalid time series length {} != {}".format(timeseries_len, self._timeseries_weeks))
+        if timeseries_len != self._timeseries_weeks:
+            logger.warning(
+                "Invalid time series length {} != {}".format(
+                    timeseries_len, self._timeseries_weeks
+                )
+            )
             raise ValueError("Invalid time series length")
 
         # Create list of vertices
@@ -538,268 +457,6 @@ class DatasetBuilder:
 
         logger.info("Computed sample={}".format(data))
         return data
-
-    def create_sample(
-        self,
-        center_lat,
-        center_lon,
-        center_time,
-        center_area,
-        ground_truth,
-        small_radius,
-        medium_radius,
-    ):
-        logger.info(
-            "Creating sample for center_lat={}, center_lon={}, center_time={}".format(
-                center_lat, center_lon, center_time
-            )
-        )
-
-        # Initialize basic graph representation
-        vertices = []
-        vertices_idx = {}
-        edges = []
-
-        # Create a small grid graph around the center vertex (small radius).
-        grid = list(
-            map(
-                self._normalize_lat_lon,
-                self._create_neighbors(
-                    (center_lat, center_lon), include_self=True, radius=small_radius
-                ),
-            )
-        )
-        for cur in grid:
-            cur_vertex = (cur[0], cur[1])
-            vertices_idx[cur_vertex] = len(vertices)
-            vertices.append(cur_vertex)
-
-        # Create small grid edges
-        for lat_inc in range(-small_radius, small_radius + 1):
-            for lon_inc in range(-small_radius, small_radius + 1):
-                # vertex that we care about
-                cur = (
-                    center_lat + lat_inc * self._sp_res,
-                    center_lon + lon_inc * self._sp_res,
-                )
-                cur_idx = vertices_idx[(cur[0], cur[1])]
-                # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
-
-                # 1-hop neighbors
-                cur_neighbors = self._create_neighbors(
-                    cur, radius=1, include_self=False
-                )
-                # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
-
-                # 1-hop neighbors inside our bounding box from the center vertex
-                cur_neighbors_bb = [
-                    neighbor
-                    for neighbor in cur_neighbors
-                    if self._in_bounding_box(
-                        neighbor,
-                        center_lat_lon=(center_lat, center_lon),
-                        radius=small_radius,
-                    )
-                ]
-                cur_neighbors_bb = list(map(self._normalize_lat_lon, cur_neighbors_bb))
-                cur_neighbors_bb_idx = [
-                    vertices_idx[(x[0], x[1])] for x in cur_neighbors_bb
-                ]
-                # logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
-                # logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
-
-                for neighbor_idx in cur_neighbors_bb_idx:
-                    # add only one direction, the other will be added by the other vertex
-                    edges.append((cur_idx, neighbor_idx))
-
-        # Create medium radius periphery
-        logger.debug("Creating mid-range periphery")
-        periphery_vertices = self._create_periphery_neighbors(
-            (center_lat, center_lon), radius=medium_radius, normalize=True
-        )
-        center_idx = vertices_idx[(center_lat, center_lon)]
-        for cur_p_vertex in periphery_vertices:
-            vertices_idx[cur_p_vertex] = len(vertices)
-            cur_p_vertex_idx = len(vertices)
-            vertices.append(cur_p_vertex)
-
-            edges.append((center_idx, cur_p_vertex_idx))
-            edges.append((cur_p_vertex_idx, center_idx))
-
-            cur_p_neighbors = self._create_neighbors(
-                cur_p_vertex, radius=1, include_self=False, normalize=True
-            )
-            for cur_p_neighbor in cur_p_neighbors:
-                vertices_idx[cur_p_neighbor] = len(vertices)
-                cur_p_neighbor_idx = len(vertices)
-                vertices.append(cur_p_neighbor)
-
-                edges.append((cur_p_vertex_idx, cur_p_neighbor_idx))
-                edges.append((cur_p_neighbor_idx, cur_p_vertex_idx))
-
-        vertex_features, vertex_positions = self._compute_local_vertices_features(
-            vertices, center_lat, center_lon, center_time, small_radius, medium_radius
-        )
-
-        # Create long range vertices to OCI
-        for cur_oci_vertex in self._oci_locations:
-            logger.debug("Oci = {}".format(cur_oci_vertex))
-            vertices_idx[cur_oci_vertex] = len(vertices)
-            cur_oci_vertex_idx = len(vertices)
-            vertices.append(cur_oci_vertex_idx)
-
-            oci_features, oci_positions = self._compute_vertex_features(
-                cur_oci_vertex[0], cur_oci_vertex[1], center_time
-            )
-            vertex_features.extend(oci_features)
-            vertex_positions.extend(oci_positions)
-
-            edges.append((center_idx, cur_oci_vertex_idx))
-            edges.append((cur_oci_vertex_idx, center_idx))
-
-            cur_oci_vertex_neighbors = self._create_neighbors(
-                cur_oci_vertex, radius=1, include_self=False, normalize=True
-            )
-
-            for cur_oci_vertex_neighbor in cur_oci_vertex_neighbors:
-                vertices_idx[cur_oci_vertex_neighbor] = len(vertices)
-                cur_oci_vertex_neighbor_idx = len(vertices)
-                vertices.append(cur_oci_vertex_neighbor)
-
-                oci_features, oci_positions = self._compute_vertex_features(
-                    cur_oci_vertex_neighbor[0], cur_oci_vertex_neighbor[1], center_time
-                )
-                vertex_features.extend(oci_features)
-                vertex_positions.extend(oci_positions)
-
-                edges.append((cur_oci_vertex_idx, cur_oci_vertex_neighbor_idx))
-                edges.append((cur_oci_vertex_neighbor_idx, cur_oci_vertex_idx))
-
-        vertex_features = np.array(vertex_features)
-        vertex_features = torch.from_numpy(vertex_features).type(torch.float32)
-        vertex_positions = np.array(vertex_positions)
-        vertex_positions = torch.from_numpy(vertex_positions).type(torch.float32)
-
-        graph_level_ground_truth = torch.from_numpy(np.array(ground_truth)).type(
-            torch.float32
-        )
-        assert len(graph_level_ground_truth) == self._target_count
-
-        area = torch.from_numpy(np.array(center_area)).type(torch.float32)
-
-        # Create edge index tensor
-        sources, targets = zip(*edges)
-        edge_index = torch.tensor([sources, targets], dtype=torch.long)
-        logger.debug("Computed edge tensor= {}".format(edge_index))
-
-        data = Data(
-            x=vertex_features,
-            y=graph_level_ground_truth,
-            edge_index=edge_index,
-            pos=vertex_positions,
-            area=area,
-            center_lat=center_lat,
-            center_lon=center_lon,
-            center_time=center_time,
-        )
-
-        logger.debug("Computed sample={}".format(data))
-        return data
-
-    def _compute_local_vertices_features(
-        self, vertices, center_lat, center_lon, center_time, small_radius, medium_radius
-    ):
-        first_week = center_time - np.timedelta64(
-            self._timeseries_weeks * self._days_per_week, "D"
-        )
-
-        max_radius = max(medium_radius + 1, small_radius + 1)
-        lat_slice = slice(
-            center_lat + max_radius * self._sp_res,
-            center_lat - max_radius * self._sp_res,
-        )
-        lon_slice = slice(
-            center_lon - max_radius * self._sp_res,
-            center_lon + max_radius * self._sp_res,
-        )
-
-        input_vars = self._input_vars
-        if self._include_oci_variables:
-            input_vars += self._oci_input_vars
-        points_input_vars = (
-            self._cube[input_vars]
-            .sel(
-                latitude=lat_slice,
-                longitude=lon_slice,
-                time=slice(first_week, center_time),
-            )
-            .load()
-        )
-
-        # Create vertex feature tensors
-        vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude"))
-        vertex_features = []
-        vertex_positions = []
-        for vertex in vertices:
-            # get all input vars and append lat-lon
-            v_features = (
-                vertices_input_vars.sel(vertex=vertex)
-                .to_array(dim="variable", name=None)
-                .values
-            )
-            v_position = [
-                np.cos(vertex[0]),
-                np.sin(vertex[0]),
-                np.cos(vertex[1]),
-                np.sin(vertex[1]),
-            ]
-            vertex_features.append(v_features)
-            vertex_positions.append(v_position)
-
-        return vertex_features, vertex_positions
-
-    def _compute_vertex_features(
-        self,
-        vertex_lat,
-        vertex_lon,
-        vertex_time,
-    ):
-        logger.debug(
-            "Computing oci features for ({},{},{})".format(
-                vertex_lat, vertex_lon, vertex_time
-            )
-        )
-        first_week = vertex_time - np.timedelta64(
-            self._timeseries_weeks * self._days_per_week, "D"
-        )
-
-        input_vars = self._input_vars
-        if self._include_oci_variables:
-            input_vars += self._oci_input_vars
-        points_input_vars = (
-            self._cube[input_vars]
-            .sel(
-                latitude=vertex_lat,
-                longitude=vertex_lon,
-                time=slice(first_week, vertex_time),
-            )
-            .load()
-        )
-
-        # Create vertex feature tensors
-        vertex_features = []
-        vertex_positions = [
-            [
-                np.cos(vertex_lat),
-                np.sin(vertex_lat),
-                np.cos(vertex_lon),
-                np.sin(vertex_lon),
-            ]
-        ]
-        v_features = points_input_vars.to_array(dim="variable", name=None).values
-        vertex_features.append(v_features)
-
-        return vertex_features, vertex_positions
 
     def _sample_wrt_threshold(
         self, sample_region, sample_region_gwsi_ba_per_area, strategy
@@ -944,25 +601,41 @@ class DatasetBuilder:
         area_in_hectares = area.values / 10000.0
         return area_in_hectares
 
-    def compute_ground_truth(self, lat, lon, time):
-        start_time = time
-        end_time = time + np.timedelta64(
-            (self._target_count * self._target_length) * self._days_per_week, "D"
+    def compute_ground_truth(self, center_lat, center_lon, center_time):
+
+        # find center_time in time coords
+        center_time_idx = np.where(self._cube["time"] == center_time)[0][0]
+        time_slice = slice(
+            center_time_idx + 1,
+            center_time_idx + 1 + self._target_length * self._target_count,
+            self._target_length,
         )
         logger.debug(
-            "Computing ground truth for lat={}, lon={}, time=[{},{}]".format(
-                lat, lon, start_time, end_time
+            "Computing ground truth for lat={}, lon={}, time={}, time_slice={}".format(
+                center_lat, center_lon, center_time, time_slice
             )
         )
-        values = self._cube["gwis_ba"].sel(
-            latitude=lat,
-            longitude=lon,
-            time=slice(
-                start_time,
-                end_time,
-            ),
+
+        gwis_ba = (
+            self._cube["gwis_ba"]
+            .sel(
+                latitude=center_lat,
+                longitude=center_lon,
+            )
+            .isel(time=time_slice)
         )
-        return values.values[: self._target_count]
+
+        timeseries_len = len(gwis_ba.coords["time"])
+        if timeseries_len != self._target_count:
+            logger.warning(
+                "Invalid time series length {} != {}".format(
+                    timeseries_len, self._target_count
+                )
+            )
+            raise ValueError("Invalid time series length")
+
+        logger.debug("Ground truth target values={}".format(gwis_ba.values))
+        return gwis_ba.values
 
     def run(self):
         ##Africa
@@ -1002,11 +675,10 @@ class DatasetBuilder:
                 center_time=center_time,
                 center_area=center_area,
                 ground_truth=ground_truth,
-                radius=self._small_radius,
+                radius=self._radius,
             )
 
             self._write_sample_to_disk(graph, idx)
-
 
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
@@ -1077,40 +749,6 @@ class DatasetBuilder:
     def _datetime64_to_ts(self, dt64):
         return (dt64 - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
 
-    def _vertices_per_oci(self):
-        all_long_range = []
-        for oci in self._oci_input_vars:
-            if oci not in OCI_BOUNDING_BOXES:
-                continue
-            for candidate_bb in OCI_BOUNDING_BOXES[oci]:
-
-                lat_values = self._cube.latitude
-                lat_values = lat_values.where(
-                    (lat_values >= candidate_bb["min_lat"])
-                    & (lat_values <= candidate_bb["max_lat"])
-                )
-                lat_values = lat_values[~np.isnan(lat_values)]
-                lat_values = lat_values.values
-                candidate_lat = np.take(lat_values, lat_values.size // 2)
-
-                lon_values = self._cube.longitude
-                lon_values = lon_values.where(
-                    (lon_values >= candidate_bb["min_lon"])
-                    & (lon_values <= candidate_bb["max_lon"])
-                )
-                lon_values = lon_values[~np.isnan(lon_values)]
-                lon_values = lon_values.values
-                candidate_lon = np.take(lon_values, lon_values.size // 2)
-
-                logger.info(
-                    "Using ({},{}) as location for oci {}".format(
-                        candidate_lat, candidate_lon, oci
-                    )
-                )
-                all_long_range.append((candidate_lat, candidate_lon))
-
-        return all_long_range
-
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -1127,8 +765,7 @@ def main(args):
         args.load_cube_in_memory,
         args.output_folder,
         args.split,
-        args.small_radius,
-        args.medium_radius,
+        args.radius,
         args.positive_samples_threshold,
         args.positive_samples_size,
         args.generate_all_samples,
@@ -1183,22 +820,13 @@ if __name__ == "__main__":
         help="Split type. Can be train, test, val.",
     )
     parser.add_argument(
-        "--small-radius",
+        "--radius",
         metavar="KEY",
         type=int,
         action="store",
-        dest="small_radius",
-        default=3,
-        help="Small radius of grid graph",
-    )
-    parser.add_argument(
-        "--medium-radius",
-        metavar="KEY",
-        type=int,
-        action="store",
-        dest="medium_radius",
-        default=5,
-        help="Medium radius of grid graph",
+        dest="radius",
+        default=7,
+        help="Radius of grid graph",
     )
     parser.add_argument(
         "--global-scale-factor",
