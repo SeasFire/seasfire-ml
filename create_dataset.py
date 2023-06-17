@@ -4,7 +4,6 @@ import argparse
 import logging
 import os
 from tqdm import tqdm
-import pandas as pd
 import xarray as xr
 import numpy as np
 import torch
@@ -46,6 +45,19 @@ class DatasetBuilder:
             "tp",
             "vpd",
         ]
+        self._oci_input_vars = [
+            # "oci_censo",
+            # "oci_ea",
+            # "oci_epo",
+            # "oci_gmsst",
+            "oci_nao",
+            # "oci_nina34_anom",
+            # "oci_pdo",
+            # "oci_pna",
+            # "oci_soi",
+            # "oci_wp",
+        ]
+        self._include_oci_variables = include_oci_variables
 
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self._target_var = "gwis_ba"
@@ -101,20 +113,6 @@ class DatasetBuilder:
             self._cube.load()
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
-
-        self._oci_input_vars = [
-            # "oci_censo",
-            # "oci_ea",
-            # "oci_epo",
-            # "oci_gmsst",
-            "oci_nao",
-            # "oci_nina34_anom",
-            # "oci_pdo",
-            # "oci_pna",
-            # "oci_soi",
-            # "oci_wp",
-        ]
-        self._include_oci_variables = include_oci_variables
 
         # for oci_var in self._oci_input_vars:
         #     logger.debug(
@@ -206,35 +204,10 @@ class DatasetBuilder:
             raise ValueError("Invalid split type")
 
     def _create_local_vertices(self, center_lat, center_lon, center_time, radius):
-        # Create a grid graph around the center vertex.
-        grid = list(
-            map(
-                self._normalize_lat_lon,
-                self._create_neighbors(
-                    (center_lat, center_lon), include_self=True, radius=radius
-                ),
-            )
-        )
-
-        vertices = []
-        vertices_idx = {}
-        for cur in grid:
-            cur_vertex = (cur[0], cur[1])
-            vertices_idx[cur_vertex] = len(vertices)
-            vertices.append(cur_vertex)
-
         # find center_time in time coords
         center_time_idx = np.where(self._cube["time"] == center_time)[0][0]
         time_slice = slice(
             center_time_idx - self._timeseries_weeks + 1, center_time_idx + 1
-        )
-        lat_slice = slice(
-            center_lat + (radius + 1) * self._sp_res,
-            center_lat - (radius + 1) * self._sp_res,
-        )
-        lon_slice = slice(
-            center_lon - (radius + 1) * self._sp_res,
-            center_lon + (radius + 1) * self._sp_res,
         )
 
         input_vars = self._input_vars
@@ -242,13 +215,10 @@ class DatasetBuilder:
             input_vars += self._oci_input_vars
         points_input_vars = (
             self._cube[input_vars]
-            .sel(
-                latitude=lat_slice,
-                longitude=lon_slice,
-            )
             .isel(time=time_slice)
             .load()
         )
+
         timeseries_len = len(points_input_vars.coords["time"])
         if timeseries_len != self._timeseries_weeks:
             logger.warning(
@@ -257,6 +227,19 @@ class DatasetBuilder:
                 )
             )
             raise ValueError("Invalid time series length")
+
+        lat_coords = self._create_lat_coords(center_lat, radius, True)
+        lon_coords = self._create_lon_coords(center_lon, radius, True)
+
+        # Create list of vertices
+        vertices = []
+        vertices_idx = {}
+        for lat in lat_coords:
+            for lon in lon_coords:
+                cur_vertex = (lat, lon)
+                vertices_idx[cur_vertex] = len(vertices)
+                vertices.append(cur_vertex)
+
 
         # Create vertex feature tensors
         vertices_input_vars = points_input_vars.stack(vertex=("latitude", "longitude"))
@@ -278,51 +261,16 @@ class DatasetBuilder:
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
-        return vertices, vertices_idx, vertex_features, vertex_positions
+        grid = np.meshgrid(
+            lat_coords, lon_coords
+        )
+        result = (grid, vertices, vertices_idx, vertex_features, vertex_positions)
 
-    def _create_local_edges(self, center_lat, center_lon, radius, vertices_idx):
-        edges = []
-        for lat_inc in range(-radius, radius + 1):
-            for lon_inc in range(-radius, radius + 1):
-                # vertex that we care about
-                cur = (
-                    center_lat + lat_inc * self._sp_res,
-                    center_lon + lon_inc * self._sp_res,
-                )
-                cur_idx = vertices_idx[(cur[0], cur[1])]
-                # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+        return result
 
-                # 1-hop neighbors
-                cur_neighbors = self._create_neighbors(
-                    cur, radius=1, include_self=False
-                )
-                # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
-
-                # 1-hop neighbors inside our bounding box from the center vertex
-                cur_neighbors_bb = [
-                    neighbor
-                    for neighbor in cur_neighbors
-                    if self._in_bounding_box(
-                        neighbor,
-                        center_lat_lon=(center_lat, center_lon),
-                        radius=radius,
-                    )
-                ]
-                cur_neighbors_bb = list(map(self._normalize_lat_lon, cur_neighbors_bb))
-                cur_neighbors_bb_idx = [
-                    vertices_idx[(x[0], x[1])] for x in cur_neighbors_bb
-                ]
-                # logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
-                # logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
-
-                for neighbor_idx in cur_neighbors_bb_idx:
-                    # add only one direction, the other will be added by the other vertex
-                    edges.append((cur_idx, neighbor_idx))
-        return edges
-
-    def _create_global_vertices(self, center_time):
-        result = self._read_from_cache(key="global_{}".format(center_time))
-        if result is not None: 
+    def _create_global_vertices(self, time):
+        result = self._read_from_cache(key="global_{}".format(time))
+        if result is not None:
             return result
 
         global_region = self._cube
@@ -334,10 +282,8 @@ class DatasetBuilder:
         ).mean(skipna=True)
 
         # find center_time in time coords
-        center_time_idx = np.where(global_region["time"] == center_time)[0][0]
-        time_slice = slice(
-            center_time_idx - self._timeseries_weeks + 1, center_time_idx + 1
-        )
+        time_idx = np.where(global_region["time"] == time)[0][0]
+        time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
 
         input_vars = self._input_vars
         if self._include_oci_variables:
@@ -382,10 +328,52 @@ class DatasetBuilder:
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
-        result = (vertices, vertices_idx, vertex_features, vertex_positions)
-        self._write_to_cache(key="global_{}".format(center_time), data=result)
+        grid = np.meshgrid(global_agg["latitude"], global_agg["longitude"])
+
+        result = (grid, vertices, vertices_idx, vertex_features, vertex_positions)
+        self._write_to_cache(key="global_{}".format(time), data=result)
 
         return result
+
+    def _create_local_edges(self, center_lat, center_lon, radius, vertices_idx):
+        edges = []
+        for lat_inc in range(-radius, radius + 1):
+            for lon_inc in range(-radius, radius + 1):
+                # vertex that we care about
+                cur = (
+                    center_lat + lat_inc * self._sp_res,
+                    center_lon + lon_inc * self._sp_res,
+                )
+                cur_idx = vertices_idx[(cur[0], cur[1])]
+                # logger.info("cur = {}, cur_idx={}".format(cur, cur_idx))
+
+                # 1-hop neighbors
+                cur_neighbors = self._create_neighbors(
+                    cur, radius=1, include_self=False
+                )
+                # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
+
+                # 1-hop neighbors inside our bounding box from the center vertex
+                cur_neighbors_bb = [
+                    neighbor
+                    for neighbor in cur_neighbors
+                    if self._in_bounding_box(
+                        neighbor,
+                        center_lat_lon=(center_lat, center_lon),
+                        radius=radius,
+                    )
+                ]
+                cur_neighbors_bb = list(map(self._normalize_lat_lon, cur_neighbors_bb))
+                cur_neighbors_bb_idx = [
+                    vertices_idx[(x[0], x[1])] for x in cur_neighbors_bb
+                ]
+                # logger.info("cur 1-neighbors in bb = {}".format(cur_neighbors_bb))
+                # logger.info("cur_idx 1-neighbors in bb = {}".format(cur_neighbors_bb_idx))
+
+                for neighbor_idx in cur_neighbors_bb_idx:
+                    # add only one direction, the other will be added by the other vertex
+                    edges.append((cur_idx, neighbor_idx))
+        return edges
 
     def _create_sample_data(
         self,
@@ -404,6 +392,7 @@ class DatasetBuilder:
 
         # compute local vertices
         (
+            local_grid,
             local_vertices,
             local_vertices_idx,
             local_vertices_features,
@@ -415,20 +404,23 @@ class DatasetBuilder:
             radius=radius,
         )
 
-        local_edges = self._create_local_edges(
-            center_lat=center_lat,
-            center_lon=center_lon,
-            radius=radius,
-            vertices_idx=local_vertices_idx,
-        )
+        center_vertex_idx = local_vertices_idx[(center_lat, center_lon)]
 
         # compute global vertices
         (
+            global_grid,
             global_vertices,
             global_vertices_idx,
             global_vertices_features,
             global_vertices_positions,
-        ) = self._create_global_vertices(center_time=center_time)
+        ) = self._create_global_vertices(time=center_time)
+
+        # local_edges = self._create_local_edges(
+        #     center_lat=center_lat,
+        #     center_lon=center_lon,
+        #     radius=radius,
+        #     vertices_idx=local_vertices_idx,
+        # )
 
         # TODO: combine local and global vertices
         # TODO: add edges
@@ -451,20 +443,21 @@ class DatasetBuilder:
         area = torch.from_numpy(np.array(center_area)).type(torch.float32)
 
         # Create edge index tensor
-        edges = local_edges
-        sources, targets = zip(*edges)
-        edge_index = torch.tensor([sources, targets], dtype=torch.long)
-        logger.debug("Computed edge tensor= {}".format(edge_index))
+        # edges = local_edges
+        # sources, targets = zip(*edges)
+        # edge_index = torch.tensor([sources, targets], dtype=torch.long)
+        # logger.debug("Computed edge tensor= {}".format(edge_index))
 
         data = Data(
             x=vertices_features,
             y=graph_level_ground_truth,
-            edge_index=edge_index,
+            # edge_index=edge_index,
             pos=vertices_positions,
             area=area,
             center_lat=center_lat,
             center_lon=center_lon,
             center_time=center_time,
+            center_vertex_idx=center_vertex_idx,
         )
 
         logger.info("Computed sample={}".format(data))
@@ -693,11 +686,11 @@ class DatasetBuilder:
             self._write_sample_to_disk(graph, idx)
 
     def _read_from_cache(self, key):
-        try:  
+        try:
             return torch.load(
                 os.path.join(self._cache_folder, "cache_item_{}.pt".format(key))
             )
-        except FileNotFoundError: 
+        except FileNotFoundError:
             return None
 
     def _write_to_cache(self, key, data):
@@ -739,25 +732,6 @@ class DatasetBuilder:
             neighbors = list(map(self._normalize_lat_lon, neighbors))
         return neighbors
 
-    def _create_periphery_neighbors(
-        self, lat_lon, radius=4, include_self=False, normalize=False
-    ):
-        """Create a list of neighbors in the periphery of a square with a specific radius around
-        a vertex.
-        """
-        lat, lon = lat_lon
-        neighbors = []
-        for lat_inc in [-radius, 0, radius]:
-            for lon_inc in [-radius, 0, radius]:
-                if not include_self and lat_inc == 0 and lon_inc == 0:
-                    continue
-                neighbors.append(
-                    (lat + lat_inc * self._sp_res, lon + lon_inc * self._sp_res)
-                )
-        if normalize:
-            neighbors = list(map(self._normalize_lat_lon, neighbors))
-        return neighbors
-
     def _normalize_lat_lon(self, lat_lon):
         lat, lon = lat_lon
         while lat > self._lat_max:
@@ -769,6 +743,52 @@ class DatasetBuilder:
         while lon > self._lon_max:
             lon -= 360.0
         return lat, lon
+
+    def _normalize_lat(self, lat):
+        while lat > self._lat_max:
+            lat -= 180.0
+        while lat < self._lat_min:
+            lat += 180.0
+        return lat
+
+    def _normalize_lon(self, lon):
+        while lon < self._lon_min:
+            lon += 360.0
+        while lon > self._lon_max:
+            lon -= 360.0
+        return lon
+
+    def _create_lat_coords(self, lat, radius, normalize=True):
+        lat_start = lat + radius * self._sp_res
+        lat_end = lat - (radius + 1) * self._sp_res
+        lat_range = np.arange(lat_start, lat_end, -self._sp_res)
+        if normalize:
+            lat_range = np.array(list(map(self._normalize_lat, lat_range)))
+        return lat_range
+
+    def _create_lon_coords(self, lon, radius, normalize=True):
+        lon_start = lon - radius * self._sp_res
+        lon_end = lon + (radius + 1) * self._sp_res
+        lon_range = np.arange(lon_start, lon_end, self._sp_res)
+        if normalize:
+            lon_range = np.array(list(map(self._normalize_lon, lon_range)))
+        return lon_range
+
+    def _create_local_grid(self, center_lat, center_lon, radius, normalize=True):
+        lat_range = self._create_lat_coords(
+            lat=center_lat,
+            radius=radius,
+            normalize=normalize,
+        )
+
+        lon_range = self._create_lon_coords(
+            lon=center_lon,
+            radius=radius,
+            normalize=normalize,
+        )
+        
+        grid_lat, grid_lon = np.meshgrid(lat_range, lon_range)
+        return grid_lat, grid_lon
 
     def _datetime64_to_ts(self, dt64):
         return (dt64 - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
