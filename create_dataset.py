@@ -32,9 +32,13 @@ class DatasetBuilder:
         global_scale_factor,
     ):
         self._cube_path = cube_path
+        self._log_preprocess_input_vars = [
+            "tp",
+            "pop_dens"
+        ]
         self._input_vars = [
             "mslp",
-            "tp", # TODO: log
+            "tp",
             "vpd",
             "sst",
             "t2m_mean",
@@ -42,7 +46,7 @@ class DatasetBuilder:
             "swvl1",
             "lst_day",
             "ndvi",
-            "pop_dens", # TODO: log
+            "pop_dens",
         ]
         self._oci_input_vars = [
             "oci_wp",
@@ -112,6 +116,13 @@ class DatasetBuilder:
             self._cube.load()
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
+
+        for var_name in self._log_preprocess_input_vars: 
+            logger.info("Log-transforming input var: {}".format(var_name))
+            self._cube[var_name] = xr.DataArray(np.log(1.0 + self._cube[var_name].values),
+                                    coords=self._cube[var_name].coords,
+                                    dims=self._cube[var_name].dims,
+                                    attrs=self._cube[var_name].attrs)
 
         for input_var in self._input_vars:
             logger.debug(
