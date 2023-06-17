@@ -86,6 +86,13 @@ class DatasetBuilder:
             if not os.path.exists(folder):
                 os.makedirs(folder)
 
+        # create output split folder
+        self._cache_folder = os.path.join(output_folder, "cache")
+        for folder in [self._cache_folder]:
+            logger.info("Creating cache folder {}".format(folder))
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+
         # open zarr and display basic info
         logger.info("Opening zarr file: {}".format(self._cube_path))
         self._cube = xr.open_zarr(self._cube_path, consolidated=False)
@@ -314,7 +321,9 @@ class DatasetBuilder:
         return edges
 
     def _create_global_vertices(self, center_time):
-        # TODO: cache result on disk based on center_time to avoid recomputation
+        result = self._read_from_cache(key="global_{}".format(center_time))
+        if result is not None: 
+            return result
 
         global_region = self._cube
         lat_target = len(global_region.coords["latitude"]) // self._global_scale_factor
@@ -373,7 +382,10 @@ class DatasetBuilder:
             vertex_features.append(v_features)
             vertex_positions.append(v_position)
 
-        return vertices, vertices_idx, vertex_features, vertex_positions
+        result = (vertices, vertices_idx, vertex_features, vertex_positions)
+        self._write_to_cache(key="global_{}".format(center_time), data=result)
+
+        return result
 
     def _create_sample_data(
         self,
@@ -679,6 +691,18 @@ class DatasetBuilder:
             )
 
             self._write_sample_to_disk(graph, idx)
+
+    def _read_from_cache(self, key):
+        try:  
+            return torch.load(
+                os.path.join(self._cache_folder, "cache_item_{}.pt".format(key))
+            )
+        except FileNotFoundError: 
+            return None
+
+    def _write_to_cache(self, key, data):
+        output_path = os.path.join(self._cache_folder, "cache_item_{}.pt".format(key))
+        torch.save(data, output_path)
 
     def _write_sample_to_disk(self, data, index):
         output_path = os.path.join(self._output_folder, "graph_{}.pt".format(index))
