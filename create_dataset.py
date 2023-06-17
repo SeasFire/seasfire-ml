@@ -114,24 +114,18 @@ class DatasetBuilder:
         logger.info("Vars: {}".format(self._cube.data_vars))
 
         for input_var in self._input_vars:
-            logger.info(
+            logger.debug(
                 "Var name {}, description: {}".format(
                     input_var, self._cube[input_var].description
                 )
             )
 
         for oci_var in self._oci_input_vars:
-            logger.info(
+            logger.debug(
                 "Oci name {}, description: {}".format(
                     oci_var, self._cube[oci_var].description
                 )
             )
-        # print(self._cube.longitude.values)
-        # for x in self._cube.longitude.values:
-        #     print(x)
-        # print(self._cube.latitude.values)
-        # for x in self._cube.longitude.values:
-        #     print(x)
 
         # Radius for grid graph
         self._radius = radius
@@ -335,7 +329,7 @@ class DatasetBuilder:
 
                 # 1-hop neighbors
                 cur_neighbors = self._create_all_neighbors(
-                    cur, radius=1, include_self=False
+                    cur, radius=3, include_self=False, normalize=True
                 )
                 # logger.info("cur 1-neighbors = {}".format(cur_neighbors))
 
