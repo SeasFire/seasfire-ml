@@ -15,7 +15,7 @@ from tqdm import tqdm
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from graph_dataset import GraphDataset
+from utils import GraphDataset
 from torch_geometric.data import Data
 
 
