@@ -93,7 +93,7 @@ def main(args):
     logger.info("Using target week={}".format(args.target_week))
 
     if transform.target_week != args.target_week:
-        logger.warn(
+        logger.warning(
             "Model has been trained with target week {} instead of {}".format(
                 transform.target_week, args.target_week
             )
