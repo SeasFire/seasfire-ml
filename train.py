@@ -181,18 +181,18 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
                 current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
                 logger.info("Found new best model in epoch {}".format(epoch))
-                logger.info("Saving best model as best_{}.pt".format(model_name))
+                logger.info("Saving best model as best_{}_target{}.pt".format(model_name, transform.target_week))
                 torch.save({
                     "model": model,
                     "criterion": criterion,
                     "transform": transform,
                     "name": model_name,
-                }, "best_{}.pt".format(model_name))
+                }, "best_{}_target{}.pt".format(model_name, transform.target_week))
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
-    logger.info("Saving model as {}.pt".format(model_name))
+    logger.info("Saving model as {}_target{}.pt".format(model_name, transform.target_week))
     torch.save(
         {
             "model": model,
@@ -200,7 +200,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             "transform": transform,
             "name": model_name,
         },
-        "{}.pt".format(model_name)
+        "{}_target{}.pt".format(model_name, transform.target_week)
     )
 
     with open("train_metrics.pkl", "wb") as file:

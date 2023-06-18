@@ -148,7 +148,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_GRU.pt",
+        default="best_GRU_t1.pt",
         help="Path to load the trained model from",
     )
     parser.add_argument(
