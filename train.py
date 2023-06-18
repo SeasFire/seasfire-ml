@@ -42,7 +42,7 @@ def set_seed(seed: int = 42) -> None:
 
 
 def train(model, train_loader, epochs, val_loader, task, model_name, transform):
-    logger.info("Starting training")
+    logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
         "Accuracy": [],
@@ -58,12 +58,6 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         "AUROC": [],
         "Loss": [],
     }
-
-    current_max_avg = 0
-    current_best_epoch = 0
-    current_best_model = None
-
-    optimizer = model.optimizer
 
     if task == "binary":
         criterion = torch.nn.CrossEntropyLoss()
@@ -84,7 +78,9 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     elif task == "regression":
         criterion = torch.nn.MSELoss()
 
+    optimizer = model.optimizer
     model = model.to(device)
+    current_max_avg = 0
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
@@ -165,7 +161,6 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
         logger.info("| Train Loss: {:.4f}".format(train_loss))
-        logger.info("| Val Loss: {:.4f}".format(val_loss))
 
         if task == "binary":
             for metric, key in zip(train_metrics, train_metrics_dict.keys()):
@@ -174,6 +169,9 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                 train_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
+        logger.info("| Val Loss: {:.4f}".format(val_loss))
+
+        if task == "binary":
             for metric, key in zip(val_metrics, val_metrics_dict.keys()):
                 temp = metric.compute()
                 logger.info("| Val " + key + ": {:.4f}".format(temp))
@@ -228,7 +226,7 @@ def main(args):
         cache_filename="dataset_mean_std_cached_stats.pk",
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
-    print(args.model_name)
+    logger.info("Using model: {}".format(args.model_name))
     if args.model_name in [
         "AttentionGNN-TGCN2",
         "AttentionGNN-TGatConv",
@@ -262,6 +260,7 @@ def main(args):
         transform=transform,
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
+    logger.info("Using batch size={}".format(args.batch_size))
 
     train_loader = loader_class(
         train_dataset,
@@ -394,15 +393,6 @@ if __name__ == "__main__":
         dest="model_name",
         default="AttentionGNN-TGCN2",
         help="Model name",
-    )
-    parser.add_argument(
-        "--model-path",
-        metavar="PATH",
-        type=str,
-        action="store",
-        dest="model_path",
-        default="AttentionGNN-TGCN2.pt",
-        help="Path to save the trained model",
     )
     parser.add_argument(
         "--task",
