@@ -53,6 +53,13 @@ class GraphBuilder:
         self._timeseries_weeks = timeseries_weeks
         self._target_count = target_count
 
+    @property
+    def cube(self):
+        return self._cube
+
+    @property
+    def target_var(self):
+        return self._target_var
 
     def _create_local_vertices(self, lat, lon, time, radius):
         # find time in time coords
@@ -228,7 +235,7 @@ class GraphBuilder:
         ground_truth,
         radius,
     ):
-        logger.info(
+        logger.debug(
             "Creating sample for lat={}, lon={}, time={}".format(
                 lat, lon, time
             )
