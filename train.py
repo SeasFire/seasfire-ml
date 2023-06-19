@@ -186,9 +186,10 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                     "name": model_name,
                 }
                 # Save the entire best model to PATH
-                torch.save(model_info, "best_" + args.model_path)
+                torch.save(model_info, "weekly_data/experiments/TRANSFORMER/4_week/best_" + args.model_path)
 
                 logger.info("Best epoch: {}".format(current_best_epoch))
+
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
@@ -201,7 +202,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             "name": model_name,
         }
         # Save the entire best model to PATH
-        torch.save(model_info, str(epoch) + "_" + args.model_path)
+        torch.save(model_info,"weekly_data/experiments/TRANSFORMER/4_week/" + str(epoch) + "_" + args.model_path)
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
@@ -219,7 +220,7 @@ def main(args):
     if torch.cuda.is_available():
         logger.info("Torch cuda version: {}".format(torch.version.cuda))
 
-    set_seed(32)
+    set_seed(42)
 
     logger.info("Extracting dataset statistics")
     mean_std_per_feature = compute_mean_std_per_feature(
@@ -449,7 +450,7 @@ if __name__ == "__main__":
         type=tuple,
         action="store",
         dest="hidden_channels",
-        default=(256, 64),
+        default=(32, 256),
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(
@@ -468,7 +469,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_week",
-        default=1,
+        default=5,
         help="Target week",
     )
     parser.add_argument(
@@ -503,3 +504,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(args)
+
+#./train.py --train-path "weekly_data/train/" --val-path "weekly_data/val/" --model-name "GRU" --model-path "gru.pt" --batch-size 128 --target-week 5 --learning-rate 5e-4
