@@ -446,7 +446,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="timesteps",
-        default=48,
+        default=24,
         help="Time steps in the past",
     )
     parser.add_argument(
@@ -456,7 +456,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-4,
+        default=5e-4,
         help="Learning rate",
     )
     parser.add_argument(
