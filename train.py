@@ -121,7 +121,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                 y = data[1].to(device)
                 edge_index = None
                 batch = None
-
+           
             preds = model(x, edge_index, None, None, batch)
             if task == "regression":
                 y = y.unsqueeze(1)
@@ -130,6 +130,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             train_labels.append(y.float())
             # logger.info("preds = {}".format(preds))
             # logger.info("y = {}".format(y.float()))
+            
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
@@ -221,9 +222,9 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             "criterion": criterion,
             "transform": transform,
             "name": model_name,
-        }
-        # Save the entire best model to PATH
-        torch.save(model_info, str(epoch) + "_" + args.model_path)
+        },
+        "{}_target{}.pt".format(model_name, transform.target_week)
+    )
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
