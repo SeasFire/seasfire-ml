@@ -101,11 +101,6 @@ class Attention2GNN(torch.nn.Module):
         self.fc = torch.nn.Linear(output_channels[1], output_channels[2])
         self.sigmoid = torch.nn.Sigmoid()
 
-        # print(self.parameters)
-        self.optimizer = torch.optim.Adam(
-            self.parameters(), lr=learning_rate         #, weight_decay=weight_decay
-        )
-
         self.task = task
 
     def forward(
