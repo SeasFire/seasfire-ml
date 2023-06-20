@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 import torch
 import torch_geometric
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
 from utils import GraphDataset
 from torch_geometric.data import Data
 
@@ -23,10 +23,12 @@ def test(model, loader, criterion, task):
         model.eval()
 
         metrics = [
-            Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task="multiclass", num_classes=2, average="macro").to(device),
-            AveragePrecision(task="multiclass", num_classes=2).to(device),
-            AUROC(task="multiclass", num_classes=2).to(device),
+            Accuracy(task="binary").to(device),
+            Recall(task="binary").to(device),
+            F1Score(task="binary").to(device),
+            AveragePrecision(task="binary").to(device),
+            AUROC(task="binary").to(device),
+            StatScores(task="binary").to(device)
         ]
 
         predictions = []
@@ -51,22 +53,20 @@ def test(model, loader, criterion, task):
                 y = y.unsqueeze(1)
 
             predictions.append(preds)
-            labels.append(y)
+            labels.append(y.float())
 
             if task == "binary":
-                y_class = torch.argmax(y, dim=1)
                 for metric in metrics:
-                    metric.update(preds, y_class)
+                    metric.update(preds, y)
 
         loss = criterion(torch.cat(labels), torch.cat(predictions))
         logger.info(f"| Test Loss: {loss}")
 
         if task == "binary":
             for metric, metric_name in zip(
-                metrics, ["Accuracy", "F1Score", "Average Precision", "AUROC"]
+                metrics, ["Accuracy", "Recall", "F1Score", "Average Precision", "AUROC", "Stats"]
             ):
-                temp = metric.compute()
-                logger.info(f"| Test {metric_name}: {(temp):.4f}")
+                logger.info("| Test {}: {}".format(metric_name, metric.compute()))
                 metric.reset()
         elif task == "regression":
             raise ValueError("Not yet supported")
@@ -148,7 +148,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="best_GRU_t1.pt",
+        default="best_GRU_target1.pt",
         help="Path to load the trained model from",
     )
     parser.add_argument(

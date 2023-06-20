@@ -10,7 +10,7 @@ from tqdm import tqdm
 import torch
 import torch_geometric
 from torch_geometric.data import Data
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
 from models import (
     AttentionGNN,
     GRUModel,
@@ -44,6 +44,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
 
     train_metrics_dict = {
         "Accuracy": [],
+        "Recall": [],
         "F1Score": [],
         "AveragePrecision": [],
         "AUROC": [],
@@ -52,6 +53,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     }
     val_metrics_dict = {
         "Accuracy": [],
+        "Recall": [],
         "F1Score": [],
         "AveragePrecision": [],
         "AUROC": [],
@@ -68,6 +70,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
 
         train_metrics = [
             Accuracy(task="binary").to(device),
+            Recall(task="binary").to(device),
             F1Score(task="binary").to(device),
             AveragePrecision(task="binary").to(device),
             AUROC(task="binary").to(device),
@@ -76,6 +79,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
 
         val_metrics = [
             Accuracy(task="binary").to(device),
+            Recall(task="binary").to(device),
             F1Score(task="binary").to(device),
             AveragePrecision(task="binary").to(device),
             AUROC(task="binary").to(device),
@@ -308,14 +312,13 @@ def main(args):
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
 
     num_features = train_dataset.num_node_features
-    timesteps = args.timesteps
 
     if args.model_name == "AttentionGNN-TGCN2":
         model = AttentionGNN(
             TGCN2,
             num_features,
             args.hidden_channels,
-            timesteps,
+            args.timesteps,
             args.learning_rate,
             args.weight_decay,
             task=args.task,
@@ -325,7 +328,7 @@ def main(args):
             TGatConv,
             num_features,
             args.hidden_channels,
-            timesteps,
+            args.timesteps,
             args.learning_rate,
             args.weight_decay,
             task=args.task,
@@ -335,7 +338,7 @@ def main(args):
             TGCN2,
             num_features,
             args.hidden_channels,
-            timesteps,
+            args.timesteps,
             args.learning_rate,
             args.weight_decay,
             task=args.task,
@@ -345,7 +348,7 @@ def main(args):
             TGatConv,
             num_features,
             args.hidden_channels,
-            timesteps,
+            args.timesteps,
             args.learning_rate,
             args.weight_decay,
             task=args.task,
@@ -355,7 +358,7 @@ def main(args):
             TGCN2,
             num_features,
             args.hidden_channels,
-            timesteps,
+            args.timesteps,
             args.learning_rate,
             args.weight_decay,
             task=args.task,
@@ -363,7 +366,7 @@ def main(args):
     elif args.model_name == "GRU":
         model = GRUModel(
             num_features,
-            128,
+            args.gru_hidden_size,
             1,
             1,
         )
@@ -443,6 +446,15 @@ if __name__ == "__main__":
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(
+        "--gru-hidden-size",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="gru_hidden_size",
+        default=128,
+        help="GRU hidden size",
+    )    
+    parser.add_argument(
         "-e",
         "--epochs",
         metavar="KEY",
@@ -458,7 +470,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="target_week",
-        default=5,
+        default=1,
         help="Target week",
     )
     parser.add_argument(
@@ -478,7 +490,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-3,
+        default=5e-3,
         help="Learning rate",
     )
     parser.add_argument(
@@ -488,7 +500,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=0,
+        default=0.03,
         help="Weight decay",
     )
     args = parser.parse_args()
