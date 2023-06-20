@@ -57,12 +57,14 @@ class GraphNormalize:
         if self._task == "binary":
             if graph.y.shape[0] == 1:
                 graph.y = torch.where(graph.y > 0.0, 1, 0)
-                graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
+                # graph.y = torch.nn.functional.one_hot(graph.y, 2).float()
             elif graph.y.shape[0] > 1:
                 y = (graph.y)[self._target_week - 1]
                 y = torch.where(y > 0.0, 1, 0)
-                y = torch.nn.functional.one_hot(y, 2).float()
-                graph.y = y.unsqueeze(0)
+                # y = torch.nn.functional.one_hot(y, 2).float()
+                y = y.unsqueeze(0)
+                graph.y = y.unsqueeze(1)
+                
 
         elif self._task == "regression":
             # graph.y = graph.y / 1000.0
@@ -82,7 +84,6 @@ class GraphNormalize:
         if self._append_position_as_feature:
             positions = graph.pos.unsqueeze(2).expand(-1, -1, graph.x.shape[2])
             graph.x = torch.cat((graph.x, positions), dim=1)
-
         return graph
 
 
@@ -164,5 +165,5 @@ class ToCentralNodeAndNormalize:
             graph.x = torch.cat((graph.x, positions), dim=0)
 
         graph.x = graph.x.permute(1, 0)
-        #graph.y = graph.y.squeeze(0)
+        # graph.y = graph.y.unsqueeze(0)
         return graph.x, graph.y
