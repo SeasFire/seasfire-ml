@@ -10,7 +10,7 @@ from tqdm import tqdm
 import torch
 import torch_geometric
 from torch_geometric.data import Data
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores
 from models import (
     AttentionGNN,
     GRUModel,
@@ -47,6 +47,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         "F1Score": [],
         "AveragePrecision": [],
         "AUROC": [],
+        "StatsScore": [],
         "Loss": [],
     }
     val_metrics_dict = {
@@ -54,29 +55,46 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         "F1Score": [],
         "AveragePrecision": [],
         "AUROC": [],
+        "StatsScore": [],
         "Loss": [],
     }
 
     if task == "binary":
-        criterion = torch.nn.CrossEntropyLoss()
+        #criterion = torch.nn.CrossEntropyLoss()
+        pos_weight = torch.FloatTensor([2.0]).to(device)
+        criterion = torch.nn.BCELoss()
+        criterion = torch.nn.BCELoss(weight=pos_weight)
+        #criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
         train_metrics = [
-            Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task="multiclass", num_classes=2, average="macro").to(device),
-            AveragePrecision(task="multiclass", num_classes=2).to(device),
-            AUROC(task="multiclass", num_classes=2).to(device),
+            Accuracy(task="binary").to(device),
+            F1Score(task="binary").to(device),
+            AveragePrecision(task="binary").to(device),
+            AUROC(task="binary").to(device),
+            StatScores(task="binary").to(device)
         ]
 
         val_metrics = [
-            Accuracy(task="multiclass", num_classes=2).to(device),
-            F1Score(task="multiclass", num_classes=2, average="macro").to(device),
-            AveragePrecision(task="multiclass", num_classes=2).to(device),
-            AUROC(task="multiclass", num_classes=2).to(device),
+            Accuracy(task="binary").to(device),
+            F1Score(task="binary").to(device),
+            AveragePrecision(task="binary").to(device),
+            AUROC(task="binary").to(device),
+            StatScores(task="binary").to(device)
         ]
     elif task == "regression":
         criterion = torch.nn.MSELoss()
 
-    optimizer = model.optimizer
+    optimizer = torch.optim.Adadelta(
+        model.parameters(),
+        lr=args.learning_rate,
+        rho=0.9,
+        eps=1e-06,
+        weight_decay=args.weight_decay,
+        foreach=None,
+        maximize=False,
+    )
+    logger.info("Optimizer={}".format(optimizer))
+
     model = model.to(device)
     current_max_avg = 0
 
@@ -109,17 +127,20 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                 y = y.unsqueeze(1)
 
             train_predictions.append(preds)
-            train_labels.append(y)
-            train_loss = criterion(y, preds)
+            train_labels.append(y.float())
+            # logger.info("preds = {}".format(preds))
+            # logger.info("y = {}".format(y.float()))
+            train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
             train_loss.backward()
             optimizer.step()
 
             if task == "binary":
-                y_class = torch.argmax(y, dim=1)
+                #y_class = torch.argmax(y, dim=1)
                 for metric in train_metrics:
-                    metric.update(preds, y_class)
+                    #metric.update(preds, y_class)
+                    metric.update(preds, y)
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
@@ -148,12 +169,13 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                     y = y.unsqueeze(1)
 
                 val_predictions.append(preds)
-                val_labels.append(y)
+                val_labels.append(y.float())
 
                 if task == "binary":
-                    y_class = torch.argmax(y, dim=1)
+                    #y_class = torch.argmax(y, dim=1)
                     for metric in val_metrics:
-                        metric.update(preds, y_class)
+                        #metric.update(preds, y_class)
+                        metric.update(preds, y)
 
         train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
@@ -163,7 +185,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         if task == "binary":
             for metric, key in zip(train_metrics, train_metrics_dict.keys()):
                 temp = metric.compute()
-                logger.info("| Train " + key + ": {:.4f}".format(temp))
+                logger.info("| Train " + key + ": {}".format(temp))
                 train_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
@@ -172,7 +194,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         if task == "binary":
             for metric, key in zip(val_metrics, val_metrics_dict.keys()):
                 temp = metric.compute()
-                logger.info("| Val " + key + ": {:.4f}".format(temp))
+                logger.info("| Val " + key + ": {}".format(temp))
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
@@ -277,7 +299,7 @@ def main(args):
     logger.info("Building model {}".format(args.model_name))
 
     if args.task == "binary":
-        linear_out_channels = 2
+        linear_out_channels = 1
         args.hidden_channels = args.hidden_channels + (linear_out_channels,)
     elif args.task == "regression":
         linear_out_channels = 1
@@ -339,11 +361,9 @@ def main(args):
     elif args.model_name == "GRU":
         model = GRUModel(
             num_features,
-            args.hidden_channels,
-            timesteps,
-            args.learning_rate,
-            args.weight_decay,
-            task=args.task,
+            128,
+            1,
+            1,
         )
     else:
         raise ValueError("Invalid model")
@@ -456,7 +476,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-4,
+        default=1e-3,
         help="Learning rate",
     )
     parser.add_argument(
