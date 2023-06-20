@@ -34,7 +34,7 @@ class A3TGCN2(torch.nn.Module):
             add_graph_aggregation_layer=add_graph_aggregation_layer,
             **kwargs
         )
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
         torch.nn.init.uniform_(self.attention)
 
@@ -90,12 +90,12 @@ class AttentionGNN(torch.nn.Module):
             **kwargs
         )
         # Equals single-shot prediction
-        self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
-
-        # print(self.parameters)
-        self.optimizer = torch.optim.Adam(
-            self.parameters(), lr=learning_rate, weight_decay=weight_decay
-        )
+        self.fc = torch.nn.Linear(output_channels[1], output_channels[2])
+        self.sigmoid = torch.nn.Sigmoid()
+        # # print(self.parameters)
+        # self.optimizer = torch.optim.Adam(
+        #     self.parameters(), lr=learning_rate, weight_decay=weight_decay
+        # )
 
         self.task = task
 
@@ -116,8 +116,9 @@ class AttentionGNN(torch.nn.Module):
         h.to(device)
         h = F.relu(h)
 
-        h = self.linear(h)
+        out = self.fc(h)
         if self.task == "binary":
-            h = torch.softmax(h, dim=1)
-
-        return h
+            # out = torch.softmax(out, dim=1)
+            out = self.sigmoid(out)
+            
+        return out
