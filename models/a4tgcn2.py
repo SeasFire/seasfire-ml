@@ -27,11 +27,8 @@ class A4TGCN2(torch.nn.Module):
             **kwargs
         )
         
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.attention = torch.nn.Parameter(torch.empty(periods, device=device))
-        
         self.mean_aggr_z = aggr.MeanAggregation()
-        
         torch.nn.init.uniform_(self.attention)
 
     def forward(
@@ -101,7 +98,8 @@ class Attention2GNN(torch.nn.Module):
             **kwargs
         )
         # Equals single-shot prediction
-        self.linear = torch.nn.Linear(output_channels[1], output_channels[2])
+        self.fc = torch.nn.Linear(output_channels[1], output_channels[2])
+        self.sigmoid = torch.nn.Sigmoid()
 
         # print(self.parameters)
         self.optimizer = torch.optim.Adam(
@@ -127,8 +125,9 @@ class Attention2GNN(torch.nn.Module):
         h.to(device)
         # h = F.relu(h)
 
-        h = self.linear(h)
+        out = self.fc(h)
         if self.task == "binary":
-            h = torch.softmax(h, dim=1)
+            # h = torch.softmax(h, dim=1)
+            out = self.sigmoid(out)
 
-        return h
+        return out
