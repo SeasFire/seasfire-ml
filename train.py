@@ -11,10 +11,15 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
-from models import AttentionGNN, GRUModel, TGatConv, TGCN2, Attention2GNN, TransformerAggregationGNN
-from graph_dataset import GraphDataset
-from transforms import GraphNormalize, ToCentralNodeAndNormalize
-from utils import compute_mean_std_per_feature
+from models import (
+    AttentionGNN,
+    GRUModel,
+    TGatConv,
+    TGCN2,
+    Attention2GNN,
+    TransformerAggregationGNN,
+)
+from utils import GraphDataset, GraphNormalize, ToCentralNodeAndNormalize, compute_mean_std_per_feature
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +40,8 @@ def set_seed(seed: int = 42) -> None:
 
 
 def train(model, train_loader, epochs, val_loader, task, model_name, transform):
+    logger.info("Starting training for {} epochs".format(epochs))
+
     train_metrics_dict = {
         "Accuracy": [],
         "F1Score": [],
@@ -49,12 +56,6 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         "AUROC": [],
         "Loss": [],
     }
-
-    current_max_avg = 0
-    current_best_epoch = 0
-    best_model = model
-
-    optimizer = model.optimizer
 
     if task == "binary":
         criterion = torch.nn.CrossEntropyLoss()
@@ -75,7 +76,9 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     elif task == "regression":
         criterion = torch.nn.MSELoss()
 
+    optimizer = model.optimizer
     model = model.to(device)
+    current_max_avg = 0
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
@@ -156,7 +159,6 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
 
         logger.info("| Train Loss: {:.4f}".format(train_loss))
-        logger.info("| Val Loss: {:.4f}".format(val_loss))
 
         if task == "binary":
             for metric, key in zip(train_metrics, train_metrics_dict.keys()):
@@ -165,50 +167,45 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                 train_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
+        logger.info("| Val Loss: {:.4f}".format(val_loss))
+
+        if task == "binary":
             for metric, key in zip(val_metrics, val_metrics_dict.keys()):
                 temp = metric.compute()
                 logger.info("| Val " + key + ": {:.4f}".format(temp))
                 val_metrics_dict[key].append(temp.cpu().detach().numpy())
                 metric.reset()
 
-            
-            if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
-                print(val_metrics_dict["AveragePrecision"][epoch - 1])
-                best_model = model
-                current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
-                current_best_epoch = epoch
 
-                logger.info("Saving model as {}".format(args.model_path))
-                model_info = {
-                    "model": best_model,
+            if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
+                current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
+                logger.info("Found new best model in epoch {}".format(epoch))
+                logger.info("Saving best model as best_{}_target{}.pt".format(model_name, transform.target_week))
+                torch.save({
+                    "model": model,
                     "criterion": criterion,
                     "transform": transform,
                     "name": model_name,
-                }
-                # Save the entire best model to PATH
-                torch.save(model_info, "weekly_data/experiments/TRANSFORMER/4_week/best_" + args.model_path)
-
-                logger.info("Best epoch: {}".format(current_best_epoch))
+                }, "best_{}_target{}.pt".format(model_name, transform.target_week))
 
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
-        logger.info("Saving model as {}".format(args.model_path))
-        model_info = {
-            "model": best_model,
+    logger.info("Saving model as {}_target{}.pt".format(model_name, transform.target_week))
+    torch.save(
+        {
+            "model": model,
             "criterion": criterion,
             "transform": transform,
             "name": model_name,
         }
         # Save the entire best model to PATH
-        torch.save(model_info,"weekly_data/experiments/TRANSFORMER/4_week/" + str(epoch) + "_" + args.model_path)
+        torch.save(model_info, str(epoch) + "_" + args.model_path)
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
         pkl.dump(val_metrics_dict, file)
-
-    return model, best_model, criterion, current_best_epoch
 
 
 def main(args):
@@ -228,7 +225,7 @@ def main(args):
         cache_filename="dataset_mean_std_cached_stats.pk",
     )
     logger.info("Statistics: {}".format(mean_std_per_feature))
-    print(args.model_name)
+    logger.info("Using model: {}".format(args.model_name))
     if args.model_name in [
         "AttentionGNN-TGCN2",
         "AttentionGNN-TGatConv",
@@ -251,6 +248,7 @@ def main(args):
             task=args.task,
             target_week=args.target_week,
             mean_std_per_feature=mean_std_per_feature,
+            use_first_number_of_variables=10,
             append_position_as_feature=True,
         )
     else:
@@ -261,11 +259,14 @@ def main(args):
         transform=transform,
     )
     logger.info("Train dataset length: {}".format(len(train_dataset)))
+    logger.info("Using batch size={}".format(args.batch_size))
 
     train_loader = loader_class(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
+        num_workers=8,
+        pin_memory=True,
     )
 
     val_dataset = GraphDataset(
@@ -348,39 +349,15 @@ def main(args):
     else:
         raise ValueError("Invalid model")
 
-    logger.info("Starting training")
-    model, best_model, criterion, current_best_epoch = train(
+    train(
         model=model,
         train_loader=train_loader,
         epochs=args.epochs,
         val_loader=val_loader,
         task=args.task,
-        model_name = args.model_name,
-        transform = transform,
+        model_name=args.model_name,
+        transform=transform,
     )
-
-    logger.info("Saving model as {}".format(args.model_path))
-    model_info = {
-        "model": model,
-        "criterion": criterion,
-        "transform": transform,
-        "name": args.model_name,
-    }
-
-    best_model_info = {
-        "model": best_model,
-        "criterion": criterion,
-        "transform": transform,
-        "name": args.model_name,
-    }
-
-    # Save the entire model to PATH
-    torch.save(model_info, args.model_path)
-
-    # Save the entire best model to PATH
-    torch.save(best_model_info, "best_" + args.model_path)
-
-    logger.info("Best epoch: {}".format(current_best_epoch))
 
 
 if __name__ == "__main__":
@@ -413,17 +390,8 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_name",
-        default="GRU",
+        default="AttentionGNN-TGCN2",
         help="Model name",
-    )
-    parser.add_argument(
-        "--model-path",
-        metavar="PATH",
-        type=str,
-        action="store",
-        dest="model_path",
-        default="gru.pt",
-        help="Path to save the trained model",
     )
     parser.add_argument(
         "--task",
@@ -441,7 +409,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=64,
+        default=16,
         help="Batch size",
     )
     parser.add_argument(
@@ -479,7 +447,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="timesteps",
-        default=48,
+        default=24,
         help="Time steps in the past",
     )
     parser.add_argument(
@@ -489,7 +457,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=1e-4,
+        default=5e-4,
         help="Learning rate",
     )
     parser.add_argument(

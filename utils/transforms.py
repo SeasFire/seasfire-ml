@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,6 +21,16 @@ class GraphNormalize:
             raise ValueError("Target week is not valid")        
         self._mean_std_per_feature = mean_std_per_feature
         self._append_position_as_feature = append_position_as_feature
+
+    @property
+    def target_week(self):
+        return self._target_week
+
+    @target_week.setter
+    def target_week(self, value):
+        if value < 1 or value > 24:
+            raise ValueError("Target week is not valid")
+        self._target_week = value
 
     def __call__(self, graph):
         tmp = list(zip(*self._mean_std_per_feature))
@@ -84,6 +93,7 @@ class ToCentralNodeAndNormalize:
         task,
         target_week,
         mean_std_per_feature,
+        use_first_number_of_variables=10,
         append_position_as_feature=True,
     ):
         self._model = model
@@ -93,6 +103,7 @@ class ToCentralNodeAndNormalize:
         if target_week < 1 or target_week > 24:
             raise ValueError("Target week is not valid")
         self._mean_std_per_feature = mean_std_per_feature
+        self._use_first_number_of_variables = use_first_number_of_variables
         self._append_position_as_feature = append_position_as_feature
 
     @property
@@ -108,14 +119,13 @@ class ToCentralNodeAndNormalize:
     def __call__(self, graph):
         tmp = list(zip(*self._mean_std_per_feature))
         mu = torch.Tensor(list(tmp[0]))
-        mu = mu[:10]
+        mu = mu[:self._use_first_number_of_variables]
         std = torch.Tensor(list(tmp[1]))
-        std = std[:10]
+        std = std[:self._use_first_number_of_variables]
+        central_vertex = graph.center_vertex_idx if graph.center_vertex_idx is not None else 0        
+
         if self._model == "GRU":
-            # keep only first node of graph
-            # assume that it is the central node
-            
-            graph.x = graph.x[0, :10, :]
+            graph.x = graph.x[central_vertex, :self._use_first_number_of_variables, :]
             mu = mu.unsqueeze(1)
             mu = mu.expand(-1, graph.x.shape[1])
             std = std.unsqueeze(1)
@@ -147,11 +157,11 @@ class ToCentralNodeAndNormalize:
 
         graph.x = torch.nan_to_num(graph.x, nan=-1.0)
 
-        # # Concatenate positions with features
-        # if self._append_position_as_feature:
-        #     graph.pos = graph.pos[0, :]
-        #     positions = graph.pos.unsqueeze(1).expand(-1, graph.x.shape[1])
-        #     graph.x = torch.cat((graph.x, positions), dim=0)
+        # Concatenate positions with features
+        if self._append_position_as_feature:
+            graph.pos = graph.pos[central_vertex, :]
+            positions = graph.pos.unsqueeze(1).expand(-1, graph.x.shape[1])
+            graph.x = torch.cat((graph.x, positions), dim=0)
 
         graph.x = graph.x.permute(1, 0)
         graph.y = graph.y.squeeze(0)

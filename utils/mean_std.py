@@ -4,7 +4,6 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-
 def compute_mean_std_per_feature(dataset, cache_filename=None):
 
     if cache_filename is not None:
