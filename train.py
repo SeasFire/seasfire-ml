@@ -11,6 +11,7 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
+from torch.optim import lr_scheduler
 from models import (
     AttentionGNN,
     GRUModel,
@@ -98,7 +99,8 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         maximize=False,
     )
     logger.info("Optimizer={}".format(optimizer))
-
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0)
+    logger.info("LR scheduler={}".format(scheduler))
     model = model.to(device)
     current_max_avg = 0
 
@@ -218,6 +220,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
+        scheduler.step()
 
     logger.info("Saving model as {}_target{}.pt".format(model_name, transform.target_week))
     torch.save(
