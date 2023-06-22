@@ -33,7 +33,6 @@ class TransformerAggregationGNN(torch.nn.Module):
         )
         self.aggr = set_transformer.SetTransformerAggregation(channels=hidden_channels[-1], heads=4)
         self.fc = torch.nn.Linear(hidden_channels[-1], 1)
-        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(
         self,
@@ -77,5 +76,4 @@ class TransformerAggregationGNN(torch.nn.Module):
         h = self.aggr(H_accum, index) 
         h = F.relu(h)
         out = self.fc(h)
-        out = self.sigmoid(out)
         return out

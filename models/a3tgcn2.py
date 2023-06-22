@@ -26,7 +26,6 @@ class AttentionGNN(torch.nn.Module):
         torch.nn.init.uniform_(self.attention)
 
         self.fc = torch.nn.Linear(hidden_channels[-1], 1)
-        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(
         self,
@@ -46,9 +45,6 @@ class AttentionGNN(torch.nn.Module):
             H_accum = H_accum + probs[period] * self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
-        #h.to(device)
         h = F.relu(H_accum)
         out = self.fc(h)
-        out = self.sigmoid(out)
-            
         return out

@@ -24,7 +24,6 @@ class Attention2GNN(torch.nn.Module):
         )
         self.mean_aggr_z = aggr.MeanAggregation()
         self.fc = torch.nn.Linear(hidden_channels[-1], 1)
-        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(
         self,
@@ -38,12 +37,12 @@ class Attention2GNN(torch.nn.Module):
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
-        H_accum = 0
         for period in range(self.periods):
             H = self._base_tgcn(
                 X[:, :, period], edge_index, edge_weight, H, readout_batch
             )
-            H_accum = H_accum + H
+        # keep the last
+        H_accum = H
             
         # Readout layer
         index = (
@@ -53,8 +52,8 @@ class Attention2GNN(torch.nn.Module):
         )
         index = index.to(device)
         H_accum = self.mean_aggr_z(H_accum, index)  # (b,16)
+
         # h.to(device)
         h = F.relu(H_accum)
         out = self.fc(h)
-        out = self.sigmoid(out)
         return out

@@ -63,8 +63,8 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     }
 
     if task == "binary":
-        pos_weight = torch.FloatTensor([2.0]).to(device)
-        criterion = torch.nn.BCELoss(weight=pos_weight)
+        pos_weight = torch.FloatTensor([1.0]).to(device)
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
         train_metrics = [
             Accuracy(task="binary").to(device),
@@ -96,7 +96,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
         maximize=False,
     )
     logger.info("Optimizer={}".format(optimizer))
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, verbose=True)
     logger.info("LR scheduler={}".format(scheduler))
     model = model.to(device)
     current_max_avg = 0
@@ -141,9 +141,7 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
             optimizer.step()
 
             if task == "binary":
-                #y_class = torch.argmax(y, dim=1)
                 for metric in train_metrics:
-                    #metric.update(preds, y_class)
                     metric.update(preds, y)
 
         # Validation
@@ -176,13 +174,11 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
                 val_labels.append(y.float())
 
                 if task == "binary":
-                    #y_class = torch.argmax(y, dim=1)
                     for metric in val_metrics:
-                        #metric.update(preds, y_class)
                         metric.update(preds, y)
 
-        train_loss = criterion(torch.cat(train_labels), torch.cat(train_predictions))
-        val_loss = criterion(torch.cat(val_labels), torch.cat(val_predictions))
+        train_loss = criterion(torch.cat(train_predictions), torch.cat(train_labels))
+        val_loss = criterion(torch.cat(val_predictions), torch.cat(val_labels))
 
         logger.info("| Train Loss: {:.4f}".format(train_loss))
 
