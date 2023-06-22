@@ -63,11 +63,8 @@ def train(model, train_loader, epochs, val_loader, task, model_name, transform):
     }
 
     if task == "binary":
-        #criterion = torch.nn.CrossEntropyLoss()
         pos_weight = torch.FloatTensor([2.0]).to(device)
-        criterion = torch.nn.BCELoss()
         criterion = torch.nn.BCELoss(weight=pos_weight)
-        #criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
         train_metrics = [
             Accuracy(task="binary").to(device),
