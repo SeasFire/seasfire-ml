@@ -307,68 +307,44 @@ def main(args):
 
     logger.info("Building model {}".format(args.model_name))
 
-    if args.task == "binary":
-        linear_out_channels = 1
-        args.hidden_channels = args.hidden_channels + (linear_out_channels,)
-    elif args.task == "regression":
-        linear_out_channels = 1
-        args.hidden_channels = args.hidden_channels + (linear_out_channels,)
-
-    num_features = train_dataset.num_node_features
-
     if args.model_name == "AttentionGNN-TGCN2":
         model = AttentionGNN(
             TGCN2,
-            num_features,
+            train_dataset.num_node_features,
             args.hidden_channels,
             args.timesteps,
-            args.learning_rate,
-            args.weight_decay,
-            task=args.task,
         ).to(device)
     elif args.model_name == "AttentionGNN-TGatConv":
         model = AttentionGNN(
             TGatConv,
-            num_features,
+            train_dataset.num_node_features,
             args.hidden_channels,
             args.timesteps,
-            args.learning_rate,
-            args.weight_decay,
-            task=args.task,
         ).to(device)
     elif args.model_name == "Attention2GNN-TGCN2":
         model = Attention2GNN(
             TGCN2,
-            num_features,
+            train_dataset.num_node_features,
             args.hidden_channels,
             args.timesteps,
-            args.learning_rate,
-            args.weight_decay,
-            task=args.task,
         ).to(device)
     elif args.model_name == "Attention2GNN-TGatConv":
         model = Attention2GNN(
             TGatConv,
-            num_features,
+            train_dataset.num_node_features,
             args.hidden_channels,
             args.timesteps,
-            args.learning_rate,
-            args.weight_decay,
-            task=args.task,
         ).to(device)
     elif args.model_name == "Transformer_Aggregation-TGCN2":
         model = TransformerAggregationGNN(
             TGCN2,
-            num_features,
+            train_dataset.num_node_features,
             args.hidden_channels,
             args.timesteps,
-            args.learning_rate,
-            args.weight_decay,
-            task=args.task,
         ).to(device)
     elif args.model_name == "GRU":
         model = GRUModel(
-            num_features,
+            train_dataset.num_node_features,
             args.gru_hidden_size,
             1,
             1,
@@ -442,10 +418,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--hidden-channels",
         metavar="KEY",
-        type=tuple,
+        type=str,
         action="store",
         dest="hidden_channels",
-        default=(32, 256),
+        default="64,64",
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(
@@ -493,7 +469,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=5e-3,
+        default=0.01,
         help="Learning rate",
     )
     parser.add_argument(
@@ -503,10 +479,15 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=0.03,
+        default=0.05,
         help="Weight decay",
     )
     args = parser.parse_args()
+
+    args.hidden_channels = args.hidden_channels.split(',')
+    if len(args.hidden_channels) != 2: 
+        raise ValueError("Expected hidden channels to be a list of two elements")
+    args.hidden_channels = (int(args.hidden_channels[0]), int(args.hidden_channels[1]))
     main(args)
 
 #./train.py --train-path "weekly_data/train/" --val-path "weekly_data/val/" --model-name "GRU" --model-path "gru.pt" --batch-size 128 --target-week 5 --learning-rate 5e-4

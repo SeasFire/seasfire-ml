@@ -1,11 +1,9 @@
 import torch
 import torch.nn.functional as F
-from .tgcn2 import TGCN2
-from .tgatconv import TGatConv
+import logging
 
-
+logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class A3TGCN2(torch.nn.Module):
     r"""A version of A3T-GCN with multiple layers.`_
@@ -72,32 +70,21 @@ class AttentionGNN(torch.nn.Module):
         self,
         tgcn_model,
         node_features,
-        output_channels,
+        hidden_channels,
         periods,
-        learning_rate,
-        weight_decay,
-        task,
         **kwargs
     ):
         super(AttentionGNN, self).__init__()
-        # Attention Temporal Graph Convolutional Cell with 2 layers
         self.tgnn = A3TGCN2(
             tgcn_model=tgcn_model,
             in_channels=node_features,
-            out_channels=output_channels,
+            out_channels=hidden_channels,
             periods=periods,
             add_graph_aggregation_layer=True,
             **kwargs
         )
-        # Equals single-shot prediction
-        self.fc = torch.nn.Linear(output_channels[1], output_channels[2])
+        self.fc = torch.nn.Linear(hidden_channels[-1], 1)
         self.sigmoid = torch.nn.Sigmoid()
-        # # print(self.parameters)
-        # self.optimizer = torch.optim.Adam(
-        #     self.parameters(), lr=learning_rate, weight_decay=weight_decay
-        # )
-
-        self.task = task
 
     def forward(
         self,
@@ -115,10 +102,7 @@ class AttentionGNN(torch.nn.Module):
         h = self.tgnn(X, edge_index, edge_weight, H, readout_batch)
         h.to(device)
         h = F.relu(h)
-
         out = self.fc(h)
-        if self.task == "binary":
-            # out = torch.softmax(out, dim=1)
-            out = self.sigmoid(out)
+        out = self.sigmoid(out)
             
         return out

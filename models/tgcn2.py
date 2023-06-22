@@ -37,6 +37,7 @@ class TGCN2(torch.nn.Module):
         self.add_graph_aggregation_layer = add_graph_aggregation_layer 
 
         self._create_parameters_and_layers()
+
     def _create_update_gate_parameters_and_layers(self):
 
         self.conv_z = GCNConv(
@@ -57,6 +58,7 @@ class TGCN2(torch.nn.Module):
 
         if self.add_graph_aggregation_layer:
             self.mean_aggr_z = aggr.MeanAggregation()
+
         self.linear_z = torch.nn.Linear(2 * self.out_channels[1], self.out_channels[1])
 
     def _create_reset_gate_parameters_and_layers(self):
@@ -79,6 +81,7 @@ class TGCN2(torch.nn.Module):
 
         if self.add_graph_aggregation_layer:
             self.mean_aggr_r = aggr.MeanAggregation()
+
         self.linear_r = torch.nn.Linear(2 * self.out_channels[1], self.out_channels[1])
 
     def _create_candidate_state_parameters_and_layers(self):
@@ -101,6 +104,7 @@ class TGCN2(torch.nn.Module):
 
         if self.add_graph_aggregation_layer:
             self.mean_aggr_h = aggr.MeanAggregation()
+            
         self.linear_h = torch.nn.Linear(2 * self.out_channels[1], self.out_channels[1])
 
     def _create_parameters_and_layers(self):

@@ -82,26 +82,21 @@ class Attention2GNN(torch.nn.Module):
         self,
         tgcn_model,
         node_features,
-        output_channels,
+        hidden_channels,
         periods,
-        learning_rate,
-        weight_decay,
-        task,
         **kwargs
     ):
         super(Attention2GNN, self).__init__()
         self.tgnn = A4TGCN2(
             tgcn_model=tgcn_model,
             in_channels=node_features,
-            out_channels=output_channels,
+            out_channels=hidden_channels,
             periods=periods,
             **kwargs
         )
         # Equals single-shot prediction
-        self.fc = torch.nn.Linear(output_channels[1], output_channels[2])
+        self.fc = torch.nn.Linear(hidden_channels[-1], 1)
         self.sigmoid = torch.nn.Sigmoid()
-
-        self.task = task
 
     def forward(
         self,
@@ -115,14 +110,9 @@ class Attention2GNN(torch.nn.Module):
         x = Node features for T time steps
         edge_index = Graph edge indices
         """
-
         h = self.tgnn(X, edge_index, edge_weight, H, readout_batch)
         h.to(device)
-        # h = F.relu(h)
-
+        h = F.relu(h)
         out = self.fc(h)
-        if self.task == "binary":
-            # h = torch.softmax(h, dim=1)
-            out = self.sigmoid(out)
-
+        out = self.sigmoid(out)
         return out
