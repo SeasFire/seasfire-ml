@@ -109,7 +109,7 @@ def train(model, train_loader, epochs, val_loader, target_week):
         train_labels = []
 
         for _, data in enumerate(tqdm(train_loader)):
-            print(data)
+            logger.info("Data={}".format(data))
 
             data = data.to(device)
             local_x = data.x
@@ -266,10 +266,11 @@ def main(args):
     )
 
     model = LocalGlobalModel(
-        20,
+        len(train_dataset.local_features),
         (64, 64),
-        20,
+        len(train_dataset.global_features),
         (64, 64),
+        args.timesteps
     )
 
     train(

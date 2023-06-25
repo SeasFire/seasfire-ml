@@ -47,6 +47,14 @@ class LocalGlobalDataset(Dataset):
     @property
     def len(self):
         return len(self._indices)
+    
+    @property
+    def local_features(self):
+        return tuple(self._metadata["input_vars"] + self._metadata["oci_input_vars"])
+    
+    @property
+    def global_features(self):
+        return tuple(self._metadata["input_vars"] + self._metadata["oci_input_vars"])    
 
     def get(self, idx: int) -> Data:
         # load datasets

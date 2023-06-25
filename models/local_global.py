@@ -16,8 +16,10 @@ class LocalGlobalModel(torch.nn.Module):
         local_hidden_channels,
         global_node_features,
         global_hidden_channels,
+        periods,
     ):
         super(LocalGlobalModel, self).__init__()
+        self.periods = periods
         self.local_gnn = TGCN2(
             in_channels=local_node_features,
             out_channels=local_hidden_channels,
@@ -43,14 +45,30 @@ class LocalGlobalModel(torch.nn.Module):
         global_H: torch.FloatTensor = None,
         readout_batch=None,
     ) -> torch.FloatTensor:
-        local_out = self.local_gnn(
-            local_x, local_edge_index, local_edge_weight, local_H, readout_batch
-        )
-        global_out = self.global_gnn(
-            global_x, global_edge_index, global_edge_weight, global_H, readout_batch
-        )
+        
+        for period in range(self.periods):
+            local_H = self.local_gnn(
+                local_x[:, :, period], local_edge_index, local_edge_weight, local_H, readout_batch
+            )
 
-        return local_out, global_out
+            global_H = self.global_gnn(
+                global_x[:, :, period], global_edge_index, global_edge_weight, global_H, readout_batch
+            )
+
+        logger.info("local_H shape = {}".format(local_H.shape))
+        logger.info("local_H = {}".format(local_H))
+        logger.info("global_H shape = {}".format(global_H.shape))
+        logger.info("global_H = {}".format(global_H))
+
+        logger.info("readout_batch_H shape = {}".format(readout_batch.shape))
+        logger.info("readout_batch_H = {}".format(readout_batch))
+
+        H = torch.cat((local_H, global_H), dim=1)
+
+        logger.info("H shape = {}".format(H.shape))
+        logger.info("H = {}".format(H))
+
+        return H
 
         # out = self.fc(out[:, -1, :])
         # return out
