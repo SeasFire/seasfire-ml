@@ -4,3 +4,4 @@ from .tgcn2 import TGCN2
 from .tgatconv import TGatConv
 from .gru import GRUModel
 from .sTatgcn2 import TransformerAggregationGNN
+from .local_global import LocalGlobalModel
