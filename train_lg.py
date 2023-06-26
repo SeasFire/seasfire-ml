@@ -241,11 +241,11 @@ def main(args):
 
     train_dataset = LocalGlobalDataset(
         root_dir=args.train_path,
-        transform=LocalGlobalTransform(args.train_path, args.target_week, True),
+        transform=LocalGlobalTransform(args.train_path, args.target_week, args.append_pos_as_features),
     )
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
-        transform=LocalGlobalTransform(args.val_path, args.target_week, True),
+        transform=LocalGlobalTransform(args.val_path, args.target_week, args.append_pos_as_features),
     )
 
     logger.info("Train dataset length: {}".format(len(train_dataset)))
@@ -266,9 +266,9 @@ def main(args):
     )
 
     model = LocalGlobalModel(
-        len(train_dataset.local_features),
+        len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
         (64, 64),
-        len(train_dataset.global_features),
+        len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
         (64, 64),
         args.timesteps
     )
@@ -372,6 +372,13 @@ if __name__ == "__main__":
         default=0.05,
         help="Weight decay",
     )
+    parser.add_argument(
+        "--append-pos-as-features", dest="append_pos_as_features", action="store_true"
+    )
+    parser.add_argument(
+        "--no-append-pos-as-features", dest="append_pos_as_features", action="store_false"
+    )
+    parser.set_defaults(append_pos_as_features=True)    
     args = parser.parse_args()
 
     args.hidden_channels = args.hidden_channels.split(",")

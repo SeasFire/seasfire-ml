@@ -80,14 +80,6 @@ class LocalGlobalBuilder:
             .load()
         )
         data = data.transpose("latitude", "longitude", "time")
-
-        # lat_values = data["latitude"].values
-        # logger.info("lat values={}".format(lat_values))
-        # lon_values = data["longitude"].values
-        # logger.info("lon values={}".format(lon_values))
-        # values = data.transpose('latitude', 'longitude', 'time').to_array().values
-        # logger.info("values={}".format(values))
-
         return data
 
     def _create_global_data(self, time):
