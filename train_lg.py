@@ -267,9 +267,9 @@ def main(args):
 
     model = LocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
-        (64, 64),
+        args.hidden_channels,
         len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
-        (64, 64),
+        args.hidden_channels,
         args.timesteps
     )
 
@@ -320,7 +320,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="hidden_channels",
-        default="64,64",
+        default="64,32",
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(

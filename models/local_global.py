@@ -55,18 +55,27 @@ class LocalGlobalModel(torch.nn.Module):
                 global_x[:, :, period], global_edge_index, global_edge_weight, global_H, readout_batch
             )
 
-        logger.info("local_H shape = {}".format(local_H.shape))
-        logger.info("local_H = {}".format(local_H))
-        logger.info("global_H shape = {}".format(global_H.shape))
-        logger.info("global_H = {}".format(global_H))
+        # logger.debug("readout_batch_H shape = {}".format(readout_batch.shape))
+        # logger.info("readout_batch_H = {}".format(readout_batch))
 
-        logger.info("readout_batch_H shape = {}".format(readout_batch.shape))
-        logger.info("readout_batch_H = {}".format(readout_batch))
+        # logger.info("local_H shape = {}".format(local_H.shape))
+        # logger.info("local_H = {}".format(local_H))
+
+        batch_size = len(torch.unique(readout_batch))
+
+        local_vertex_count = local_H.shape[0] // batch_size
+        local_H = local_H.view(batch_size, local_vertex_count, -1)
+
+        global_vertex_count = global_H.shape[0] // batch_size
+        global_H = global_H.view(batch_size, global_vertex_count, -1)
+
+        logger.info("local_H shape = {}".format(local_H.shape))
+        logger.info("global_H shape = {}".format(global_H.shape))
 
         H = torch.cat((local_H, global_H), dim=1)
 
         logger.info("H shape = {}".format(H.shape))
-        logger.info("H = {}".format(H))
+        #logger.info("H = {}".format(H))
 
         return H
 
