@@ -42,7 +42,7 @@ class LocalGlobalDataset(Dataset):
         ]
 
         self._metadata = torch.load(os.path.join(self.root_dir, "metadata.pt"))
-        logger.debug("Metadata={}".format(self._metadata))
+        logger.info("Metadata={}".format(self._metadata))
 
     @property
     def len(self):
@@ -55,6 +55,10 @@ class LocalGlobalDataset(Dataset):
     @property
     def global_features(self):
         return tuple(self._metadata["input_vars"] + self._metadata["oci_input_vars"])
+
+    @property
+    def local_global_nodes(self): 
+        return 549
 
     def get(self, idx: int) -> Data:
         # load datasets

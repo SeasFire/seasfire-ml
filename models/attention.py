@@ -137,7 +137,7 @@ class Encoder(torch.nn.Module):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.embedding_dim = embedding_dim
-        self.layers = torch.nn.ModuleList([EncoderLayer(embedding_dim, num_heads, 512, dropout) for _ in range(num_layers)])
+        self.layers = torch.nn.ModuleList([EncoderLayer(embedding_dim, num_heads, 256, dropout) for _ in range(num_layers)])
         self.norm = Norm(embedding_dim)
         self.position_embedding = PositionalEncoder(embedding_dim, max_seq_len, dropout)
     

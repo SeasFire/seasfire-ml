@@ -38,7 +38,7 @@ class LocalGlobalModel(torch.nn.Module):
             local_hidden_channels[-1],
             total_nodes,
             num_heads=4,
-            num_layers=2,
+            num_layers=3,
             dropout=0.1,
         )
         self.global_avg_pooling = torch.nn.AdaptiveAvgPool1d(local_hidden_channels[-1])
@@ -73,12 +73,6 @@ class LocalGlobalModel(torch.nn.Module):
                 readout_batch,
             )
 
-        # logger.debug("readout_batch_H shape = {}".format(readout_batch.shape))
-        # logger.info("readout_batch_H = {}".format(readout_batch))
-
-        # logger.info("local_H shape = {}".format(local_H.shape))
-        # logger.info("local_H = {}".format(local_H))
-
         batch_size = len(torch.unique(readout_batch))
 
         local_vertex_count = local_H.shape[0] // batch_size
@@ -87,31 +81,9 @@ class LocalGlobalModel(torch.nn.Module):
         global_vertex_count = global_H.shape[0] // batch_size
         global_H = global_H.view(batch_size, global_vertex_count, -1)
 
-        # logger.info("local_H shape = {}".format(local_H.shape))
-        # logger.info("global_H shape = {}".format(global_H.shape))
-
         h = torch.cat((local_H, global_H), dim=1)
         h = self.attention(h)
-
-        # logger.info("h shape={}".format(h.shape))
-        # logger.info("h={}".format(h))
-
         h = self.global_avg_pooling(h)
-
-        # logger.info("h shape 1={}".format(h.shape))
-        # logger.info("h 1={}".format(h))
-
         h = h.view(batch_size, -1)
-
-        # logger.info("h shape 2={}".format(h.shape))
-        # logger.info("h 2={}".format(h))
-
         h = self.fc(h)
-
-        # logger.info("h shape 3={}".format(h.shape))
-        # logger.info("h 3 ={}".format(h))
-
         return h.squeeze(1)
-
-        # out = self.fc(out[:, -1, :])
-        # return out

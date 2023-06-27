@@ -262,13 +262,13 @@ def main(args):
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=1,
+        num_workers=8,
         pin_memory=True,
     )
     val_loader = torch_geometric.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
-        num_workers=1,
+        num_workers=8,
         pin_memory=True,
     )
 
@@ -277,7 +277,7 @@ def main(args):
         args.hidden_channels,
         len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
-        549, # TODO: should come from dataset
+        train_dataset.local_global_nodes,
         args.timesteps
     )
 
@@ -328,7 +328,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="hidden_channels",
-        default="64,32",
+        default="32,32",
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(
