@@ -2,7 +2,7 @@ import torch
 import logging
 import torch.nn.functional as F
 from .tgcn2 import TGCN2
-
+from .attention import Encoder as TransformerEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +16,14 @@ class LocalGlobalModel(torch.nn.Module):
         local_hidden_channels,
         global_node_features,
         global_hidden_channels,
+        total_nodes,
         periods,
     ):
         super(LocalGlobalModel, self).__init__()
+        if local_hidden_channels[-1] != global_hidden_channels[-1]:
+            raise ValueError("Output embedding of each TGCN should be the same")
         self.periods = periods
+        self.total_nodes = total_nodes
         self.local_gnn = TGCN2(
             in_channels=local_node_features,
             out_channels=local_hidden_channels,
@@ -30,8 +34,15 @@ class LocalGlobalModel(torch.nn.Module):
             out_channels=global_hidden_channels,
             add_graph_aggregation_layer=False,
         )
-        output_channels = local_hidden_channels[-1] + global_hidden_channels[-1]
-        self.fc = torch.nn.Linear(output_channels, 1)
+        self.attention = TransformerEncoder(
+            local_hidden_channels[-1],
+            total_nodes,
+            num_heads=4,
+            num_layers=2,
+            dropout=0.1,
+        )
+        self.global_avg_pooling = torch.nn.AdaptiveAvgPool1d(local_hidden_channels[-1])
+        self.fc = torch.nn.Linear(total_nodes * local_hidden_channels[-1], 1)
 
     def forward(
         self,
@@ -45,14 +56,21 @@ class LocalGlobalModel(torch.nn.Module):
         global_H: torch.FloatTensor = None,
         readout_batch=None,
     ) -> torch.FloatTensor:
-        
         for period in range(self.periods):
             local_H = self.local_gnn(
-                local_x[:, :, period], local_edge_index, local_edge_weight, local_H, readout_batch
+                local_x[:, :, period],
+                local_edge_index,
+                local_edge_weight,
+                local_H,
+                readout_batch,
             )
 
             global_H = self.global_gnn(
-                global_x[:, :, period], global_edge_index, global_edge_weight, global_H, readout_batch
+                global_x[:, :, period],
+                global_edge_index,
+                global_edge_weight,
+                global_H,
+                readout_batch,
             )
 
         # logger.debug("readout_batch_H shape = {}".format(readout_batch.shape))
@@ -69,15 +87,31 @@ class LocalGlobalModel(torch.nn.Module):
         global_vertex_count = global_H.shape[0] // batch_size
         global_H = global_H.view(batch_size, global_vertex_count, -1)
 
-        logger.info("local_H shape = {}".format(local_H.shape))
-        logger.info("global_H shape = {}".format(global_H.shape))
+        # logger.info("local_H shape = {}".format(local_H.shape))
+        # logger.info("global_H shape = {}".format(global_H.shape))
 
-        H = torch.cat((local_H, global_H), dim=1)
+        h = torch.cat((local_H, global_H), dim=1)
+        h = self.attention(h)
 
-        logger.info("H shape = {}".format(H.shape))
-        #logger.info("H = {}".format(H))
+        # logger.info("h shape={}".format(h.shape))
+        # logger.info("h={}".format(h))
 
-        return H
+        h = self.global_avg_pooling(h)
+
+        # logger.info("h shape 1={}".format(h.shape))
+        # logger.info("h 1={}".format(h))
+
+        h = h.view(batch_size, -1)
+
+        # logger.info("h shape 2={}".format(h.shape))
+        # logger.info("h 2={}".format(h))
+
+        h = self.fc(h)
+
+        # logger.info("h shape 3={}".format(h.shape))
+        # logger.info("h 3 ={}".format(h))
+
+        return h.squeeze(1)
 
         # out = self.fc(out[:, -1, :])
         # return out

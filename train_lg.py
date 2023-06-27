@@ -109,7 +109,7 @@ def train(model, train_loader, epochs, val_loader, target_week):
         train_labels = []
 
         for _, data in enumerate(tqdm(train_loader)):
-            logger.info("Data={}".format(data))
+            # logger.info("Data={}".format(data))
 
             data = data.to(device)
             local_x = data.x
@@ -155,19 +155,26 @@ def train(model, train_loader, epochs, val_loader, target_week):
             model.eval()
 
             for _, data in enumerate(tqdm(val_loader)):
-                if isinstance(data, Data):
-                    data = data.to(device)
-                    x = data.x
-                    y = data.y
-                    edge_index = data.edge_index
-                    batch = data.batch
-                else:
-                    x = data[0].to(device)
-                    y = data[1].to(device)
-                    edge_index = None
-                    batch = None
 
-                preds = model(x, edge_index, None, None, batch)
+                data = data.to(device)
+                local_x = data.x
+                global_x = data.global_x
+                local_edge_index = data.edge_index
+                global_edge_index = data.global_edge_index
+                y = data.y
+                batch = data.batch
+
+                preds = model(
+                    local_x,
+                    global_x,
+                    local_edge_index,
+                    global_edge_index,
+                    None,
+                    None,
+                    None,
+                    None,
+                    batch,
+                )
 
                 val_predictions.append(preds)
                 val_labels.append(y.float())
@@ -270,6 +277,7 @@ def main(args):
         args.hidden_channels,
         len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
+        549, # TODO: should come from dataset
         args.timesteps
     )
 
