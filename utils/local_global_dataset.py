@@ -24,6 +24,8 @@ class LocalGlobalDataset(Dataset):
         logger.info("Found input vars={}".format(self._input_vars))
         self._oci_input_vars = self._metadata["oci_input_vars"]
         logger.info("Found oci input vars={}".format(self._oci_input_vars))
+        self._sp_res = self._metadata["sp_res"]
+        logger.info("sp_res={}".format(self._sp_res))
 
         self._samples = torch.load(os.path.join(self.root_dir, "samples.pt"))
         logger.info("Samples={}".format(len(self._samples)))
@@ -37,6 +39,7 @@ class LocalGlobalDataset(Dataset):
 
         logger.info("Precomputing local graph")
         self._latlon_shape = self._metadata["local_latlon_shape"]
+        self._radius = self._metadata["radius"]
         self._edge_index = self._get_knn_for_grid(
             self._latlon_shape[0], self._latlon_shape[1], 3
         )
@@ -80,6 +83,21 @@ class LocalGlobalDataset(Dataset):
             self._ground_truth_ds = ds.load()
         logger.info("ground_truth_ds={}".format(self._ground_truth_ds))
 
+        logger.info("Loading local dataset")
+        with xr.open_dataset(os.path.join(self.root_dir, "local.h5")) as ds:
+            self._local_ds = ds.load()
+        logger.debug("local_ds={}".format(self._local_ds))
+
+        # Compute local graph features
+        for oci_var in self._oci_input_vars:
+            self._local_ds[oci_var] = self._local_ds[oci_var].expand_dims(
+                dim={
+                    "latitude": self._local_ds["latitude"],
+                    "longitude": self._local_ds["longitude"],
+                }
+            )
+        logger.debug("local_ds={}".format(self._local_ds))
+
     @property
     def len(self):
         return len(self._samples)
@@ -106,12 +124,6 @@ class LocalGlobalDataset(Dataset):
             )
         )
 
-        # load datasets
-        with xr.open_dataset(
-            os.path.join(self.root_dir, "local_{}.h5".format(idx))
-        ) as ds:
-            local_ds = ds.load()
-
         # Compute ground truth - target
         time_idx = np.where(self._ground_truth_ds["time"] == time)[0][0]
         time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
@@ -132,15 +144,18 @@ class LocalGlobalDataset(Dataset):
         y = target[self._target_var].values
         logger.debug("y={}".format(y))
 
-        # compute local graph features
-        for oci_var in self._oci_input_vars:
-            local_ds[oci_var] = local_ds[oci_var].expand_dims(
-                dim={
-                    "latitude": local_ds["latitude"],
-                    "longitude": local_ds["longitude"],
-                }
-            )
+        # compute local data
+        time_idx = np.where(self._local_ds["time"] == time)[0][0]
+        time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
+        lat_slice = slice(lat + self._radius * self._sp_res, lat - self._radius * self._sp_res)
+        lon_slice = slice(lon - self._radius * self._sp_res, lon + self._radius * self._sp_res)
 
+        local_ds = (
+            self._local_ds[self._input_vars + self._oci_input_vars]
+            .sel(latitude=lat_slice, longitude=lon_slice)
+            .isel(time=time_slice)
+        )
+        local_ds = local_ds.transpose("latitude", "longitude", "time")
         local_data = xr.concat(
             [
                 local_ds[var_name]
@@ -157,7 +172,7 @@ class LocalGlobalDataset(Dataset):
         )
         logger.debug("local_pos={}".format(local_pos))
 
-        # find center_time in time coords
+        # compute global data
         time_idx = np.where(self._global_ds["time"] == time)[0][0]
         time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
         global_ds = self._global_ds.isel(time=time_slice).load()
@@ -172,6 +187,7 @@ class LocalGlobalDataset(Dataset):
         global_data = global_data.transpose("vertex", "values", "time")
         logger.debug("global_data={}".format(global_data))
 
+        # compute area
         area_data = self._area_ds.sel(latitude=lat, longitude=lon).to_array()
         logger.debug("area_data={}".format(area_data))
 

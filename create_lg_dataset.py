@@ -3,11 +3,10 @@
 import argparse
 import logging
 import os
-from tqdm import tqdm
 import xarray as xr
 import numpy as np
 import torch
-from utils import LocalGlobalBuilder, LocalGlobalDataset
+from utils import LocalGlobalDataset
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +66,20 @@ class DatasetBuilder:
         self._seed = seed
         self._rng = np.random.default_rng(self._seed)
 
-        if cube_resolution not in ["100km", "25km"]:
-            raise ValueError("Wrong cube resolution")
+        if cube_resolution == "25km":
+            self._sp_res = 0.25
+            self._lat_min = -89.875
+            self._lat_max = 89.875
+            self._lon_min = -179.875
+            self._lon_max = 179.875
+        elif cube_resolution == "100km":
+            self._sp_res = 1
+            self._lat_min = -89.5
+            self._lat_max = 89.5
+            self._lon_min = -179.5
+            self._lon_max = 179.5
+        else:
+            raise ValueError("Invalid cube resolution")        
         logger.info("Using cube resolution: {}".format(cube_resolution))
 
         # validate split
@@ -180,19 +191,6 @@ class DatasetBuilder:
         else:
             raise ValueError("Invalid split type")
 
-        # create graph builder
-        self._builder = LocalGlobalBuilder(
-            cube=self._cube,
-            cube_resolution=cube_resolution,
-            input_vars=self._input_vars,
-            oci_input_vars=self._oci_input_vars,
-            target_var=self._target_var,
-            output_folder=output_folder,
-            radius=self._radius,
-            timeseries_weeks=self._timeseries_weeks,
-            target_count=self._target_count,
-            global_scale_factor=self._global_scale_factor,
-        )
 
     def _sample_wrt_threshold(
         self, sample_region, sample_region_gwsi_ba_per_area, strategy
@@ -332,6 +330,47 @@ class DatasetBuilder:
                 min_lon, min_lat, max_lon, max_lat
             )
 
+    def _create_local_data(self, min_lat, min_lon, max_lat, max_lon):
+        lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
+        lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
+        data = (
+            self._cube[self._input_vars + self._oci_input_vars]
+            .sel(latitude=lat_slice, longitude=lon_slice)
+            .load()
+        )
+        return data        
+
+    def _create_global_data(self):
+        global_region = self._cube
+        lat_target = len(global_region.coords["latitude"]) // self._global_scale_factor
+        lon_target = len(global_region.coords["longitude"]) // self._global_scale_factor
+        logger.debug("Global view dimensions = ({},{})".format(lat_target, lon_target))
+        global_agg = global_region.coarsen(
+            latitude=lat_target, longitude=lon_target
+        ).mean(skipna=True)
+
+        data = (
+            global_agg[self._input_vars + self._oci_input_vars]
+            .load()
+        )
+        data = data.transpose("latitude", "longitude", "time")
+        return data
+
+    def _create_area_data(self): 
+        area = self._cube["area"]
+        area_in_hectares = area / 10000.0
+        return area_in_hectares
+
+    def _create_target_var_data(self, min_lat, min_lon, max_lat, max_lon):
+        lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
+        lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
+        data = (
+            self._cube[self._target_var]
+            .sel(latitude=lat_slice, longitude=lon_slice)
+            .load()
+        )
+        return data
+
     def run(self):
         ##Africa
         # min_lon = -18
@@ -350,49 +389,34 @@ class DatasetBuilder:
             min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
         )
 
-        local_latlon_shape = None
-
         logger.info("Creating global dataset")
-        global_dataset = self._builder.create_global_data()
+        global_dataset = self._create_global_data()
         global_latlon_shape = (global_dataset["latitude"].shape[0], global_dataset["longitude"].shape[0])
         self._write_dataset_to_disk(global_dataset, "global")
 
+        logger.info("Creating local dataset")
+        local_dataset = self._create_local_data(min_lat, min_lon, max_lat, max_lon)
+        self._write_dataset_to_disk(local_dataset, "local")
+
         logger.info("Creating area data")
-        area_dataset = self._builder.create_area_data()
+        area_dataset = self._create_area_data()
         self._write_dataset_to_disk(area_dataset, "area")
 
         logger.info("Creating ground truth data")
-        ground_truth_dataset = self._builder.create_target_var_data(min_lat, min_lon, max_lat, max_lon)
+        ground_truth_dataset = self._create_target_var_data(min_lat, min_lon, max_lat, max_lon)
         self._write_dataset_to_disk(ground_truth_dataset, "ground_truth")
 
         logger.info("Creating samples index")
         self._write_data_to_disk(samples, "samples")
         logger.info("About to create {} samples".format(len(samples)))
 
-        # now generate them and write to disk
-        for idx in tqdm(range(0, len(samples))):
-            if idx < self._first_sample_index:
-                continue
-            if self._is_dataset_present(idx):
-                # logger.info("Skipping sample {} generation.".format(idx))
-                continue
-
-            center_lat, center_lon, center_time = samples[idx]
-
-            local_dataset = self._builder.create(
-                lat=center_lat, lon=center_lon, time=center_time
-            )
-
-            if local_latlon_shape is None: 
-                local_latlon_shape = (local_dataset["latitude"].shape[0], local_dataset["longitude"].shape[0])
-
-            self._write_dataset_to_disk(local_dataset, "local", idx)
-
         metadata = {
             "input_vars": self._input_vars,
             "oci_input_vars": self._oci_input_vars,
             "target_var": self._target_var,
-            "local_latlon_shape": local_latlon_shape,
+            "sp_res": self._sp_res,
+            "radius": self._radius,
+            "local_latlon_shape": (self._radius*2+1, self._radius*2+1),
             "global_latlon_shape": global_latlon_shape,
             "min_lon": min_lon,
             "min_lat": min_lat,
@@ -403,10 +427,8 @@ class DatasetBuilder:
         }
         self._write_metadata_to_disk(metadata)
 
-        # Second pass to compute statistics
-        # Only if we generated at least one sample on this run
-        if local_latlon_shape is not None:
-            self._compute_statistics()
+        # cmpute statistics in second pass
+        self._compute_statistics()
 
     def _compute_statistics(self): 
         dataset = LocalGlobalDataset(
