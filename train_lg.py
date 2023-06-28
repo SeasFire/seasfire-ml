@@ -339,7 +339,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="hidden_channels",
-        default="32,32",
+        default="64,64",
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
     parser.add_argument(
@@ -378,7 +378,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=0.05,
+        default=0.01,
         help="Learning rate",
     )
     parser.add_argument(
@@ -388,7 +388,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=0.01,
+        default=0.03,
         help="Weight decay",
     )
     parser.add_argument(
