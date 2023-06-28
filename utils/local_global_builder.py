@@ -82,11 +82,7 @@ class LocalGlobalBuilder:
         data = data.transpose("latitude", "longitude", "time")
         return data
 
-    def _create_global_data(self, time):
-        result = self._read_from_cache(key="global_{}".format(time))
-        if result is not None:
-            return result
-
+    def create_global_data(self):
         global_region = self._cube
         lat_target = len(global_region.coords["latitude"]) // self._global_scale_factor
         lon_target = len(global_region.coords["longitude"]) // self._global_scale_factor
@@ -95,28 +91,11 @@ class LocalGlobalBuilder:
             latitude=lat_target, longitude=lon_target
         ).mean(skipna=True)
 
-        # find center_time in time coords
-        time_idx = np.where(global_region["time"] == time)[0][0]
-        time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
-
         data = (
             global_agg[self._input_vars + self._oci_input_vars]
-            .isel(time=time_slice)
             .load()
         )
-
-        timeseries_len = len(data.coords["time"])
-        if timeseries_len != self._timeseries_weeks:
-            logger.warning(
-                "Invalid time series length {} != {}".format(
-                    timeseries_len, self._timeseries_weeks
-                )
-            )
-            raise ValueError("Invalid time series length")
-
         data = data.transpose("latitude", "longitude", "time")
-
-        self._write_to_cache(key="global_{}".format(time), data=data)
         return data
 
     def _compute_area(self, lat, lon):
@@ -160,11 +139,10 @@ class LocalGlobalBuilder:
         logger.debug("Creating data for lat={}, lon={}, time={}".format(lat, lon, time))
 
         local_dataset = self._create_local_data(lat, lon, time, self._radius)
-        global_dataset = self._create_global_data(time)
         ground_truth_dataset = self._compute_ground_truth(lat, lon, time)
         area_dataset = self._compute_area(lat, lon)
 
-        return local_dataset, global_dataset, ground_truth_dataset, area_dataset
+        return local_dataset, ground_truth_dataset, area_dataset
 
     def _read_from_cache(self, key):
         try:

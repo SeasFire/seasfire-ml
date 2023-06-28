@@ -351,8 +351,14 @@ class DatasetBuilder:
         )
 
         local_latlon_shape = None
-        global_latlon_shape = None
 
+        logger.info("Creating global dataset")
+        global_dataset = self._builder.create_global_data()
+        global_latlon_shape = (global_dataset["latitude"].shape[0], global_dataset["longitude"].shape[0])
+        self._write_dataset_to_disk(global_dataset, "global")
+
+        logger.info("Creating samples index")
+        self._write_data_to_disk(samples, "samples")
         logger.info("About to create {} samples".format(len(samples)))
 
         # now generate them and write to disk
@@ -362,24 +368,19 @@ class DatasetBuilder:
             if self._is_dataset_present(idx):
                 # logger.info("Skipping sample {} generation.".format(idx))
                 continue
+
             center_lat, center_lon, center_time = samples[idx]
-            local_dataset, global_dataset, ground_truth_dataset, area_dataset = self._builder.create(
+
+            local_dataset, ground_truth_dataset, area_dataset = self._builder.create(
                 lat=center_lat, lon=center_lon, time=center_time
             )
 
             if local_latlon_shape is None: 
                 local_latlon_shape = (local_dataset["latitude"].shape[0], local_dataset["longitude"].shape[0])
-                global_latlon_shape = (global_dataset["latitude"].shape[0], global_dataset["longitude"].shape[0])
 
             self._write_dataset_to_disk(local_dataset, "local", idx)
-            self._write_dataset_to_disk(global_dataset, "global", idx)
             self._write_dataset_to_disk(ground_truth_dataset, "ground_truth", idx)
             self._write_dataset_to_disk(area_dataset, "area", idx)
-            self._write_data_to_disk({
-                "center_lat": center_lat,
-                "center_lon": center_lon,
-                "center_time": center_time,
-            }, "metadata", idx)
 
         metadata = {
             "input_vars": self._input_vars,
@@ -406,52 +407,65 @@ class DatasetBuilder:
             root_dir=self._output_folder,
         )
 
-        local_features_count = len(self._input_vars) + len(self._oci_input_vars)
-        logger.info("Local features={}".format(local_features_count))
-        global_features_count = local_features_count
-        logger.info("Global features={}".format(global_features_count))
+        local_stats_filename = "{}/mean_std_stats_local.pk".format(self._output_folder)
+        if not os.path.exists(local_stats_filename): 
+            local_features_count = len(self._input_vars) + len(self._oci_input_vars)
+            logger.info("Local features={}".format(local_features_count))
 
-        local_mean_std = np.zeros((local_features_count, 2))
-        logger.info("Computing local features mean/std")
-        for feature_idx in range(local_features_count):
-            logger.info("Computing mean, std for feature idx={}".format(feature_idx))
+            local_mean_std = np.zeros((local_features_count, 2))
+            logger.info("Computing local features mean/std")
+            for feature_idx in range(local_features_count):
+                logger.info("Computing mean, std for feature idx={}".format(feature_idx))
 
-            temp = np.concatenate([graph.x[:, feature_idx, :].flatten() for graph in dataset])
-            mean_std = [np.nanmean(temp), np.nanstd(temp)]
-            local_mean_std[feature_idx] = mean_std
-            logger.info("Mean, std for idx={} are {}".format(feature_idx, mean_std))
+                temp = np.concatenate([graph.x[:, feature_idx, :].flatten() for graph in dataset])
+                mean_std = [np.nanmean(temp), np.nanstd(temp)]
+                local_mean_std[feature_idx] = mean_std
+                logger.info("Mean, std for idx={} are {}".format(feature_idx, mean_std))
+            torch.save(local_mean_std, "{}/mean_std_stats_local.pk".format(self._output_folder))
+        else:
+            logger.info("Skipping local features stats computation. Found file: {}".format(local_stats_filename))
 
-        torch.save(local_mean_std, "{}/mean_std_stats_local.pk".format(self._output_folder))
+        global_stats_filename = "{}/mean_std_stats_global.pk".format(self._output_folder)
+        if not os.path.exists(global_stats_filename):         
+            global_features_count = local_features_count
+            logger.info("Global features={}".format(global_features_count))
 
-        global_mean_std = np.zeros((global_features_count, 2))
-        logger.info("Computing global features mean/std")
-        for feature_idx in range(global_features_count):
-            logger.info("Computing mean, std for feature idx={}".format(feature_idx))
+            global_mean_std = np.zeros((global_features_count, 2))
+            logger.info("Computing global features mean/std")
+            for feature_idx in range(global_features_count):
+                logger.info("Computing mean, std for feature idx={}".format(feature_idx))
 
-            temp = np.concatenate([graph.global_x[:, feature_idx, :].flatten() for graph in dataset])
-            mean_std = [np.nanmean(temp), np.nanstd(temp)]
-            global_mean_std[feature_idx] = mean_std
-            logger.info("Mean, std for idx={} are {}".format(feature_idx, mean_std))
+                temp = np.concatenate([graph.global_x[:, feature_idx, :].flatten() for graph in dataset])
+                mean_std = [np.nanmean(temp), np.nanstd(temp)]
+                global_mean_std[feature_idx] = mean_std
+                logger.info("Mean, std for idx={} are {}".format(feature_idx, mean_std))
 
-        torch.save(global_mean_std, "{}/mean_std_stats_global.pk".format(self._output_folder))
-
+            torch.save(global_mean_std, "{}/mean_std_stats_global.pk".format(self._output_folder))
+        else:
+            logger.info("Skipping global features stats computation. Found file: {}".format(global_stats_filename))
 
     def _write_metadata_to_disk(self, data):
         output_path = os.path.join(self._output_folder, "metadata.pt")
         torch.save(data, output_path)
 
-    def _write_data_to_disk(self, data, name, index):
-        output_path = os.path.join(self._output_folder, "{}_{}.pt".format(name, index))
+    def _write_data_to_disk(self, data, name, index=None):
+        if index is not None:
+            output_path = os.path.join(self._output_folder, "{}_{}.pt".format(name, index))
+        else: 
+            output_path = os.path.join(self._output_folder, "{}.pt".format(name))
         torch.save(data, output_path)
 
-    def _write_dataset_to_disk(self, dataset, name, index):
-        output_path = os.path.join(self._output_folder, "{}_{}.hd5".format(name, index))
+    def _write_dataset_to_disk(self, dataset, name, index=None):
+        if index is not None:
+            output_path = os.path.join(self._output_folder, "{}_{}.h5".format(name, index))
+        else:
+            output_path = os.path.join(self._output_folder, "{}.h5".format(name))
         dataset.to_netcdf(output_path)
 
     def _is_dataset_present(self, index):
-        for key in ["local", "global", "ground_truth", "area"]: 
+        for key in ["local", "ground_truth", "area"]: 
             output_path = os.path.join(
-                self._output_folder, "{}_{}.hd5".format(key, index)
+                self._output_folder, "{}_{}.h5".format(key, index)
             )
             if not os.path.exists(output_path): 
                 return False

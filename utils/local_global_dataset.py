@@ -14,39 +14,34 @@ class LocalGlobalDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
 
-        # load self._indices
-        local_filenames = [
-            entry for entry in os.listdir(self.root_dir) if entry.startswith("local_")
-        ]
-        global_filenames = [
-            entry for entry in os.listdir(self.root_dir) if entry.startswith("global_")
-        ]
-        ground_truth_filenames = [
-            entry
-            for entry in os.listdir(self.root_dir)
-            if entry.startswith("ground_truth_")
-        ]
-
-        if len(local_filenames) != len(global_filenames) or len(
-            ground_truth_filenames
-        ) != len(global_filenames):
-            raise ValueError("Missing dataset files")
-
-        # initializing substrings
-        sub1 = "_"
-        sub2 = "."
-
-        self._indices = [
-            filename[filename.index(sub1) + len(sub1) : filename.index(sub2)]
-            for filename in local_filenames
-        ]
-
         self._metadata = torch.load(os.path.join(self.root_dir, "metadata.pt"))
+        self._timeseries_weeks = self._metadata["timeseries_weeks"]
         logger.info("Metadata={}".format(self._metadata))
+
+        self._samples = torch.load(os.path.join(self.root_dir, "samples.pt"))
+        logger.info("Samples={}".format(len(self._samples)))
+        self._indices = list(range(len(self._samples)))
+
+        logger.info("Loading global dataset")
+        with xr.open_dataset(
+            os.path.join(self.root_dir, "global.h5")
+        ) as ds:
+            self._global_ds = ds.load()
+
+        logger.info("Precomputing global graph")
+        self._global_latlon_shape = self._metadata["global_latlon_shape"]
+        self._global_edge_index = self._get_knn_for_grid(
+            self._global_latlon_shape[0], self._global_latlon_shape[1], 3
+        )
+
+        logger.info("Precomputing local graph")
+        self._latlon_shape = self._metadata["local_latlon_shape"]
+        self._edge_index = self._get_knn_for_grid(self._latlon_shape[0], self._latlon_shape[1], 3)
+
 
     @property
     def len(self):
-        return len(self._indices)
+        return len(self._samples)
 
     @property
     def local_features(self):
@@ -61,26 +56,22 @@ class LocalGlobalDataset(Dataset):
         return 549
 
     def get(self, idx: int) -> Data:
+        lat, lon, time = self._samples[idx]
+        logger.debug("Generating sample for idx={},lat={}, lon={}, time={}".format(idx, lat, lon, time))
+
         # load datasets
         with xr.open_dataset(
-            os.path.join(self.root_dir, "local_{}.hd5".format(idx))
+            os.path.join(self.root_dir, "local_{}.h5".format(idx))
         ) as ds:
             local_ds = ds.load()
         with xr.open_dataset(
-            os.path.join(self.root_dir, "global_{}.hd5".format(idx))
-        ) as ds:
-            global_ds = ds.load()
-        with xr.open_dataset(
-            os.path.join(self.root_dir, "ground_truth_{}.hd5".format(idx))
+            os.path.join(self.root_dir, "ground_truth_{}.h5".format(idx))
         ) as ds:
             ground_truth_ds = ds.load()
         with xr.open_dataset(
-            os.path.join(self.root_dir, "area_{}.hd5".format(idx))
+            os.path.join(self.root_dir, "area_{}.h5".format(idx))
         ) as ds:
             area_ds = ds.load()
-        sample_metadata = torch.load(
-            os.path.join(self.root_dir, "metadata_{}.pt".format(idx))
-        )
 
         # compute ground truth features
         target_var = self._metadata["target_var"]
@@ -112,6 +103,11 @@ class LocalGlobalDataset(Dataset):
         local_pos = np.array(list(map(np.array, local_data["vertex"].values)), dtype=np.float32)
         logger.debug("local_pos={}".format(local_pos))
 
+        # find center_time in time coords
+        time_idx = np.where(self._global_ds["time"] == time)[0][0]
+        time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
+        global_ds = self._global_ds.isel(time=time_slice).load()
+
         # Compute global graph features
         for oci_var in oci_input_vars:
             global_ds[oci_var] = global_ds[oci_var].expand_dims(
@@ -134,28 +130,20 @@ class LocalGlobalDataset(Dataset):
         area_data = area_ds.to_array()
         logger.debug("area_data={}".format(area_data))
 
-        latlon_shape = self._metadata["local_latlon_shape"]
-        edge_index = self._get_knn_for_grid(latlon_shape[0], latlon_shape[1], 3)
-
-        global_latlon_shape = self._metadata["global_latlon_shape"]
-        global_edge_index = self._get_knn_for_grid(
-            global_latlon_shape[0], global_latlon_shape[1], 3
-        )
-
         return Data(
             x=local_data.values,
             pos=local_pos,
-            edge_index=edge_index,
-            latlon_shape=latlon_shape,
-            center_lat=sample_metadata["center_lat"],
-            center_lon=sample_metadata["center_lon"],
-            center_time=sample_metadata["center_time"],
+            edge_index=self._edge_index,
+            latlon_shape=self._latlon_shape,
+            center_lat=lat,
+            center_lon=lon,
+            center_time=time,
             center_vertex_idx=local_data.values.shape[0] // 2,
             area=area_data.values[0],
             global_x=global_data.values,
             global_pos=global_pos,
-            global_latlon_shape=global_latlon_shape,
-            global_edge_index=global_edge_index,
+            global_latlon_shape=self._global_latlon_shape,
+            global_edge_index=self._global_edge_index,
             y=y,
         )
 
