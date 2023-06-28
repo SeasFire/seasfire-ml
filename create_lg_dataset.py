@@ -356,6 +356,19 @@ class DatasetBuilder:
         data = data.transpose("latitude", "longitude", "time")
         return data
 
+    def _create_stats(self, data, name):
+        stats_filename = "{}/mean_std_stats_{}.pk".format(self._output_folder, name)
+        if not os.path.exists(stats_filename):
+            features = self._input_vars + self._oci_input_vars
+            mean_std = np.zeros((len(features), 2))
+            for idx, var_name in enumerate(features): 
+                logger.info("Computing mean-std for variable={}".format(var_name))
+                mean_std[idx] = [data[var_name].mean().item(), data[var_name].std().item()]
+            logger.info("mean-std={}".format(mean_std))
+            torch.save(mean_std, "{}/mean_std_stats_{}.pk".format(self._output_folder, name))
+        else:
+            logger.info("Skipping {} features stats computation. Found file: {}".format(name, stats_filename))
+
     def _create_area_data(self): 
         area = self._cube["area"]
         area_in_hectares = area / 10000.0
@@ -393,10 +406,12 @@ class DatasetBuilder:
         global_dataset = self._create_global_data()
         global_latlon_shape = (global_dataset["latitude"].shape[0], global_dataset["longitude"].shape[0])
         self._write_dataset_to_disk(global_dataset, "global")
+        self._create_stats(global_dataset, "global")
 
         logger.info("Creating local dataset")
         local_dataset = self._create_local_data(min_lat, min_lon, max_lat, max_lon)
         self._write_dataset_to_disk(local_dataset, "local")
+        self._create_stats(local_dataset, "local")
 
         logger.info("Creating area data")
         area_dataset = self._create_area_data()
@@ -426,51 +441,6 @@ class DatasetBuilder:
             "target_count": self._target_count,
         }
         self._write_metadata_to_disk(metadata)
-
-        # cmpute statistics in second pass
-        self._compute_statistics()
-
-    def _compute_statistics(self): 
-        dataset = LocalGlobalDataset(
-            root_dir=self._output_folder,
-        )
-
-        local_stats_filename = "{}/mean_std_stats_local.pk".format(self._output_folder)
-
-        if not os.path.exists(local_stats_filename): 
-            local_features_count = len(self._input_vars) + len(self._oci_input_vars)
-            logger.info("Local features={}".format(local_features_count))
-
-            local_mean_std = np.zeros((local_features_count, 2))
-            logger.info("Computing local features mean/std")
-            for feature_idx in range(local_features_count):
-                logger.info("Computing mean, std for feature idx={}".format(feature_idx))
-                temp = np.concatenate([graph.x[:, feature_idx, :].flatten() for graph in dataset])
-                mean_std = [np.nanmean(temp), np.nanstd(temp)]
-                local_mean_std[feature_idx] = mean_std
-                logger.info("Mean, std for idx={} are {}".format(feature_idx, mean_std))
-            torch.save(local_mean_std, "{}/mean_std_stats_local.pk".format(self._output_folder))
-        else:
-            logger.info("Skipping local features stats computation. Found file: {}".format(local_stats_filename))
-
-        global_stats_filename = "{}/mean_std_stats_global.pk".format(self._output_folder)
-        if not os.path.exists(global_stats_filename):         
-            global_features_count = local_features_count
-            logger.info("Global features={}".format(global_features_count))
-
-            global_mean_std = np.zeros((global_features_count, 2))
-            logger.info("Computing global features mean/std")
-            for feature_idx in range(global_features_count):
-                logger.info("Computing mean, std for feature idx={}".format(feature_idx))
-
-                temp = np.concatenate([graph.global_x[:, feature_idx, :].flatten() for graph in dataset])
-                mean_std = [np.nanmean(temp), np.nanstd(temp)]
-                global_mean_std[feature_idx] = mean_std
-                logger.info("Mean, std for idx={} are {}".format(feature_idx, mean_std))
-
-            torch.save(global_mean_std, "{}/mean_std_stats_global.pk".format(self._output_folder))
-        else:
-            logger.info("Skipping global features stats computation. Found file: {}".format(global_stats_filename))
 
     def _write_metadata_to_disk(self, data):
         output_path = os.path.join(self._output_folder, "metadata.pt")
