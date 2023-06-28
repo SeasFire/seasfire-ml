@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 import torch
 import torch_geometric
-from torch_geometric.data import Data
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
 from torch.optim import lr_scheduler
 from models import (
@@ -142,6 +141,8 @@ def train(model, train_loader, epochs, val_loader, target_week):
             train_loss.backward()
             optimizer.step()
 
+            probs = torch.sigmoid(preds)
+            b_preds = (probs > 0.5).float()                
             for metric in train_metrics:
                 metric.update(preds, y)
 
@@ -176,11 +177,17 @@ def train(model, train_loader, epochs, val_loader, target_week):
                     batch,
                 )
 
+                # logger.info("y     = {}".format(y.float()))
+                # logger.info("preds = {}".format(preds))
+
                 val_predictions.append(preds)
                 val_labels.append(y.float())
 
+                probs = torch.sigmoid(preds)
+                b_preds = (probs > 0.5).float()
+
                 for metric in val_metrics:
-                    metric.update(preds, y)
+                    metric.update(b_preds, y)
 
         train_loss = criterion(torch.cat(train_predictions), torch.cat(train_labels))
         val_loss = criterion(torch.cat(val_predictions), torch.cat(val_labels))
