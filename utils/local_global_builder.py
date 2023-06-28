@@ -62,7 +62,7 @@ class LocalGlobalBuilder:
     def target_var(self):
         return self._target_var
 
-    def _create_local_data(self, lat, lon, time, radius):
+    def _create_local_data(self, lat, lon, time):
         logger.debug(
             "Creating local data for lat={}, lon={}, time={}".format(lat, lon, time)
         )
@@ -70,8 +70,8 @@ class LocalGlobalBuilder:
         time_idx = np.where(self._cube["time"] == time)[0][0]
         time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
 
-        lat_slice = slice(lat + radius * self._sp_res, lat - radius * self._sp_res)
-        lon_slice = slice(lon - radius * self._sp_res, lon + radius * self._sp_res)
+        lat_slice = slice(lat + self._radius * self._sp_res, lat - self._radius * self._sp_res)
+        lon_slice = slice(lon - self._radius * self._sp_res, lon + self._radius * self._sp_res)
 
         data = (
             self._cube[self._input_vars + self._oci_input_vars]
@@ -98,51 +98,27 @@ class LocalGlobalBuilder:
         data = data.transpose("latitude", "longitude", "time")
         return data
 
-    def _compute_area(self, lat, lon):
-        area = self._cube["area"].sel(latitude=lat, longitude=lon)
+    def create_area_data(self): 
+        area = self._cube["area"]
         area_in_hectares = area / 10000.0
-        # area_in_hectares = area.values / 10000.0
         return area_in_hectares
 
-    def _compute_ground_truth(self, lat, lon, time):
-        # find time in time coords
-        time_idx = np.where(self._cube["time"] == time)[0][0]
-        time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
-        logger.debug(
-            "Computing ground truth for lat={}, lon={}, time={}, time_slice={}".format(
-                lat, lon, time, time_slice
-            )
-        )
-
-        target = (
+    def create_target_var_data(self, min_lat, min_lon, max_lat, max_lon):
+        lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
+        lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
+        data = (
             self._cube[self._target_var]
-            .sel(
-                latitude=lat,
-                longitude=lon,
-            )
-            .isel(time=time_slice)
+            .sel(latitude=lat_slice, longitude=lon_slice)
+            .load()
         )
-
-        timeseries_len = len(target.coords["time"])
-        if timeseries_len != self._target_count:
-            logger.warning(
-                "Invalid time series length {} != {}".format(
-                    timeseries_len, self._target_count
-                )
-            )
-            raise ValueError("Invalid time series length")
-
-        logger.debug("Ground truth target values={}".format(target.values))
-        return target
+        return data
 
     def create(self, lat, lon, time):
         logger.debug("Creating data for lat={}, lon={}, time={}".format(lat, lon, time))
 
-        local_dataset = self._create_local_data(lat, lon, time, self._radius)
-        ground_truth_dataset = self._compute_ground_truth(lat, lon, time)
-        area_dataset = self._compute_area(lat, lon)
+        local_dataset = self._create_local_data(lat, lon, time)
 
-        return local_dataset, ground_truth_dataset, area_dataset
+        return local_dataset
 
     def _read_from_cache(self, key):
         try:

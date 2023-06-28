@@ -15,18 +15,19 @@ class LocalGlobalDataset(Dataset):
         self.transform = transform
 
         self._metadata = torch.load(os.path.join(self.root_dir, "metadata.pt"))
-        self._timeseries_weeks = self._metadata["timeseries_weeks"]
         logger.info("Metadata={}".format(self._metadata))
+
+        self._timeseries_weeks = self._metadata["timeseries_weeks"]
+        self._target_count = self._metadata["target_count"]
+        self._target_var = self._metadata["target_var"]
+        self._input_vars = self._metadata["input_vars"]
+        logger.info("Found input vars={}".format(self._input_vars))
+        self._oci_input_vars = self._metadata["oci_input_vars"]
+        logger.info("Found oci input vars={}".format(self._oci_input_vars))
 
         self._samples = torch.load(os.path.join(self.root_dir, "samples.pt"))
         logger.info("Samples={}".format(len(self._samples)))
         self._indices = list(range(len(self._samples)))
-
-        logger.info("Loading global dataset")
-        with xr.open_dataset(
-            os.path.join(self.root_dir, "global.h5")
-        ) as ds:
-            self._global_ds = ds.load()
 
         logger.info("Precomputing global graph")
         self._global_latlon_shape = self._metadata["global_latlon_shape"]
@@ -36,8 +37,48 @@ class LocalGlobalDataset(Dataset):
 
         logger.info("Precomputing local graph")
         self._latlon_shape = self._metadata["local_latlon_shape"]
-        self._edge_index = self._get_knn_for_grid(self._latlon_shape[0], self._latlon_shape[1], 3)
+        self._edge_index = self._get_knn_for_grid(
+            self._latlon_shape[0], self._latlon_shape[1], 3
+        )
 
+        logger.info("Loading global dataset")
+        with xr.open_dataset(os.path.join(self.root_dir, "global.h5")) as ds:
+            self._global_ds = ds.load()
+        logger.debug("global_ds={}".format(self._global_ds))
+
+        # Compute global graph features
+        for oci_var in self._oci_input_vars:
+            self._global_ds[oci_var] = self._global_ds[oci_var].expand_dims(
+                dim={
+                    "latitude": self._global_ds["latitude"],
+                    "longitude": self._global_ds["longitude"],
+                }
+            )
+        logger.debug("global_ds={}".format(self._global_ds))
+
+        logger.info("Precomputing global positions")
+        self._global_pos = np.array(
+            list(
+                map(
+                    np.array,
+                    self._global_ds.stack(vertex=("latitude", "longitude"))[
+                        "vertex"
+                    ].values,
+                )
+            ),
+            dtype=np.float32,
+        )
+        logger.debug("global_pos={}".format(self._global_pos))
+
+        logger.info("Loading area dataset")
+        with xr.open_dataset(os.path.join(self.root_dir, "area.h5")) as ds:
+            self._area_ds = ds.load()
+        logger.debug("area_ds={}".format(self._area_ds))
+
+        logger.info("Loading ground truth dataset")
+        with xr.open_dataset(os.path.join(self.root_dir, "ground_truth.h5")) as ds:
+            self._ground_truth_ds = ds.load()
+        logger.info("ground_truth_ds={}".format(self._ground_truth_ds))
 
     @property
     def len(self):
@@ -52,39 +93,47 @@ class LocalGlobalDataset(Dataset):
         return tuple(self._metadata["input_vars"] + self._metadata["oci_input_vars"])
 
     @property
-    def local_global_nodes(self): 
-        return 549
+    def local_global_nodes(self):
+        local_nodes = self._latlon_shape[0] * self._latlon_shape[1]
+        global_nodes = self._global_latlon_shape[0] * self._global_latlon_shape[1]
+        return local_nodes + global_nodes
 
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
-        logger.debug("Generating sample for idx={},lat={}, lon={}, time={}".format(idx, lat, lon, time))
+        logger.debug(
+            "Generating sample for idx={},lat={}, lon={}, time={}".format(
+                idx, lat, lon, time
+            )
+        )
 
         # load datasets
         with xr.open_dataset(
             os.path.join(self.root_dir, "local_{}.h5".format(idx))
         ) as ds:
             local_ds = ds.load()
-        with xr.open_dataset(
-            os.path.join(self.root_dir, "ground_truth_{}.h5".format(idx))
-        ) as ds:
-            ground_truth_ds = ds.load()
-        with xr.open_dataset(
-            os.path.join(self.root_dir, "area_{}.h5".format(idx))
-        ) as ds:
-            area_ds = ds.load()
 
-        # compute ground truth features
-        target_var = self._metadata["target_var"]
-        y = ground_truth_ds[target_var].values
+        # Compute ground truth - target
+        time_idx = np.where(self._ground_truth_ds["time"] == time)[0][0]
+        time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
+        target = self._ground_truth_ds.sel(
+            latitude=lat,
+            longitude=lon,
+        ).isel(time=time_slice).fillna(0)
+
+        timeseries_len = len(target.coords["time"])
+        if timeseries_len != self._target_count:
+            logger.warning(
+                "Invalid time series length {} != {}".format(
+                    timeseries_len, self._target_count
+                )
+            )
+            raise ValueError("Invalid time series length")
+
+        y = target[self._target_var].values
         logger.debug("y={}".format(y))
 
         # compute local graph features
-        input_vars = self._metadata["input_vars"]
-        logger.debug("Found input vars={}".format(input_vars))
-        oci_input_vars = self._metadata["oci_input_vars"]
-        logger.debug("Found oci input vars={}".format(oci_input_vars))
-
-        for oci_var in oci_input_vars:
+        for oci_var in self._oci_input_vars:
             local_ds[oci_var] = local_ds[oci_var].expand_dims(
                 dim={
                     "latitude": local_ds["latitude"],
@@ -93,41 +142,37 @@ class LocalGlobalDataset(Dataset):
             )
 
         local_data = xr.concat(
-            [local_ds[var_name] for var_name in input_vars + oci_input_vars],
+            [
+                local_ds[var_name]
+                for var_name in self._input_vars + self._oci_input_vars
+            ],
             dim="values",
         )
         local_data = local_data.stack(vertex=("latitude", "longitude"))
         local_data = local_data.transpose("vertex", "values", "time")
         logger.debug("local_data={}".format(local_data))
 
-        local_pos = np.array(list(map(np.array, local_data["vertex"].values)), dtype=np.float32)
+        local_pos = np.array(
+            list(map(np.array, local_data["vertex"].values)), dtype=np.float32
+        )
         logger.debug("local_pos={}".format(local_pos))
 
         # find center_time in time coords
         time_idx = np.where(self._global_ds["time"] == time)[0][0]
         time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
         global_ds = self._global_ds.isel(time=time_slice).load()
-
-        # Compute global graph features
-        for oci_var in oci_input_vars:
-            global_ds[oci_var] = global_ds[oci_var].expand_dims(
-                dim={
-                    "latitude": global_ds["latitude"],
-                    "longitude": global_ds["longitude"],
-                }
-            )
         global_data = xr.concat(
-            [global_ds[var_name] for var_name in input_vars + oci_input_vars],
+            [
+                global_ds[var_name]
+                for var_name in self._input_vars + self._oci_input_vars
+            ],
             dim="values",
         )
         global_data = global_data.stack(vertex=("latitude", "longitude"))
         global_data = global_data.transpose("vertex", "values", "time")
         logger.debug("global_data={}".format(global_data))
 
-        global_pos = np.array(list(map(np.array, global_data["vertex"].values)), dtype=np.float32)
-        logger.debug("global_pos={}".format(global_pos))
-
-        area_data = area_ds.to_array()
+        area_data = self._area_ds.sel(latitude=lat, longitude=lon).to_array()
         logger.debug("area_data={}".format(area_data))
 
         return Data(
@@ -141,7 +186,7 @@ class LocalGlobalDataset(Dataset):
             center_vertex_idx=local_data.values.shape[0] // 2,
             area=area_data.values[0],
             global_x=global_data.values,
-            global_pos=global_pos,
+            global_pos=self._global_pos,
             global_latlon_shape=self._global_latlon_shape,
             global_edge_index=self._global_edge_index,
             y=y,

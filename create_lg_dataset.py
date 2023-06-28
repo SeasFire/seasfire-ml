@@ -357,6 +357,14 @@ class DatasetBuilder:
         global_latlon_shape = (global_dataset["latitude"].shape[0], global_dataset["longitude"].shape[0])
         self._write_dataset_to_disk(global_dataset, "global")
 
+        logger.info("Creating area data")
+        area_dataset = self._builder.create_area_data()
+        self._write_dataset_to_disk(area_dataset, "area")
+
+        logger.info("Creating ground truth data")
+        ground_truth_dataset = self._builder.create_target_var_data(min_lat, min_lon, max_lat, max_lon)
+        self._write_dataset_to_disk(ground_truth_dataset, "ground_truth")
+
         logger.info("Creating samples index")
         self._write_data_to_disk(samples, "samples")
         logger.info("About to create {} samples".format(len(samples)))
@@ -371,7 +379,7 @@ class DatasetBuilder:
 
             center_lat, center_lon, center_time = samples[idx]
 
-            local_dataset, ground_truth_dataset, area_dataset = self._builder.create(
+            local_dataset = self._builder.create(
                 lat=center_lat, lon=center_lon, time=center_time
             )
 
@@ -379,8 +387,6 @@ class DatasetBuilder:
                 local_latlon_shape = (local_dataset["latitude"].shape[0], local_dataset["longitude"].shape[0])
 
             self._write_dataset_to_disk(local_dataset, "local", idx)
-            self._write_dataset_to_disk(ground_truth_dataset, "ground_truth", idx)
-            self._write_dataset_to_disk(area_dataset, "area", idx)
 
         metadata = {
             "input_vars": self._input_vars,
