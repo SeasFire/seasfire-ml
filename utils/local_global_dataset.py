@@ -223,6 +223,7 @@ class LocalGlobalDataset(Dataset):
             lat_dim, lon_dim, k, add_self_loops=add_self_loops
         )
         torch.save(knn, filename)
+        return knn
 
     def _generate_knn_for_grid(self, lat_dim, lon_dim, k, add_self_loops=True):
         points = np.zeros((lat_dim * lon_dim, 2))

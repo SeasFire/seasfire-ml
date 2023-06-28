@@ -80,7 +80,6 @@ class LocalGlobalModel(torch.nn.Module):
 
         global_vertex_count = global_H.shape[0] // batch_size
         global_H = global_H.view(batch_size, global_vertex_count, -1)
-
         h = torch.cat((local_H, global_H), dim=1)
         h = self.attention(h)
         h = self.global_avg_pooling(h)
