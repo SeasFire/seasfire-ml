@@ -73,7 +73,7 @@ def test(model, loader, criterion):
         logger.info(f"| Test Loss: {loss}")
 
         for metric, metric_name in zip(
-            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision", "AUROC", "Stats"]
+            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
         ):
             logger.info("| Test {}: {}".format(metric_name, metric.compute()))
             metric.reset()
