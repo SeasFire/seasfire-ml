@@ -80,25 +80,27 @@ def train(model, train_loader, epochs, val_loader, target_week):
         StatScores(task="binary").to(device),
     ]
 
-    optimizer = torch.optim.Adadelta(
+    optimizer = torch.optim.Adam(
         model.parameters(),
         lr=args.learning_rate,
-        rho=0.9,
-        eps=1e-06,
         weight_decay=args.weight_decay,
-        foreach=None,
-        maximize=False,
     )
     logger.info("Optimizer={}".format(optimizer))
-    scheduler = lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=epochs, eta_min=0, verbose=True
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=10, T_mult=1, eta_min=1e-4
     )
+    # scheduler = lr_scheduler.CosineAnnealingLR(
+    #     optimizer, T_max=epochs, eta_min=0, verbose=True
+    # )
     logger.info("LR scheduler={}".format(scheduler))
     model = model.to(device)
+    iters = len(train_loader)
+
     current_max_avg = 0
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
+        logger.info("Current lr={}".format(scheduler.get_last_lr()))
 
         model.train()
 
@@ -107,7 +109,7 @@ def train(model, train_loader, epochs, val_loader, target_week):
         train_predictions = []
         train_labels = []
 
-        for _, data in enumerate(tqdm(train_loader)):
+        for i, data in enumerate(tqdm(train_loader)):
             # logger.info("Data={}".format(data))
 
             data = data.to(device)
@@ -133,12 +135,13 @@ def train(model, train_loader, epochs, val_loader, target_week):
             train_predictions.append(preds)
             train_labels.append(y.float())
 
-
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
             train_loss.backward()
             optimizer.step()
+
+            scheduler.step(epoch - 1 + i / iters)
 
             probs = torch.sigmoid(preds)
 
@@ -209,8 +212,8 @@ def train(model, train_loader, epochs, val_loader, target_week):
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
-        if val_metrics_dict["AveragePrecision"][epoch - 1] > current_max_avg:
-            current_max_avg = val_metrics_dict["AveragePrecision"][epoch - 1]
+        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg:
+            current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
             logger.info(
                 "Saving best model as best_LocalGlobal_target{}.pt".format(target_week)
@@ -226,7 +229,7 @@ def train(model, train_loader, epochs, val_loader, target_week):
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
-        scheduler.step()
+        #scheduler.step()
 
     logger.info("Saving model as LocalGlobal_target{}.pt".format(target_week))
     torch.save(
@@ -375,7 +378,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="learning_rate",
-        default=0.01,
+        default=0.05,
         help="Learning rate",
     )
     parser.add_argument(
@@ -385,7 +388,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=0.05,
+        default=0.01,
         help="Weight decay",
     )
     parser.add_argument(
