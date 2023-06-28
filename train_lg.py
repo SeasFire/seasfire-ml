@@ -132,8 +132,7 @@ def train(model, train_loader, epochs, val_loader, target_week):
 
             train_predictions.append(preds)
             train_labels.append(y.float())
-            # logger.info("preds = {}".format(preds))
-            # logger.info("y = {}".format(y.float()))
+
 
             train_loss = criterion(preds, y.float())
 
@@ -142,9 +141,12 @@ def train(model, train_loader, epochs, val_loader, target_week):
             optimizer.step()
 
             probs = torch.sigmoid(preds)
-            b_preds = (probs > 0.5).float()                
+
+            #logger.info("preds = {}".format((probs > 0.5).float()))
+            #logger.info("y = {}".format(y.float()))
+
             for metric in train_metrics:
-                metric.update(preds, y)
+                metric.update(probs, y)
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
@@ -177,17 +179,16 @@ def train(model, train_loader, epochs, val_loader, target_week):
                     batch,
                 )
 
-                # logger.info("y     = {}".format(y.float()))
-                # logger.info("preds = {}".format(preds))
-
                 val_predictions.append(preds)
                 val_labels.append(y.float())
 
                 probs = torch.sigmoid(preds)
-                b_preds = (probs > 0.5).float()
+
+                # logger.info("preds = {}".format((probs > 0.5).float()))
+                # logger.info("y = {}".format(y.float()))
 
                 for metric in val_metrics:
-                    metric.update(b_preds, y)
+                    metric.update(probs, y)
 
         train_loss = criterion(torch.cat(train_predictions), torch.cat(train_labels))
         val_loss = criterion(torch.cat(val_predictions), torch.cat(val_labels))
