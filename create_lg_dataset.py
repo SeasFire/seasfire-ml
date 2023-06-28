@@ -436,6 +436,7 @@ class DatasetBuilder:
         )
 
         local_stats_filename = "{}/mean_std_stats_local.pk".format(self._output_folder)
+
         if not os.path.exists(local_stats_filename): 
             local_features_count = len(self._input_vars) + len(self._oci_input_vars)
             logger.info("Local features={}".format(local_features_count))
@@ -444,7 +445,6 @@ class DatasetBuilder:
             logger.info("Computing local features mean/std")
             for feature_idx in range(local_features_count):
                 logger.info("Computing mean, std for feature idx={}".format(feature_idx))
-
                 temp = np.concatenate([graph.x[:, feature_idx, :].flatten() for graph in dataset])
                 mean_std = [np.nanmean(temp), np.nanstd(temp)]
                 local_mean_std[feature_idx] = mean_std

@@ -81,7 +81,7 @@ class LocalGlobalDataset(Dataset):
         logger.info("Loading ground truth dataset")
         with xr.open_dataset(os.path.join(self.root_dir, "ground_truth.h5")) as ds:
             self._ground_truth_ds = ds.load()
-        logger.info("ground_truth_ds={}".format(self._ground_truth_ds))
+        logger.debug("ground_truth_ds={}".format(self._ground_truth_ds))
 
         logger.info("Loading local dataset")
         with xr.open_dataset(os.path.join(self.root_dir, "local.h5")) as ds:
