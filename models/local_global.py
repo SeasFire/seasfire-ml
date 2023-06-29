@@ -27,7 +27,6 @@ class LocalGlobalModel(torch.nn.Module):
         super(LocalGlobalModel, self).__init__()
         if local_hidden_channels[-1] != global_hidden_channels[-1]:
             raise ValueError("Output embedding of each TGCN should be the same")
-        total_nodes = local_nodes + global_nodes if include_global else 0
         self.local_gnn = TGCN2(
             in_channels=local_node_features,
             out_channels=local_hidden_channels,
@@ -42,6 +41,9 @@ class LocalGlobalModel(torch.nn.Module):
                 add_graph_aggregation_layer=False,
             )
             self.global_timesteps = global_timesteps
+            total_nodes = local_nodes + global_nodes
+        else: 
+            total_nodes = local_nodes
         self.attention = TransformerEncoder(
             local_hidden_channels[-1],
             total_nodes,

@@ -110,13 +110,13 @@ def train(model, train_loader, epochs, val_loader, target_week):
         train_labels = []
 
         for i, data in enumerate(tqdm(train_loader)):
-            logger.info("Data={}".format(data))
+            # logger.info("Data={}".format(data))
 
             data = data.to(device)
             local_x = data.x
-            global_x = data.global_x
+            global_x = data.get("global_x")
             local_edge_index = data.edge_index
-            global_edge_index = data.global_edge_index
+            global_edge_index = data.get("global_edge_index")
             y = data.y
             batch = data.batch
 
@@ -164,9 +164,9 @@ def train(model, train_loader, epochs, val_loader, target_week):
 
                 data = data.to(device)
                 local_x = data.x
-                global_x = data.global_x
+                global_x = data.get("global_x")
                 local_edge_index = data.edge_index
-                global_edge_index = data.global_edge_index
+                global_edge_index = data.get("global_edge_index")
                 y = data.y
                 batch = data.batch
 

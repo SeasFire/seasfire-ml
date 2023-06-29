@@ -40,9 +40,9 @@ def test(model, loader, criterion):
 
             data = data.to(device)
             local_x = data.x
-            global_x = data.global_x
+            global_x = data.get("global_x")
             local_edge_index = data.edge_index
-            global_edge_index = data.global_edge_index
+            global_edge_index = data.get("global_edge_index")
             y = data.y
             batch = data.batch
 

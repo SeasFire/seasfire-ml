@@ -74,7 +74,9 @@ class LocalGlobalDataset(Dataset):
         logger.debug("local_ds={}".format(self._local_ds))
 
         self._include_global = include_global
-        if include_global:
+        if self._include_global:
+            logger.info("Global data enabled in dataset")
+
             self._global_sp_res = self._metadata["global_sp_res"]
             logger.info("global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
 
@@ -83,6 +85,7 @@ class LocalGlobalDataset(Dataset):
             self._global_edge_index = self._get_knn_for_grid(
                 self._global_latlon_shape[0], self._global_latlon_shape[1], 3
             )
+            logger.debug("Global edge index={}".format(self._global_edge_index))
 
             logger.info("Loading global dataset")
             with xr.open_dataset(os.path.join(self.root_dir, "global.h5")) as ds:
@@ -123,9 +126,9 @@ class LocalGlobalDataset(Dataset):
 
     @property
     def global_features(self):
-        if not self._include_global: 
-            raise ValueError("No global support")
-        return tuple(self._input_vars + self._oci_input_vars)
+        if self._include_global:
+            return tuple(self._input_vars + self._oci_input_vars)
+        return []
 
     @property
     def local_nodes(self):
@@ -134,10 +137,8 @@ class LocalGlobalDataset(Dataset):
     @property
     def global_nodes(self):
         if self._include_global:
-            global_nodes = self._global_latlon_shape[0] * self._global_latlon_shape[1]
-        else: 
-            global_nodes = 0
-        return global_nodes
+            return self._global_latlon_shape[0] * self._global_latlon_shape[1]
+        return 0
 
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
@@ -199,19 +200,6 @@ class LocalGlobalDataset(Dataset):
         area_data = self._area_ds.sel(latitude=lat, longitude=lon).to_array()
         logger.debug("area_data={}".format(area_data))
 
-        data = Data(
-            x=local_data.values,
-            pos=local_pos,
-            edge_index=self._edge_index,
-            latlon_shape=self._latlon_shape,
-            center_lat=lat,
-            center_lon=lon,
-            center_time=time,
-            center_vertex_idx=local_data.values.shape[0] // 2,
-            area=area_data.values[0],
-            y=y,
-        )
-
         if self._include_global:
             # compute global data
             time_idx = np.where(self._global_ds["time"] == time)[0][0]
@@ -227,13 +215,27 @@ class LocalGlobalDataset(Dataset):
             global_data = global_data.stack(vertex=("latitude", "longitude"))
             global_data = global_data.transpose("vertex", "values", "time")
 
-            # augment data with global
-            data.global_x=global_data.values,
-            data.global_pos=self._global_pos,
-            data.global_latlon_shape=self._global_latlon_shape,
-            data.global_edge_index=self._global_edge_index,
+            global_x=global_data.values
+            global_pos=self._global_pos
+            global_latlon_shape=self._global_latlon_shape
+            global_edge_index=self._global_edge_index
  
-        return data
+        return Data(
+            x=local_data.values,
+            pos=local_pos,
+            edge_index=self._edge_index,
+            latlon_shape=self._latlon_shape,
+            center_lat=lat,
+            center_lon=lon,
+            center_time=time,
+            center_vertex_idx=local_data.values.shape[0] // 2,
+            area=area_data.values[0],
+            y=y,
+            global_x=global_x if self._include_global else None,
+            global_pos=global_pos if self._include_global else None,
+            global_latlon_shape=global_latlon_shape if self._include_global else None,
+            global_edge_index=global_edge_index if self._include_global else None,
+        )
 
     def _get_knn_for_grid(self, lat_dim, lon_dim, k, add_self_loops=True):
         filename = os.path.join(
@@ -320,8 +322,6 @@ class LocalGlobalTransform:
         self._target_week = value
 
     def __call__(self, data):
-        logger.info("Transforming data={}".format(data))
-
         # local graph features
         features_count = data.x.shape[1]
         local_mean_std = self._local_mean_std_per_feature[:features_count,:]
