@@ -37,7 +37,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, target_week):
+def train(model, train_loader, epochs, val_loader, target_week, model_name):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -216,34 +216,46 @@ def train(model, train_loader, epochs, val_loader, target_week):
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
             logger.info(
-                "Saving best model as best_LocalGlobal_target{}.pt".format(target_week)
+                "Saving best model as best_{}.pt".format(model_name)
             )
             torch.save(
                 {
                     "model": model,
                     "criterion": criterion,
-                    "name": "LocalGlobal",
+                    "name": model_name,
                 },
-                "best_LocalGlobal_target{}.pt".format(target_week),
+                "best_{}.pt".format(model_name),
             )
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
         #scheduler.step()
 
-    logger.info("Saving model as LocalGlobal_target{}.pt".format(target_week))
+    logger.info("Saving model as {}.pt".format(model_name))
     torch.save(
         {
             "model": model,
             "criterion": criterion,
-            "name": "LocalGlobal",
+            "name": model_name,
         },
-        "LocalGlobal_target{}.pt".format(target_week),
+        "{}.pt".format(model_name),
     )
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
         pkl.dump(val_metrics_dict, file)
+
+
+def build_model_name(args): 
+    model_type = "local-global" if args.include_global else "local"
+    target = "target-{}".format(args.target_week)
+    local_radius = "radius-{}".format(args.local_radius)
+    oci = "oci-1" if args.include_oci_variables else "oci-0"
+    if args.include_global:
+        timesteps = "time-l{}-g{}".format(args.local_timesteps, args.global_timesteps)
+    else: 
+        timesteps = "time-l{}-g0".format(args.local_timesteps)
+    return "{}_{}_{}_{}_{}".format(model_type, target, oci, local_radius, timesteps)
 
 
 def main(args):
@@ -308,6 +320,7 @@ def main(args):
         epochs=args.epochs,
         val_loader=val_loader,
         target_week=args.target_week,
+        model_name=build_model_name(args)
     )
 
 
