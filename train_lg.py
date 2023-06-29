@@ -295,6 +295,7 @@ def main(args):
         args.hidden_channels,
         args.global_timesteps,
         train_dataset.local_global_nodes,
+        args.decoder_hidden_channels
     )
 
     train(
@@ -347,6 +348,15 @@ if __name__ == "__main__":
         default="64,64",
         help="Hidden channels for layer 1 and layer 2 of GCN",
     )
+    parser.add_argument(
+        "--decoder-hidden-channels",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="decoder_hidden_channels",
+        default="256,64",
+        help="Hidden channels for decoder layers",
+    )    
     parser.add_argument(
         "-e",
         "--epochs",
@@ -435,4 +445,6 @@ if __name__ == "__main__":
     if len(args.hidden_channels) != 2:
         raise ValueError("Expected hidden channels to be a list of two elements")
     args.hidden_channels = (int(args.hidden_channels[0]), int(args.hidden_channels[1]))
+    
+    args.decoder_hidden_channels = [int(x) for x in args.decoder_hidden_channels.split(",")]
     main(args)

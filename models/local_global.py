@@ -3,6 +3,7 @@ import logging
 import torch.nn.functional as F
 from .tgcn2 import TGCN2
 from .attention import Encoder as TransformerEncoder
+from torch_geometric.nn import MLP
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class LocalGlobalModel(torch.nn.Module):
         global_hidden_channels,
         global_timesteps,
         total_nodes,
+        decoder_hidden_channels,
     ):
         super(LocalGlobalModel, self).__init__()
         if local_hidden_channels[-1] != global_hidden_channels[-1]:
@@ -44,7 +46,10 @@ class LocalGlobalModel(torch.nn.Module):
             dropout=0.1,
         )
         self.global_avg_pooling = torch.nn.AdaptiveAvgPool1d(local_hidden_channels[-1])
-        self.fc = torch.nn.Linear(total_nodes * local_hidden_channels[-1], 1)
+        if decoder_hidden_channels is None: 
+            self.decoder = torch.nn.Linear(total_nodes * local_hidden_channels[-1], 1)
+        else: 
+            self.decoder = MLP([total_nodes * local_hidden_channels[-1]] + decoder_hidden_channels + [1])
 
     def forward(
         self,
@@ -90,5 +95,5 @@ class LocalGlobalModel(torch.nn.Module):
         h = self.attention(h)
         h = self.global_avg_pooling(h)
         h = h.view(batch_size, -1)
-        h = self.fc(h)
+        h = self.decoder(h)
         return h.squeeze(1)
