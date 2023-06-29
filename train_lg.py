@@ -260,11 +260,13 @@ def main(args):
     train_dataset = LocalGlobalDataset(
         root_dir=args.train_path,
         local_radius=args.local_radius,
+        include_oci_variables=args.include_oci_variables,
         transform=LocalGlobalTransform(args.train_path, args.target_week, args.append_pos_as_features),
     )
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
         local_radius=args.local_radius,
+        include_oci_variables=args.include_oci_variables,
         transform=LocalGlobalTransform(args.val_path, args.target_week, args.append_pos_as_features),
     )
 
@@ -408,7 +410,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-append-pos-as-features", dest="append_pos_as_features", action="store_false"
     )
-    parser.set_defaults(append_pos_as_features=True)    
+    parser.set_defaults(append_pos_as_features=True)
+    parser.add_argument(
+        "--include-oci-variables", dest="include_oci_variables", action="store_true"
+    )
+    parser.add_argument(
+        "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
+    )
+    parser.set_defaults(include_oci_variables=True)    
     args = parser.parse_args()
 
     args.hidden_channels = args.hidden_channels.split(",")
