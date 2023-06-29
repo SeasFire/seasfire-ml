@@ -508,7 +508,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../1d_SeasFireCube.zarr",
+        default="../seasfire_1deg.zarr",
         help="Cube path",
     )
     parser.add_argument(
