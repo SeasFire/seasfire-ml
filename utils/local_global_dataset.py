@@ -28,7 +28,9 @@ class LocalGlobalDataset(Dataset):
         else:
             self._oci_input_vars = []
         self._sp_res = self._metadata["sp_res"]
-        logger.info("sp_res={}".format(self._sp_res))
+        logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
+        self._global_sp_res = self._metadata["global_sp_res"]
+        logger.info("global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
 
         self._samples = torch.load(os.path.join(self.root_dir, "samples.pt"))
         logger.info("Samples={}".format(len(self._samples)))

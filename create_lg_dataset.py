@@ -6,7 +6,6 @@ import os
 import xarray as xr
 import numpy as np
 import torch
-from utils import LocalGlobalDataset
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +15,7 @@ class DatasetBuilder:
         self,
         cube_path,
         cube_resolution,
+        global_cube_path,
         load_cube_in_memory,
         output_folder,
         split,
@@ -30,7 +30,6 @@ class DatasetBuilder:
         include_oci_variables,
         global_scale_factor,
     ):
-        self._cube_path = cube_path
         self._log_preprocess_input_vars = ["tp", "pop_dens"]
         self._input_vars = [
             "mslp",
@@ -65,6 +64,21 @@ class DatasetBuilder:
         self._seed = seed
         self._rng = np.random.default_rng(self._seed)
 
+        # validate split
+        if split not in ["train", "test", "val"]:
+            raise ValueError("Wrong split type")
+        self._split = split
+        logger.info("Using split: {}".format(self._split))
+
+        # create output split folder
+        self._output_folder = os.path.join(output_folder, self._split)
+        for folder in [self._output_folder]:
+            logger.info("Creating output folder {}".format(folder))
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+
+        logger.info("Cube path={}".format(cube_path))
+        self._cube_path = cube_path
         if cube_resolution == "25km":
             self._sp_res = 0.25
             self._lat_min = -89.875
@@ -81,25 +95,44 @@ class DatasetBuilder:
             raise ValueError("Invalid cube resolution")        
         logger.info("Using cube resolution: {}".format(cube_resolution))
 
-        # validate split
-        if split not in ["train", "test", "val"]:
-            raise ValueError("Wrong split type")
-        self._split = split
-        logger.info("Using split: {}".format(self._split))
+        self._global_sp_res = 1
+        self._global_lat_min = -89.5
+        self._global_lat_max = 89.5
+        self._global_lon_min = -179.5
+        self._global_lon_max = 179.5
 
-        # create output split folder
-        self._output_folder = os.path.join(output_folder, self._split)
-        for folder in [self._output_folder]:
-            logger.info("Creating output folder {}".format(folder))
-            if not os.path.exists(folder):
-                os.makedirs(folder)
+        # open global cube if present
+        self._global_cube = None
+        if global_cube_path is None: 
+            if cube_resolution == "25km": 
+                raise ValueError("Global cube not found")
+        else:
+            logger.info("Opening global cube zarr file: {}".format(global_cube_path))
+            self._global_cube = xr.open_zarr(global_cube_path, consolidated=False)
+            if load_cube_in_memory:
+                logger.info("Loading global cube into memory")
+                self._global_cube.load()
 
-        # open zarr and display basic info
-        logger.info("Opening zarr file: {}".format(self._cube_path))
+            for var_name in self._log_preprocess_input_vars:
+                logger.info("Log-transforming input var: {}".format(var_name))
+                self._global_cube[var_name] = xr.DataArray(
+                    np.log(1.0 + self._global_cube[var_name].values),
+                    coords=self._global_cube[var_name].coords,
+                    dims=self._global_cube[var_name].dims,
+                    attrs=self._global_cube[var_name].attrs,
+                )                
+
+        # open local cube and display basic info
+        logger.info("Opening local cube zarr file: {}".format(self._cube_path))
         self._cube = xr.open_zarr(self._cube_path, consolidated=False)
         if load_cube_in_memory:
             logger.info("Loading the whole cube in memory.")
             self._cube.load()
+
+        if self._global_cube is None: 
+            logger.info("Using local cube as global")
+            self._global_cube = self._cube
+        
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
 
@@ -341,7 +374,7 @@ class DatasetBuilder:
         return data        
 
     def _create_global_data(self):
-        global_region = self._cube
+        global_region = self._global_cube
         lat_target = len(global_region.coords["latitude"]) // self._global_scale_factor
         lon_target = len(global_region.coords["longitude"]) // self._global_scale_factor
         logger.debug("Global view dimensions = ({},{})".format(lat_target, lon_target))
@@ -431,8 +464,9 @@ class DatasetBuilder:
             "oci_input_vars": self._oci_input_vars,
             "target_var": self._target_var,
             "sp_res": self._sp_res,
-            "max_radius": self._radius,
+            "global_sp_res": self._global_sp_res,
             "global_latlon_shape": global_latlon_shape,
+            "max_radius": self._radius,
             "min_lon": min_lon,
             "min_lat": min_lat,
             "max_lon": max_lon,
@@ -460,15 +494,6 @@ class DatasetBuilder:
             output_path = os.path.join(self._output_folder, "{}.h5".format(name))
         dataset.to_netcdf(output_path)
 
-    def _is_dataset_present(self, index):
-        for key in ["local", "ground_truth", "area"]: 
-            output_path = os.path.join(
-                self._output_folder, "{}_{}.h5".format(key, index)
-            )
-            if not os.path.exists(output_path): 
-                return False
-        return True
-
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level)
@@ -481,6 +506,7 @@ def main(args):
     builder = DatasetBuilder(
         args.cube_path,
         args.cube_resolution,
+        args.global_cube_path,
         args.load_cube_in_memory,
         args.output_folder,
         args.split,
@@ -519,6 +545,15 @@ if __name__ == "__main__":
         dest="cube_resolution",
         default="100km",
         help="Cube resolution. Can be 100km or 25km.",
+    )    
+    parser.add_argument(
+        "--global-cube-path",
+        metavar="PATH",
+        type=str,
+        action="store",
+        dest="global_cube_path",
+        default=None,
+        help="Global cube path",
     )
     parser.add_argument(
         "--output-folder",
