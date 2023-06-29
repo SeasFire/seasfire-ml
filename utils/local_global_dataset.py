@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalGlobalDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, local_radius, transform=None):
         self.root_dir = root_dir
         self.transform = transform
 
@@ -38,8 +38,13 @@ class LocalGlobalDataset(Dataset):
         )
 
         logger.info("Precomputing local graph")
-        self._latlon_shape = self._metadata["local_latlon_shape"]
-        self._radius = self._metadata["radius"]
+        self._max_radius = self._metadata["max_radius"]
+        self._radius = local_radius
+        logger.info("Using local radius={}".format(self._radius))
+        if self._radius > self._max_radius:
+            raise ValueError("Max radius is smaller than local radius.")
+        self._latlon_shape = (2*self._radius+1, 2*self._radius+1)
+        logger.info("Local grid shape={}".format(self._latlon_shape))
         self._edge_index = self._get_knn_for_grid(
             self._latlon_shape[0], self._latlon_shape[1], 3
         )

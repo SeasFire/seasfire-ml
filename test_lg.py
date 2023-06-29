@@ -98,6 +98,7 @@ def main(args):
 
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
+        local_radius=args.local_radius,
         transform=LocalGlobalTransform(args.test_path, args.target_week, args.append_pos_as_features),
     )
 
@@ -147,6 +148,15 @@ if __name__ == "__main__":
         default=32,
         help="Batch size",
     )
+    parser.add_argument(
+        "--local-radius",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="local_radius",
+        default=7,
+        help="Local radius",
+    )        
     parser.add_argument(
         "--target-week",
         metavar="KEY",

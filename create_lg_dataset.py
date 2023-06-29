@@ -127,9 +127,9 @@ class DatasetBuilder:
                 )
             )
 
-        # Radius for grid graph
+        # Maximum radius supported for grid graph
         self._radius = radius
-        logger.info("Using radius={} for grid graph".format(self._radius))
+        logger.info("Will add max radius padding={} around area".format(self._radius))
 
         self._global_scale_factor = global_scale_factor
         logger.info("Using global scale factor={}".format(self._global_scale_factor))
@@ -331,6 +331,7 @@ class DatasetBuilder:
             )
 
     def _create_local_data(self, min_lat, min_lon, max_lat, max_lon):
+        # add radius padding around location of interest
         lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
         lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
         data = (
@@ -364,7 +365,7 @@ class DatasetBuilder:
             for idx, var_name in enumerate(features): 
                 logger.info("Computing mean-std for variable={}".format(var_name))
                 mean_std[idx] = [data[var_name].mean().item(), data[var_name].std().item()]
-            logger.info("mean-std={}".format(mean_std))
+            logger.debug("mean-std={}".format(mean_std))
             torch.save(mean_std, "{}/mean_std_stats_{}.pk".format(self._output_folder, name))
         else:
             logger.info("Skipping {} features stats computation. Found file: {}".format(name, stats_filename))
@@ -375,6 +376,7 @@ class DatasetBuilder:
         return area_in_hectares
 
     def _create_target_var_data(self, min_lat, min_lon, max_lat, max_lon):
+        # add radius padding around area of interest
         lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
         lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
         data = (
@@ -430,8 +432,7 @@ class DatasetBuilder:
             "oci_input_vars": self._oci_input_vars,
             "target_var": self._target_var,
             "sp_res": self._sp_res,
-            "radius": self._radius,
-            "local_latlon_shape": (self._radius*2+1, self._radius*2+1),
+            "max_radius": self._radius,
             "global_latlon_shape": global_latlon_shape,
             "min_lon": min_lon,
             "min_lat": min_lat,

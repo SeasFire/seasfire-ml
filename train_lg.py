@@ -259,10 +259,12 @@ def main(args):
 
     train_dataset = LocalGlobalDataset(
         root_dir=args.train_path,
+        local_radius=args.local_radius,
         transform=LocalGlobalTransform(args.train_path, args.target_week, args.append_pos_as_features),
     )
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
+        local_radius=args.local_radius,
         transform=LocalGlobalTransform(args.val_path, args.target_week, args.append_pos_as_features),
     )
 
@@ -352,6 +354,15 @@ if __name__ == "__main__":
         default=100,
         help="Epochs",
     )
+    parser.add_argument(
+        "--local-radius",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="local_radius",
+        default=7,
+        help="Local radius",
+    )    
     parser.add_argument(
         "--target-week",
         metavar="KEY",
