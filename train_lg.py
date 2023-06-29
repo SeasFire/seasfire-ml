@@ -290,10 +290,11 @@ def main(args):
     model = LocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
+        args.local_timesteps,
         len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
+        args.global_timesteps,
         train_dataset.local_global_nodes,
-        args.timesteps
     )
 
     train(
@@ -375,14 +376,24 @@ if __name__ == "__main__":
         help="Target week",
     )
     parser.add_argument(
-        "-ts",
-        "--timesteps",
+        "-lt",
+        "--local-timesteps",
         metavar="KEY",
         type=int,
         action="store",
-        dest="timesteps",
+        dest="local_timesteps",
         default=24,
-        help="Time steps in the past",
+        help="Time steps in the past for the local part",
+    )    
+    parser.add_argument(
+        "-gt",
+        "--global-timesteps",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="global_timesteps",
+        default=24,
+        help="Time steps in the past for the global part",
     )
     parser.add_argument(
         "-lr",

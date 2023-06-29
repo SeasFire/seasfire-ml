@@ -14,26 +14,28 @@ class LocalGlobalModel(torch.nn.Module):
         self,
         local_node_features,
         local_hidden_channels,
+        local_timesteps,
         global_node_features,
         global_hidden_channels,
+        global_timesteps,
         total_nodes,
-        periods,
     ):
         super(LocalGlobalModel, self).__init__()
         if local_hidden_channels[-1] != global_hidden_channels[-1]:
             raise ValueError("Output embedding of each TGCN should be the same")
-        self.periods = periods
         self.total_nodes = total_nodes
         self.local_gnn = TGCN2(
             in_channels=local_node_features,
             out_channels=local_hidden_channels,
             add_graph_aggregation_layer=False,
         )
+        self.local_timesteps = local_timesteps
         self.global_gnn = TGCN2(
             in_channels=global_node_features,
             out_channels=global_hidden_channels,
             add_graph_aggregation_layer=False,
         )
+        self.global_timesteps = global_timesteps
         self.attention = TransformerEncoder(
             local_hidden_channels[-1],
             total_nodes,
@@ -56,7 +58,9 @@ class LocalGlobalModel(torch.nn.Module):
         global_H: torch.FloatTensor = None,
         readout_batch=None,
     ) -> torch.FloatTensor:
-        for period in range(self.periods):
+        
+        local_x = local_x[:,:,-self.local_timesteps:]
+        for period in range(self.local_timesteps):
             local_H = self.local_gnn(
                 local_x[:, :, period],
                 local_edge_index,
@@ -65,6 +69,8 @@ class LocalGlobalModel(torch.nn.Module):
                 readout_batch,
             )
 
+        global_x = global_x[:,:,-self.global_timesteps:]
+        for period in range(self.global_timesteps):
             global_H = self.global_gnn(
                 global_x[:, :, period],
                 global_edge_index,
