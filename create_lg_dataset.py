@@ -55,8 +55,7 @@ class DatasetBuilder:
             "oci_epo",
             "oci_nina34_anom",
             "oci_censo",
-        ]
-        self._include_oci_variables = include_oci_variables
+        ] if include_oci_variables else []
 
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self._target_var = "gwis_ba"
