@@ -100,7 +100,8 @@ def main(args):
         root_dir=args.test_path,
         local_radius=args.local_radius,
         include_oci_variables=args.include_oci_variables,
-        transform=LocalGlobalTransform(args.test_path, args.target_week, args.append_pos_as_features),
+        include_global=args.include_global,
+        transform=LocalGlobalTransform(args.test_path, args.target_week, args.include_global, args.append_pos_as_features),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))
@@ -170,6 +171,13 @@ if __name__ == "__main__":
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     parser.set_defaults(debug=False)
+    parser.add_argument(
+        "--include-global", dest="include_global", action="store_true"
+    )
+    parser.add_argument(
+        "--no-include-global", dest="include_global", action="store_false"
+    )
+    parser.set_defaults(include_global=True)        
     parser.add_argument(
         "--append-pos-as-features", dest="append_pos_as_features", action="store_true"
     )

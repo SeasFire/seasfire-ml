@@ -110,7 +110,7 @@ def train(model, train_loader, epochs, val_loader, target_week):
         train_labels = []
 
         for i, data in enumerate(tqdm(train_loader)):
-            # logger.info("Data={}".format(data))
+            logger.info("Data={}".format(data))
 
             data = data.to(device)
             local_x = data.x
@@ -260,14 +260,16 @@ def main(args):
     train_dataset = LocalGlobalDataset(
         root_dir=args.train_path,
         local_radius=args.local_radius,
+        include_global=args.include_global,
         include_oci_variables=args.include_oci_variables,
-        transform=LocalGlobalTransform(args.train_path, args.target_week, args.append_pos_as_features),
+        transform=LocalGlobalTransform(args.train_path, args.target_week, args.include_global, args.append_pos_as_features),
     )
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
         local_radius=args.local_radius,
+        include_global=args.include_global,
         include_oci_variables=args.include_oci_variables,
-        transform=LocalGlobalTransform(args.val_path, args.target_week, args.append_pos_as_features),
+        transform=LocalGlobalTransform(args.val_path, args.target_week, args.include_global, args.append_pos_as_features),
     )
 
     logger.info("Train dataset length: {}".format(len(train_dataset)))
@@ -291,11 +293,13 @@ def main(args):
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
         args.local_timesteps,
+        train_dataset.local_nodes,
         len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
         args.global_timesteps,
-        train_dataset.local_global_nodes,
-        args.decoder_hidden_channels
+        train_dataset.global_nodes,
+        args.decoder_hidden_channels,
+        args.include_global
     )
 
     train(
@@ -426,6 +430,13 @@ if __name__ == "__main__":
         help="Weight decay",
     )
     parser.add_argument(
+        "--include-global", dest="include_global", action="store_true"
+    )
+    parser.add_argument(
+        "--no-include-global", dest="include_global", action="store_false"
+    )
+    parser.set_defaults(include_global=True)    
+    parser.add_argument(
         "--append-pos-as-features", dest="append_pos_as_features", action="store_true"
     )
     parser.add_argument(
@@ -445,6 +456,6 @@ if __name__ == "__main__":
     if len(args.hidden_channels) != 2:
         raise ValueError("Expected hidden channels to be a list of two elements")
     args.hidden_channels = (int(args.hidden_channels[0]), int(args.hidden_channels[1]))
-    
+
     args.decoder_hidden_channels = [int(x) for x in args.decoder_hidden_channels.split(",")]
     main(args)

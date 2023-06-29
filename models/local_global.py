@@ -16,28 +16,32 @@ class LocalGlobalModel(torch.nn.Module):
         local_node_features,
         local_hidden_channels,
         local_timesteps,
+        local_nodes,
         global_node_features,
         global_hidden_channels,
         global_timesteps,
-        total_nodes,
+        global_nodes,
         decoder_hidden_channels,
+        include_global=True,
     ):
         super(LocalGlobalModel, self).__init__()
         if local_hidden_channels[-1] != global_hidden_channels[-1]:
             raise ValueError("Output embedding of each TGCN should be the same")
-        self.total_nodes = total_nodes
+        total_nodes = local_nodes + global_nodes if include_global else 0
         self.local_gnn = TGCN2(
             in_channels=local_node_features,
             out_channels=local_hidden_channels,
             add_graph_aggregation_layer=False,
         )
         self.local_timesteps = local_timesteps
-        self.global_gnn = TGCN2(
-            in_channels=global_node_features,
-            out_channels=global_hidden_channels,
-            add_graph_aggregation_layer=False,
-        )
-        self.global_timesteps = global_timesteps
+        self._include_global = include_global
+        if include_global:
+            self.global_gnn = TGCN2(
+                in_channels=global_node_features,
+                out_channels=global_hidden_channels,
+                add_graph_aggregation_layer=False,
+            )
+            self.global_timesteps = global_timesteps
         self.attention = TransformerEncoder(
             local_hidden_channels[-1],
             total_nodes,
@@ -74,24 +78,29 @@ class LocalGlobalModel(torch.nn.Module):
                 readout_batch,
             )
 
-        global_x = global_x[:,:,-self.global_timesteps:]
-        for period in range(self.global_timesteps):
-            global_H = self.global_gnn(
-                global_x[:, :, period],
-                global_edge_index,
-                global_edge_weight,
-                global_H,
-                readout_batch,
-            )
+        if self._include_global:
+            global_x = global_x[:,:,-self.global_timesteps:]
+            for period in range(self.global_timesteps):
+                global_H = self.global_gnn(
+                    global_x[:, :, period],
+                    global_edge_index,
+                    global_edge_weight,
+                    global_H,
+                    readout_batch,
+                )
 
         batch_size = len(torch.unique(readout_batch))
 
         local_vertex_count = local_H.shape[0] // batch_size
         local_H = local_H.view(batch_size, local_vertex_count, -1)
 
-        global_vertex_count = global_H.shape[0] // batch_size
-        global_H = global_H.view(batch_size, global_vertex_count, -1)
-        h = torch.cat((local_H, global_H), dim=1)
+        if self._include_global:
+            global_vertex_count = global_H.shape[0] // batch_size
+            global_H = global_H.view(batch_size, global_vertex_count, -1)
+            h = torch.cat((local_H, global_H), dim=1)
+        else:
+            h = local_H
+
         h = self.attention(h)
         h = self.global_avg_pooling(h)
         h = h.view(batch_size, -1)

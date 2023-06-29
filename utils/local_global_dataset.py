@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalGlobalDataset(Dataset):
-    def __init__(self, root_dir, local_radius, include_oci_variables=True, transform=None):
+    def __init__(self, root_dir, local_radius, include_global=True, include_oci_variables=True, transform=None):
         self.root_dir = root_dir
         self.transform = transform
 
@@ -21,26 +21,20 @@ class LocalGlobalDataset(Dataset):
         self._target_count = self._metadata["target_count"]
         self._target_var = self._metadata["target_var"]
         self._input_vars = self._metadata["input_vars"]
+
         logger.info("Found input vars={}".format(self._input_vars))
         if include_oci_variables:
             self._oci_input_vars = self._metadata["oci_input_vars"]
             logger.info("Found oci input vars={}".format(self._oci_input_vars))
         else:
             self._oci_input_vars = []
+
         self._sp_res = self._metadata["sp_res"]
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
-        self._global_sp_res = self._metadata["global_sp_res"]
-        logger.info("global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
-
+        
         self._samples = torch.load(os.path.join(self.root_dir, "samples.pt"))
         logger.info("Samples={}".format(len(self._samples)))
         self._indices = list(range(len(self._samples)))
-
-        logger.info("Precomputing global graph")
-        self._global_latlon_shape = self._metadata["global_latlon_shape"]
-        self._global_edge_index = self._get_knn_for_grid(
-            self._global_latlon_shape[0], self._global_latlon_shape[1], 3
-        )
 
         logger.info("Precomputing local graph")
         self._max_radius = self._metadata["max_radius"]
@@ -53,35 +47,6 @@ class LocalGlobalDataset(Dataset):
         self._edge_index = self._get_knn_for_grid(
             self._latlon_shape[0], self._latlon_shape[1], 3
         )
-
-        logger.info("Loading global dataset")
-        with xr.open_dataset(os.path.join(self.root_dir, "global.h5")) as ds:
-            self._global_ds = ds.load()
-        logger.debug("global_ds={}".format(self._global_ds))
-
-        # Compute global graph features
-        for oci_var in self._oci_input_vars:
-            self._global_ds[oci_var] = self._global_ds[oci_var].expand_dims(
-                dim={
-                    "latitude": self._global_ds["latitude"],
-                    "longitude": self._global_ds["longitude"],
-                }
-            )
-        logger.debug("global_ds={}".format(self._global_ds))
-
-        logger.info("Precomputing global positions")
-        self._global_pos = np.array(
-            list(
-                map(
-                    np.array,
-                    self._global_ds.stack(vertex=("latitude", "longitude"))[
-                        "vertex"
-                    ].values,
-                )
-            ),
-            dtype=np.float32,
-        )
-        logger.debug("global_pos={}".format(self._global_pos))
 
         logger.info("Loading area dataset")
         with xr.open_dataset(os.path.join(self.root_dir, "area.h5")) as ds:
@@ -108,6 +73,46 @@ class LocalGlobalDataset(Dataset):
             )
         logger.debug("local_ds={}".format(self._local_ds))
 
+        self._include_global = include_global
+        if include_global:
+            self._global_sp_res = self._metadata["global_sp_res"]
+            logger.info("global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
+
+            logger.info("Precomputing global graph")
+            self._global_latlon_shape = self._metadata["global_latlon_shape"]
+            self._global_edge_index = self._get_knn_for_grid(
+                self._global_latlon_shape[0], self._global_latlon_shape[1], 3
+            )
+
+            logger.info("Loading global dataset")
+            with xr.open_dataset(os.path.join(self.root_dir, "global.h5")) as ds:
+                self._global_ds = ds.load()
+            logger.debug("global_ds={}".format(self._global_ds))
+
+            # Compute global graph features
+            for oci_var in self._oci_input_vars:
+                self._global_ds[oci_var] = self._global_ds[oci_var].expand_dims(
+                    dim={
+                        "latitude": self._global_ds["latitude"],
+                        "longitude": self._global_ds["longitude"],
+                    }
+                )
+            logger.debug("global_ds={}".format(self._global_ds))
+
+            logger.info("Precomputing global positions")
+            self._global_pos = np.array(
+                list(
+                    map(
+                        np.array,
+                        self._global_ds.stack(vertex=("latitude", "longitude"))[
+                            "vertex"
+                        ].values,
+                    )
+                ),
+                dtype=np.float32,
+            )
+            logger.debug("global_pos={}".format(self._global_pos))
+
     @property
     def len(self):
         return len(self._samples)
@@ -118,13 +123,21 @@ class LocalGlobalDataset(Dataset):
 
     @property
     def global_features(self):
+        if not self._include_global: 
+            raise ValueError("No global support")
         return tuple(self._input_vars + self._oci_input_vars)
 
     @property
-    def local_global_nodes(self):
-        local_nodes = self._latlon_shape[0] * self._latlon_shape[1]
-        global_nodes = self._global_latlon_shape[0] * self._global_latlon_shape[1]
-        return local_nodes + global_nodes
+    def local_nodes(self):
+        return self._latlon_shape[0] * self._latlon_shape[1]
+
+    @property
+    def global_nodes(self):
+        if self._include_global:
+            global_nodes = self._global_latlon_shape[0] * self._global_latlon_shape[1]
+        else: 
+            global_nodes = 0
+        return global_nodes
 
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
@@ -182,26 +195,11 @@ class LocalGlobalDataset(Dataset):
         )
         logger.debug("local_pos={}".format(local_pos))
 
-        # compute global data
-        time_idx = np.where(self._global_ds["time"] == time)[0][0]
-        time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
-        global_ds = self._global_ds.isel(time=time_slice).load()
-        global_data = xr.concat(
-            [
-                global_ds[var_name]
-                for var_name in self._input_vars + self._oci_input_vars
-            ],
-            dim="values",
-        )
-        global_data = global_data.stack(vertex=("latitude", "longitude"))
-        global_data = global_data.transpose("vertex", "values", "time")
-        logger.debug("global_data={}".format(global_data))
-
         # compute area
         area_data = self._area_ds.sel(latitude=lat, longitude=lon).to_array()
         logger.debug("area_data={}".format(area_data))
 
-        return Data(
+        data = Data(
             x=local_data.values,
             pos=local_pos,
             edge_index=self._edge_index,
@@ -211,12 +209,31 @@ class LocalGlobalDataset(Dataset):
             center_time=time,
             center_vertex_idx=local_data.values.shape[0] // 2,
             area=area_data.values[0],
-            global_x=global_data.values,
-            global_pos=self._global_pos,
-            global_latlon_shape=self._global_latlon_shape,
-            global_edge_index=self._global_edge_index,
             y=y,
         )
+
+        if self._include_global:
+            # compute global data
+            time_idx = np.where(self._global_ds["time"] == time)[0][0]
+            time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
+            global_ds = self._global_ds.isel(time=time_slice).load()
+            global_data = xr.concat(
+                [
+                    global_ds[var_name]
+                    for var_name in self._input_vars + self._oci_input_vars
+                ],
+                dim="values",
+            )
+            global_data = global_data.stack(vertex=("latitude", "longitude"))
+            global_data = global_data.transpose("vertex", "values", "time")
+
+            # augment data with global
+            data.global_x=global_data.values,
+            data.global_pos=self._global_pos,
+            data.global_latlon_shape=self._global_latlon_shape,
+            data.global_edge_index=self._global_edge_index,
+ 
+        return data
 
     def _get_knn_for_grid(self, lat_dim, lon_dim, k, add_self_loops=True):
         filename = os.path.join(
@@ -265,6 +282,7 @@ class LocalGlobalTransform:
         self,
         root_dir,
         target_week,
+        include_global=True,
         append_position_as_feature=True,
     ):
         self.root_dir = root_dir
@@ -277,14 +295,18 @@ class LocalGlobalTransform:
         logger.debug(
             "Loaded local dataset mean, std={}".format(self._local_mean_std_per_feature)
         )
-        self._global_mean_std_per_feature = torch.load(
-            "{}/{}".format(self.root_dir, "mean_std_stats_global.pk")
-        )
-        logger.debug(
-            "Loaded global dataset mean, std={}".format(
-                self._global_mean_std_per_feature
+
+        self._include_global = include_global
+        if include_global:
+            self._global_mean_std_per_feature = torch.load(
+                "{}/{}".format(self.root_dir, "mean_std_stats_global.pk")
             )
-        )
+            logger.debug(
+                "Loaded global dataset mean, std={}".format(
+                    self._global_mean_std_per_feature
+                )
+            )
+
         self._append_position_as_feature = append_position_as_feature
 
     @property
@@ -298,6 +320,8 @@ class LocalGlobalTransform:
         self._target_week = value
 
     def __call__(self, data):
+        logger.info("Transforming data={}".format(data))
+
         # local graph features
         features_count = data.x.shape[1]
         local_mean_std = self._local_mean_std_per_feature[:features_count,:]
@@ -337,44 +361,45 @@ class LocalGlobalTransform:
 
         data.x = torch.from_numpy(data.x)
 
-        # global graph features
-        global_features_count = data.global_x.shape[1]
-        global_mean_std = self._global_mean_std_per_feature[:global_features_count,:]
-        global_mean_std = np.transpose(global_mean_std)
-        global_mu = global_mean_std[0]
-        global_mu = np.repeat(global_mu, data.global_x.shape[2])
-        global_mu = np.reshape(global_mu, (global_features_count, -1))
-        global_std = global_mean_std[1]
-        global_std = np.repeat(global_std, data.global_x.shape[2])
-        global_std = np.reshape(global_std, (global_features_count, -1))
-        for i in range(0, data.global_x.shape[0]):
-            data.global_x[i, :, :] = (data.global_x[i, :, :] - global_mu) / global_std
-        data.global_x = np.nan_to_num(data.global_x, nan=-1.0)
+        if self._include_global:
+            # global graph features
+            global_features_count = data.global_x.shape[1]
+            global_mean_std = self._global_mean_std_per_feature[:global_features_count,:]
+            global_mean_std = np.transpose(global_mean_std)
+            global_mu = global_mean_std[0]
+            global_mu = np.repeat(global_mu, data.global_x.shape[2])
+            global_mu = np.reshape(global_mu, (global_features_count, -1))
+            global_std = global_mean_std[1]
+            global_std = np.repeat(global_std, data.global_x.shape[2])
+            global_std = np.reshape(global_std, (global_features_count, -1))
+            for i in range(0, data.global_x.shape[0]):
+                data.global_x[i, :, :] = (data.global_x[i, :, :] - global_mu) / global_std
+            data.global_x = np.nan_to_num(data.global_x, nan=-1.0)
 
-        if self._append_position_as_feature:
-            latlon = np.transpose(data.global_pos)
-            lat = latlon[0]
-            lon = latlon[1]
-            cos_lat = np.reshape(
-                np.repeat(np.cos(lat * np.pi / 180), data.global_x.shape[2]),
-                (-1, data.global_x.shape[2]),
-            )
-            sin_lat = np.reshape(
-                np.repeat(np.sin(lat * np.pi / 180), data.global_x.shape[2]),
-                (-1, data.global_x.shape[2]),
-            )
-            cos_lon = np.reshape(
-                np.repeat(np.cos(lon * np.pi / 180), data.global_x.shape[2]),
-                (-1, data.global_x.shape[2]),
-            )
-            sin_lon = np.reshape(
-                np.repeat(np.sin(lon * np.pi / 180), data.global_x.shape[2]),
-                (-1, data.global_x.shape[2]),
-            )
-            pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
-            data.global_x = np.concatenate((data.global_x, pos), axis=1)
+            if self._append_position_as_feature:
+                latlon = np.transpose(data.global_pos)
+                lat = latlon[0]
+                lon = latlon[1]
+                cos_lat = np.reshape(
+                    np.repeat(np.cos(lat * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                sin_lat = np.reshape(
+                    np.repeat(np.sin(lat * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                cos_lon = np.reshape(
+                    np.repeat(np.cos(lon * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                sin_lon = np.reshape(
+                    np.repeat(np.sin(lon * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
+                data.global_x = np.concatenate((data.global_x, pos), axis=1)
 
-        data.global_x = torch.from_numpy(data.global_x)
+            data.global_x = torch.from_numpy(data.global_x)
 
         # label
         y = np.where(data.y > 0.0, 1, 0)
