@@ -420,16 +420,16 @@ class DatasetBuilder:
 
     def run(self):
         ##Africa
-        # min_lon = -18
-        # min_lat = -35
-        # max_lon = 51
-        # max_lat = 30
+        min_lon = -18
+        min_lat = -35
+        max_lon = 51
+        max_lat = 30
 
         # Europe
-        min_lon = -25
-        min_lat = 36
-        max_lon = 50
-        max_lat = 72
+        #min_lon = -25
+        #min_lat = 36
+        #max_lon = 50
+        #max_lat = 72
 
         # create list of samples to generate
         samples = self.generate_samples_lists(

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalGlobalDataset(Dataset):
-    def __init__(self, root_dir, local_radius, include_global=True, include_oci_variables=True, transform=None):
+    def __init__(self, root_dir, local_radius, local_k, global_k=2, include_global=True, include_oci_variables=True, transform=None):
         self.root_dir = root_dir
         self.transform = transform
 
@@ -44,8 +44,12 @@ class LocalGlobalDataset(Dataset):
             raise ValueError("Max radius is smaller than local radius.")
         self._latlon_shape = (2*self._radius+1, 2*self._radius+1)
         logger.info("Local grid shape={}".format(self._latlon_shape))
+        self._local_k = local_k
+        logger.info("Using k-nn with k={}".format(self._local_k))        
+        if self._local_k > self._radius: 
+            logger.warning("k-nn with large k={} more than local radius={}".format(self._local_k, self._radius))
         self._edge_index = self._get_knn_for_grid(
-            self._latlon_shape[0], self._latlon_shape[1], 3
+            self._latlon_shape[0], self._latlon_shape[1], self._local_k
         )
 
         logger.info("Loading area dataset")
@@ -78,12 +82,15 @@ class LocalGlobalDataset(Dataset):
             logger.info("Global data enabled in dataset")
 
             self._global_sp_res = self._metadata["global_sp_res"]
-            logger.info("global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
+            logger.info("Global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
+
+            self._global_k = global_k
+            logger.info("Will use k-nn for global with k={}".format(self._global_k))
 
             logger.info("Precomputing global graph")
             self._global_latlon_shape = self._metadata["global_latlon_shape"]
             self._global_edge_index = self._get_knn_for_grid(
-                self._global_latlon_shape[0], self._global_latlon_shape[1], 3
+                self._global_latlon_shape[0], self._global_latlon_shape[1], self._global_k
             )
             logger.debug("Global edge index={}".format(self._global_edge_index))
 

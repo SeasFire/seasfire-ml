@@ -99,6 +99,8 @@ def main(args):
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
         local_radius=args.local_radius,
+        local_k=args.local_k,
+        global_k=args.global_k,        
         include_oci_variables=args.include_oci_variables,
         include_global=args.include_global,
         transform=LocalGlobalTransform(args.test_path, args.target_week, args.include_global, args.append_pos_as_features),
@@ -158,7 +160,25 @@ if __name__ == "__main__":
         dest="local_radius",
         default=7,
         help="Local radius",
-    )        
+    )
+    parser.add_argument(
+        "--local-k",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="local_k",
+        default=2,
+        help="Local k for knn graph.",
+    )
+    parser.add_argument(
+        "--global-k",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="global_k",
+        default=2,
+        help="Global k for knn graph.",
+    )                
     parser.add_argument(
         "--target-week",
         metavar="KEY",

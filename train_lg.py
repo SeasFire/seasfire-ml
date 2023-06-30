@@ -59,8 +59,9 @@ def train(model, train_loader, epochs, val_loader, target_week, model_name):
         "Loss": [],
     }
 
-    pos_weight = torch.FloatTensor([1.0]).to(device)
-    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    # pos_weight = torch.FloatTensor([1.0]).to(device)
+    # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    criterion = torch.nn.BCEWithLogitsLoss()
 
     train_metrics = [
         Accuracy(task="binary").to(device),
@@ -272,6 +273,8 @@ def main(args):
     train_dataset = LocalGlobalDataset(
         root_dir=args.train_path,
         local_radius=args.local_radius,
+        local_k=args.local_k,
+        global_k=args.global_k,
         include_global=args.include_global,
         include_oci_variables=args.include_oci_variables,
         transform=LocalGlobalTransform(args.train_path, args.target_week, args.include_global, args.append_pos_as_features),
@@ -279,6 +282,8 @@ def main(args):
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
         local_radius=args.local_radius,
+        local_k=args.local_k,
+        global_k=args.global_k,
         include_global=args.include_global,
         include_oci_variables=args.include_oci_variables,
         transform=LocalGlobalTransform(args.val_path, args.target_week, args.include_global, args.append_pos_as_features),
@@ -392,7 +397,16 @@ if __name__ == "__main__":
         dest="local_radius",
         default=7,
         help="Local radius",
-    )    
+    )
+    parser.add_argument(
+        "--local-k",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="local_k",
+        default=2,
+        help="Local k for knn graph.",
+    )        
     parser.add_argument(
         "--target-week",
         metavar="KEY",
@@ -422,6 +436,15 @@ if __name__ == "__main__":
         default=24,
         help="Time steps in the past for the global part",
     )
+    parser.add_argument(
+        "--global-k",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="global_k",
+        default=2,
+        help="Global k for knn graph.",
+    )            
     parser.add_argument(
         "-lr",
         "--learning-rate",
