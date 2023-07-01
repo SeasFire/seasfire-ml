@@ -63,6 +63,9 @@ class DatasetBuilder:
         self._target_var = "gwis_ba"
         logger.info("Using target variable: {}".format(self._target_var))
 
+        self._ndvi_var = "ndvi"
+        logger.info("Using ndvi variable: {}".format(self._ndvi_var))
+
         logger.info("Using seed: {}".format(seed))
         self._seed = seed
         self._rng = np.random.default_rng(self._seed)
@@ -224,22 +227,22 @@ class DatasetBuilder:
             raise ValueError("Invalid split type")
 
     def _sample_wrt_threshold(
-        self, sample_region, sample_region_gwsi_ba_per_area, strategy
+        self, sample_region, sample_region_gwsi_ba_per_area, sample_region_ndvi, strategy
     ):
         if strategy == "above-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area > self._positive_samples_threshold
-            )
+            ) & (~np.isnan(sample_region_ndvi))
             size = self._positive_samples_size
         elif strategy == "positive-below-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
-            ) & (sample_region_gwsi_ba_per_area > 0.0)
+            ) & (sample_region_gwsi_ba_per_area > 0.0) & (~np.isnan(sample_region_ndvi))
             size = self._positive_samples_size
         elif strategy == "zero":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= 0.0
-            )
+            ) & (~np.isnan(sample_region_ndvi))
             size = 2 * self._positive_samples_size
         else:
             raise ValueError("Invalid strategy")
@@ -273,20 +276,20 @@ class DatasetBuilder:
         return result
 
     def _all_wrt_threshold(
-        self, sample_region, sample_region_gwsi_ba_per_area, strategy
+        self, sample_region, sample_region_gwsi_ba_per_area, sample_region_ndvi, strategy
     ):
         if strategy == "above-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area > self._positive_samples_threshold
-            )
+            ) & (~np.isnan(sample_region_ndvi))
         elif strategy == "positive-below-threshold":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
-            ) & (sample_region_gwsi_ba_per_area > 0.0)
+            ) & (sample_region_gwsi_ba_per_area > 0.0) & (~np.isnan(sample_region_ndvi))
         elif strategy == "zero":
             sample_region_gwsi_ba_per_area_wrt_threshold = (
                 sample_region_gwsi_ba_per_area <= 0.0
-            )
+            ) & (~np.isnan(sample_region_ndvi))
         else:
             raise ValueError("Invalid strategy")
 
@@ -317,7 +320,8 @@ class DatasetBuilder:
         ).isel(time=slice(self._start_time, self._end_time))
 
         # find target variable in region
-        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
+        sample_region_target_var_values = sample_region[self._target_var].values
+        sample_region_ndvi = sample_region[self._ndvi_var].values
 
         # compute area in sample region and add time dimension
         sample_region_area = (
@@ -334,21 +338,22 @@ class DatasetBuilder:
 
         # compute target variable per area
         sample_region_gwsi_ba_per_area = (
-            sample_region_gwsi_ba_values / sample_region_area_values
+            sample_region_target_var_values / sample_region_area_values
         )
 
         above_threshold_samples_list = self._all_wrt_threshold(
-            sample_region, sample_region_gwsi_ba_per_area, strategy="above-threshold"
+            sample_region, sample_region_gwsi_ba_per_area, sample_region_ndvi, strategy="above-threshold"
         )
 
         below_threshold_samples_list = self._all_wrt_threshold(
             sample_region,
             sample_region_gwsi_ba_per_area,
+            sample_region_ndvi,
             strategy="positive-below-threshold",
         )
 
         zero_threshold_samples_list = self._all_wrt_threshold(
-            sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
+            sample_region, sample_region_gwsi_ba_per_area, sample_region_ndvi, strategy="zero"
         )
 
         return (
@@ -364,7 +369,8 @@ class DatasetBuilder:
         ).isel(time=slice(self._start_time, self._end_time))
 
         # find target variable in region
-        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
+        sample_region_target_var_values = sample_region[self._target_var].values
+        sample_region_ndvi = sample_region[self._ndvi_var].values
 
         # compute area in sample region and add time dimension
         sample_region_area = (
@@ -381,21 +387,22 @@ class DatasetBuilder:
 
         # compute target variable per area
         sample_region_gwsi_ba_per_area = (
-            sample_region_gwsi_ba_values / sample_region_area_values
+            sample_region_target_var_values / sample_region_area_values
         )
 
         above_threshold_samples_list = self._sample_wrt_threshold(
-            sample_region, sample_region_gwsi_ba_per_area, strategy="above-threshold"
+            sample_region, sample_region_gwsi_ba_per_area, sample_region_ndvi, strategy="above-threshold"
         )
 
         below_threshold_samples_list = self._sample_wrt_threshold(
             sample_region,
             sample_region_gwsi_ba_per_area,
+            sample_region_ndvi,
             strategy="positive-below-threshold",
         )
 
         zero_threshold_samples_list = self._sample_wrt_threshold(
-            sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
+            sample_region, sample_region_gwsi_ba_per_area, sample_region_ndvi, strategy="zero"
         )
 
         return (

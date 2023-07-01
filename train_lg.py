@@ -256,8 +256,8 @@ def save_model(model, criterion, model_prefix, model_name):
 
 
 def main(args):
-    logging.basicConfig(level=logging.INFO)
-    logger.addHandler(logging.FileHandler("logs.log"))
+    level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=level)
 
     logger.info("Torch version: {}".format(torch.__version__))
     logger.info("Cuda available: {}".format(torch.cuda.is_available()))
@@ -491,7 +491,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
     )
-    parser.set_defaults(include_oci_variables=True)    
+    parser.set_defaults(include_oci_variables=True)
+    parser.add_argument("--debug", dest="debug", action="store_true")
+    parser.add_argument("--no-debug", dest="debug", action="store_false")    
     args = parser.parse_args()
 
     args.hidden_channels = args.hidden_channels.split(",")
