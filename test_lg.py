@@ -17,7 +17,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def test(model, loader, criterion):
-    logger.info("Starting test")
+    logger.info("Starting Test")
 
     model = model.to(device)
 
@@ -113,7 +113,7 @@ def main(args):
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=8,
+        num_workers=args.num_workers,
         pin_memory=True,
     )
 
@@ -158,7 +158,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=7,
+        default=3,
         help="Local radius",
     )
     parser.add_argument(
@@ -188,6 +188,15 @@ if __name__ == "__main__":
         default=1,
         help="Target week",
     )
+    parser.add_argument(
+        "--num-workers",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="num_workers",
+        default=12,
+        help="Num workers",
+    )    
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     parser.set_defaults(debug=False)

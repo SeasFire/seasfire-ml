@@ -273,21 +273,35 @@ class DatasetBuilder:
             )
         return result
 
-    def _generate_all_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
-        sample_region = self._cube.sel(
-            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
-        ).isel(time=slice(self._start_time, self._end_time))
+    def _all_wrt_threshold(
+        self, sample_region, sample_region_gwsi_ba_per_area, strategy
+    ):
+        if strategy == "above-threshold":
+            sample_region_gwsi_ba_per_area_wrt_threshold = (
+                sample_region_gwsi_ba_per_area > self._positive_samples_threshold
+            )
+        elif strategy == "positive-below-threshold":
+            sample_region_gwsi_ba_per_area_wrt_threshold = (
+                sample_region_gwsi_ba_per_area <= self._positive_samples_threshold
+            ) & (sample_region_gwsi_ba_per_area > 0.0)
+        elif strategy == "zero":
+            sample_region_gwsi_ba_per_area_wrt_threshold = (
+                sample_region_gwsi_ba_per_area <= 0.0
+            )
+        else:
+            raise ValueError("Invalid strategy")
 
-        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
-        sample_region_gwsi_non_nan = sample_region_gwsi_ba_values >= 0.0
-
-        sample_len_non_nan = np.sum(sample_region_gwsi_non_nan)
-        logger.debug("Samples={}".format(sample_len_non_nan))
+        sample_len_wrt_threshold = np.sum(sample_region_gwsi_ba_per_area_wrt_threshold)
+        logger.info(
+            "Samples for strategy={} are {}".format(strategy, sample_len_wrt_threshold)
+        )
 
         result = []
-        all_samples_index = np.argwhere(sample_region_gwsi_non_nan)
+        all_wrt_threshold_samples_index = np.argwhere(
+            sample_region_gwsi_ba_per_area_wrt_threshold
+        )
 
-        for index in all_samples_index:
+        for index in all_wrt_threshold_samples_index:
             result.append(
                 (
                     sample_region.latitude.values[index[1]],
@@ -295,8 +309,50 @@ class DatasetBuilder:
                     sample_region.time.values[index[0]],
                 ),
             )
-
         return result
+
+    def _generate_all_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
+        # define sample region
+        sample_region = self._cube.sel(
+            latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
+        ).isel(time=slice(self._start_time, self._end_time))
+
+        # find target variable in region
+        sample_region_gwsi_ba_values = sample_region.gwis_ba.values
+
+        # compute area in sample region and add time dimension
+        sample_region_area = (
+            self._cube["area"]
+            .sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon))
+            .expand_dims(dim={"time": sample_region.time}, axis=0)
+        )
+
+        # Convert area in hectars
+        sample_region_area_values = sample_region_area.values / 10000.0
+        logger.info(
+            "Unique area values: {}".format(np.unique(sample_region_area_values))
+        )
+
+        # compute target variable per area
+        sample_region_gwsi_ba_per_area = (
+            sample_region_gwsi_ba_values / sample_region_area_values
+        )
+
+        above_threshold_samples_list = self._all_wrt_threshold(
+            sample_region, sample_region_gwsi_ba_per_area, strategy="above-threshold"
+        )
+
+        below_threshold_samples_list = self._all_wrt_threshold(
+            sample_region,
+            sample_region_gwsi_ba_per_area,
+            strategy="positive-below-threshold",
+        )
+
+        zero_threshold_samples_list = self._all_wrt_threshold(
+            sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
+        )
+
+        return above_threshold_samples_list, below_threshold_samples_list, zero_threshold_samples_list
 
     def _generate_threshold_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         # define sample region
@@ -339,11 +395,7 @@ class DatasetBuilder:
             sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
         )
 
-        return (
-            above_threshold_samples_list
-            + below_threshold_samples_list
-            + zero_threshold_samples_list
-        )
+        return above_threshold_samples_list, below_threshold_samples_list, zero_threshold_samples_list
 
     def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         logger.info("Generating sample list for split={}".format(self._split))
@@ -419,20 +471,20 @@ class DatasetBuilder:
         return data
 
     def run(self):
-        ##Africa
-        min_lon = -18
-        min_lat = -35
-        max_lon = 51
-        max_lat = 30
+        # Africa
+        # min_lon = -18
+        # min_lat = -35
+        # max_lon = 51
+        # max_lat = 30
 
         # Europe
-        #min_lon = -25
-        #min_lat = 36
-        #max_lon = 50
-        #max_lat = 72
+        min_lon = -25
+        min_lat = 36
+        max_lon = 50
+        max_lat = 72
 
         # create list of samples to generate
-        samples = self.generate_samples_lists(
+        gt_threshold_samples, le_threshold_samples, zero_threshold_samples = self.generate_samples_lists(
             min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
         )
 
@@ -456,8 +508,14 @@ class DatasetBuilder:
         self._write_dataset_to_disk(ground_truth_dataset, "ground_truth")
 
         logger.info("Creating samples index")
-        self._write_data_to_disk(samples, "samples")
-        logger.info("About to create {} samples".format(len(samples)))
+        logger.info("About to create {} samples above the threshold".format(len(gt_threshold_samples)))
+        self._write_data_to_disk(gt_threshold_samples, "gt_threshold_samples")
+
+        logger.info("About to create {} samples below the threshold".format(len(le_threshold_samples)))
+        self._write_data_to_disk(le_threshold_samples, "le_threshold_samples")
+
+        logger.info("About to create {} zero samples".format(len(zero_threshold_samples)))
+        self._write_data_to_disk(zero_threshold_samples, "zero_threshold_samples")
 
         metadata = {
             "input_vars": self._input_vars,
@@ -473,6 +531,10 @@ class DatasetBuilder:
             "max_lat": max_lat,
             "timeseries_weeks": self._timeseries_weeks,
             "target_count": self._target_count,
+            "positive_samples_threshold": self._positive_samples_threshold,
+            "gt_threshold_samples": len(gt_threshold_samples),
+            "le_threshold_samples": len(le_threshold_samples),
+            "zero_threshold_samples": len(zero_threshold_samples),
         }
         self._write_metadata_to_disk(metadata)
 

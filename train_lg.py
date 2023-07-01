@@ -37,7 +37,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, target_week, model_name):
+def train(model, train_loader, epochs, val_loader, model_name):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -146,8 +146,8 @@ def train(model, train_loader, epochs, val_loader, target_week, model_name):
 
             probs = torch.sigmoid(preds)
 
-            #logger.info("preds = {}".format((probs > 0.5).float()))
-            #logger.info("y = {}".format(y.float()))
+            # logger.info("preds = {}".format((probs > 0.5).float()))
+            # logger.info("y = {}".format(y.float()))
 
             for metric in train_metrics:
                 metric.update(probs, y)
@@ -213,34 +213,16 @@ def train(model, train_loader, epochs, val_loader, target_week, model_name):
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
+        save_model(model, criterion, "last", model_name)
         if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg:
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
-            logger.info(
-                "Saving best model as best_{}.pt".format(model_name)
-            )
-            torch.save(
-                {
-                    "model": model,
-                    "criterion": criterion,
-                    "name": model_name,
-                },
-                "best_{}.pt".format(model_name),
-            )
+            save_model(model, criterion, "best", model_name)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
         #scheduler.step()
 
-    logger.info("Saving model as {}.pt".format(model_name))
-    torch.save(
-        {
-            "model": model,
-            "criterion": criterion,
-            "name": model_name,
-        },
-        "{}.pt".format(model_name),
-    )
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
     with open("val_metrics.pkl", "wb") as file:
@@ -257,6 +239,20 @@ def build_model_name(args):
     else: 
         timesteps = "time-l{}-g0".format(args.local_timesteps)
     return "{}_{}_{}_{}_{}".format(model_type, target, oci, local_radius, timesteps)
+
+
+def save_model(model, criterion, model_prefix, model_name): 
+    logger.info(
+        "Saving model as {}_{}.pt".format(model_prefix, model_name)
+    )
+    torch.save(
+        {
+            "model": model,
+            "criterion": criterion,
+            "name": model_name,
+        },
+        "{}_{}.pt".format(model_prefix, model_name),
+    )
 
 
 def main(args):
@@ -279,6 +275,8 @@ def main(args):
         include_oci_variables=args.include_oci_variables,
         transform=LocalGlobalTransform(args.train_path, args.target_week, args.include_global, args.append_pos_as_features),
     )
+    train_balanced_sampler = train_dataset.balanced_sampler()
+
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
         local_radius=args.local_radius,
@@ -295,7 +293,7 @@ def main(args):
     train_loader = torch_geometric.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=True,
+        sampler=train_balanced_sampler,
         num_workers=8,
         pin_memory=True,
     )
@@ -324,7 +322,6 @@ def main(args):
         train_loader=train_loader,
         epochs=args.epochs,
         val_loader=val_loader,
-        target_week=args.target_week,
         model_name=build_model_name(args)
     )
 

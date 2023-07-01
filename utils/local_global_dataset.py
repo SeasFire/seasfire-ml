@@ -1,4 +1,5 @@
 import torch
+from torch.utils.data import WeightedRandomSampler
 from torch_geometric.data import Dataset, Data
 import os
 import xarray as xr
@@ -7,10 +8,20 @@ import logging
 from sklearn.neighbors import NearestNeighbors
 
 logger = logging.getLogger(__name__)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class LocalGlobalDataset(Dataset):
-    def __init__(self, root_dir, local_radius, local_k, global_k=2, include_global=True, include_oci_variables=True, transform=None):
+    def __init__(
+        self,
+        root_dir,
+        local_radius,
+        local_k,
+        global_k=2,
+        include_global=True,
+        include_oci_variables=True,
+        transform=None,
+    ):
         self.root_dir = root_dir
         self.transform = transform
 
@@ -31,10 +42,38 @@ class LocalGlobalDataset(Dataset):
 
         self._sp_res = self._metadata["sp_res"]
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
-        
-        self._samples = torch.load(os.path.join(self.root_dir, "samples.pt"))
-        logger.info("Samples={}".format(len(self._samples)))
-        self._indices = list(range(len(self._samples)))
+
+        gt_threshold_samples = torch.load(
+            os.path.join(self.root_dir, "gt_threshold_samples.pt")
+        )
+        self._gt_threshold_samples_count = len(gt_threshold_samples)
+        logger.info("Samples (>threshold)={}".format(self._gt_threshold_samples_count))
+
+        le_threshold_samples = torch.load(
+            os.path.join(self.root_dir, "le_threshold_samples.pt")
+        )
+        self._le_threshold_samples_count = len(le_threshold_samples)
+        logger.info(
+            "Samples (>0 and <=threshold)={}".format(
+                self._le_threshold_samples_count
+            )
+        )
+
+        zero_threshold_samples = torch.load(
+            os.path.join(self.root_dir, "zero_threshold_samples.pt")
+        )
+        self._zero_threshold_samples_count = len(zero_threshold_samples)
+        logger.info("Samples (=0)={}".format(self._zero_threshold_samples_count))
+
+        self._samples = gt_threshold_samples + le_threshold_samples + zero_threshold_samples
+
+        self._indices = list(
+            range(
+                self._gt_threshold_samples_count
+                + self._le_threshold_samples_count
+                + self._zero_threshold_samples_count
+            )
+        )
 
         logger.info("Precomputing local graph")
         self._max_radius = self._metadata["max_radius"]
@@ -42,12 +81,16 @@ class LocalGlobalDataset(Dataset):
         logger.info("Using local radius={}".format(self._radius))
         if self._radius > self._max_radius:
             raise ValueError("Max radius is smaller than local radius.")
-        self._latlon_shape = (2*self._radius+1, 2*self._radius+1)
+        self._latlon_shape = (2 * self._radius + 1, 2 * self._radius + 1)
         logger.info("Local grid shape={}".format(self._latlon_shape))
         self._local_k = local_k
-        logger.info("Using k-nn with k={}".format(self._local_k))        
-        if self._local_k > self._radius: 
-            logger.warning("k-nn with large k={} more than local radius={}".format(self._local_k, self._radius))
+        logger.info("Using k-nn with k={}".format(self._local_k))
+        if self._local_k > self._radius:
+            logger.warning(
+                "k-nn with large k={} more than local radius={}".format(
+                    self._local_k, self._radius
+                )
+            )
         self._edge_index = self._get_knn_for_grid(
             self._latlon_shape[0], self._latlon_shape[1], self._local_k
         )
@@ -82,7 +125,11 @@ class LocalGlobalDataset(Dataset):
             logger.info("Global data enabled in dataset")
 
             self._global_sp_res = self._metadata["global_sp_res"]
-            logger.info("Global spatial resolution (global_sp_res)={}".format(self._global_sp_res))
+            logger.info(
+                "Global spatial resolution (global_sp_res)={}".format(
+                    self._global_sp_res
+                )
+            )
 
             self._global_k = global_k
             logger.info("Will use k-nn for global with k={}".format(self._global_k))
@@ -90,7 +137,9 @@ class LocalGlobalDataset(Dataset):
             logger.info("Precomputing global graph")
             self._global_latlon_shape = self._metadata["global_latlon_shape"]
             self._global_edge_index = self._get_knn_for_grid(
-                self._global_latlon_shape[0], self._global_latlon_shape[1], self._global_k
+                self._global_latlon_shape[0],
+                self._global_latlon_shape[1],
+                self._global_k,
             )
             logger.debug("Global edge index={}".format(self._global_edge_index))
 
@@ -125,7 +174,11 @@ class LocalGlobalDataset(Dataset):
 
     @property
     def len(self):
-        return len(self._samples)
+        return (
+            self._gt_threshold_samples_count
+            + self._le_threshold_samples_count
+            + self._zero_threshold_samples_count
+        )
 
     @property
     def local_features(self):
@@ -158,10 +211,14 @@ class LocalGlobalDataset(Dataset):
         # Compute ground truth - target
         time_idx = np.where(self._ground_truth_ds["time"] == time)[0][0]
         time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
-        target = self._ground_truth_ds.sel(
-            latitude=lat,
-            longitude=lon,
-        ).isel(time=time_slice).fillna(0)
+        target = (
+            self._ground_truth_ds.sel(
+                latitude=lat,
+                longitude=lon,
+            )
+            .isel(time=time_slice)
+            .fillna(0)
+        )
 
         timeseries_len = len(target.coords["time"])
         if timeseries_len != self._target_count:
@@ -178,8 +235,12 @@ class LocalGlobalDataset(Dataset):
         # compute local data
         time_idx = np.where(self._local_ds["time"] == time)[0][0]
         time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
-        lat_slice = slice(lat + self._radius * self._sp_res, lat - self._radius * self._sp_res)
-        lon_slice = slice(lon - self._radius * self._sp_res, lon + self._radius * self._sp_res)
+        lat_slice = slice(
+            lat + self._radius * self._sp_res, lat - self._radius * self._sp_res
+        )
+        lon_slice = slice(
+            lon - self._radius * self._sp_res, lon + self._radius * self._sp_res
+        )
 
         local_ds = (
             self._local_ds[self._input_vars + self._oci_input_vars]
@@ -222,11 +283,11 @@ class LocalGlobalDataset(Dataset):
             global_data = global_data.stack(vertex=("latitude", "longitude"))
             global_data = global_data.transpose("vertex", "values", "time")
 
-            global_x=global_data.values
-            global_pos=self._global_pos
-            global_latlon_shape=self._global_latlon_shape
-            global_edge_index=self._global_edge_index
- 
+            global_x = global_data.values
+            global_pos = self._global_pos
+            global_latlon_shape = self._global_latlon_shape
+            global_edge_index = self._global_edge_index
+
         return Data(
             x=local_data.values,
             pos=local_pos,
@@ -285,6 +346,26 @@ class LocalGlobalDataset(Dataset):
 
         return edge_index
 
+    def balanced_sampler(self): 
+        logger.info("Creating weighted random sampler")
+        gt_threshold_target = 0.3
+        le_threshold_target = 0.2
+        zero_threshold_target = 0.5
+        logger.info("Target proportions (>,<=,0) = {}, {}, {}".format(gt_threshold_target, le_threshold_target, zero_threshold_target))
+
+        gt_threshold_weight = gt_threshold_target / self._gt_threshold_samples_count
+        le_threshold_weight = le_threshold_target / self._le_threshold_samples_count
+        zero_threshold_weight = zero_threshold_target / self._zero_threshold_samples_count
+        
+        gt = np.full(self._gt_threshold_samples_count, gt_threshold_weight)
+        le = np.full(self._le_threshold_samples_count, le_threshold_weight)
+        zero = np.full(self._zero_threshold_samples_count, zero_threshold_weight)
+        samples_weights = np.concatenate((gt, le, zero))
+        samples_weights = torch.from_numpy(samples_weights).to(device)
+        logger.debug("samples_weights = {}".format(samples_weights))
+
+        return WeightedRandomSampler(weights=samples_weights, num_samples=len(samples_weights), replacement=True)
+
 
 class LocalGlobalTransform:
     def __init__(
@@ -331,7 +412,7 @@ class LocalGlobalTransform:
     def __call__(self, data):
         # local graph features
         features_count = data.x.shape[1]
-        local_mean_std = self._local_mean_std_per_feature[:features_count,:]
+        local_mean_std = self._local_mean_std_per_feature[:features_count, :]
         local_mean_std = np.transpose(local_mean_std)
         local_mu = local_mean_std[0]
         local_mu = np.repeat(local_mu, data.x.shape[2])
@@ -371,7 +452,9 @@ class LocalGlobalTransform:
         if self._include_global:
             # global graph features
             global_features_count = data.global_x.shape[1]
-            global_mean_std = self._global_mean_std_per_feature[:global_features_count,:]
+            global_mean_std = self._global_mean_std_per_feature[
+                :global_features_count, :
+            ]
             global_mean_std = np.transpose(global_mean_std)
             global_mu = global_mean_std[0]
             global_mu = np.repeat(global_mu, data.global_x.shape[2])
@@ -380,7 +463,9 @@ class LocalGlobalTransform:
             global_std = np.repeat(global_std, data.global_x.shape[2])
             global_std = np.reshape(global_std, (global_features_count, -1))
             for i in range(0, data.global_x.shape[0]):
-                data.global_x[i, :, :] = (data.global_x[i, :, :] - global_mu) / global_std
+                data.global_x[i, :, :] = (
+                    data.global_x[i, :, :] - global_mu
+                ) / global_std
             data.global_x = np.nan_to_num(data.global_x, nan=-1.0)
 
             if self._append_position_as_feature:
