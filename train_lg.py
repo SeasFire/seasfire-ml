@@ -258,6 +258,8 @@ def save_model(model, criterion, model_prefix, model_name):
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level)
+    if args.log_file is not None:
+        logger.addHandler(logging.FileHandler(args.log_file))    
 
     logger.info("Torch version: {}".format(torch.__version__))
     logger.info("Cuda available: {}".format(torch.cuda.is_available()))
@@ -470,7 +472,16 @@ if __name__ == "__main__":
         dest="num_workers",
         default=12,
         help="Num workers",
-    )    
+    )
+    parser.add_argument(
+        "--log-file",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="log_file",
+        default=None,
+        help="Filename to output all logs",
+    )        
     parser.add_argument(
         "--include-global", dest="include_global", action="store_true"
     )

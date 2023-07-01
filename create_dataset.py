@@ -704,7 +704,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="positive_samples_threshold",
-        default=0.002,
+        default=0.01,
         help="Positive sample threshold",
     )
     parser.add_argument(
@@ -713,7 +713,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="positive_samples_size",
-        default=100,
+        default=50000,
         help="Positive samples size.",
     )
     parser.add_argument(
