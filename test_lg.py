@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def test(model, loader, criterion):
+def test(model, loader, criterion, model_name):
     logger.info("Starting Test")
 
     model = model.to(device)
@@ -72,11 +72,16 @@ def test(model, loader, criterion):
         loss = criterion(torch.cat(predictions), torch.cat(labels))
         logger.info(f"| Test Loss: {loss}")
 
+        result = "{}".format(model_name)
         for metric, metric_name in zip(
             metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
         ):
-            logger.info("| Test {}: {}".format(metric_name, metric.compute()))
+            metric_value = metric.compute()
+            logger.info("| Test {}: {}".format(metric_name, metric_value))
+            result += ",{}".format(metric_value)
             metric.reset()
+            
+        logger.info(result)
 
 
 def main(args):
@@ -117,7 +122,7 @@ def main(args):
         pin_memory=True,
     )
 
-    test(model=model, loader=loader, criterion=criterion)
+    test(model=model, loader=loader, criterion=criterion, model_name=model_name)
 
 
 if __name__ == "__main__":

@@ -223,8 +223,13 @@ def save_model(model, criterion, model_prefix, model_name):
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level)
-    if args.log_file is not None:
-        logger.addHandler(logging.FileHandler(args.log_file))
+
+    if args.log_file is None:
+        model_name=build_model_name(args)
+        log_file = "{}.train.logs".format(model_name)
+    else: 
+        log_file = args.log_file
+    logger.addHandler(logging.FileHandler(log_file))
 
     logger.info("Torch version: {}".format(torch.__version__))
     logger.info("Cuda available: {}".format(torch.cuda.is_available()))

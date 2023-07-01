@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def test(model, loader, criterion):
+def test(model, loader, criterion, model_name):
     logger.info("Starting Test")
 
     model = model.to(device)
@@ -57,12 +57,16 @@ def test(model, loader, criterion):
         loss = criterion(torch.cat(predictions), torch.cat(labels))
         logger.info(f"| Test Loss: {loss}")
 
+        result = "{}".format(model_name)
         for metric, metric_name in zip(
             metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
         ):
-            logger.info("| Test {}: {}".format(metric_name, metric.compute()))
+            metric_value = metric.compute()
+            logger.info("| Test {}: {}".format(metric_name, metric_value))
+            result += ",{}".format(metric_value)
             metric.reset()
 
+        logger.info(result)
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -77,6 +81,12 @@ def main(args):
     model = model_info["model"]
     criterion = model_info["criterion"]
     model_name = model_info["name"]
+
+    if args.log_file is None:
+        log_file = "{}.test.logs".format(model_name)
+    else: 
+        log_file = args.log_file
+    logger.addHandler(logging.FileHandler(log_file))        
 
     logger.info("Using model={}".format(model_name))
     logger.info("Using target week={}".format(args.target_week))
@@ -98,7 +108,7 @@ def main(args):
         pin_memory=True,
     )
 
-    test(model=model, loader=loader, criterion=criterion)
+    test(model=model, loader=loader, criterion=criterion, model_name=model_name)
 
 
 if __name__ == "__main__":
@@ -151,6 +161,15 @@ if __name__ == "__main__":
         default=12,
         help="Num workers",
     )    
+    parser.add_argument(
+        "--log-file",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="log_file",
+        default=None,
+        help="Filename to output all logs",
+    )        
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     parser.set_defaults(debug=False)
