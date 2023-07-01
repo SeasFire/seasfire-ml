@@ -20,21 +20,13 @@ class GRUModel(torch.nn.Module):
 
     def forward(
         self,
-        X: torch.FloatTensor,
-        edge_index: torch.LongTensor,
-        edge_weight: torch.FloatTensor = None,
-        H: torch.FloatTensor = None,
-        readout_batch=None,
+        x: torch.FloatTensor,
+        h: torch.FloatTensor = None,
     ) -> torch.FloatTensor:
-        """
-        x = Node features for T time steps
-        edge_index = Graph edge indices
-        """
-        if H is not None:
-            h0 = H.to(device)
+        if h is not None:
+            h0 = h.to(device)
         else:
-            h0 = torch.zeros(self.num_layers, X.size(0), self.hidden_size).to(device)
-
-        out, _ = self.gru(X, h0)
+            h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(device)
+        out, _ = self.gru(x, h0)
         out = self.fc(out[:, -1, :])
         return out
