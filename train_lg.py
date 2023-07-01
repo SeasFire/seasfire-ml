@@ -294,13 +294,13 @@ def main(args):
         train_dataset,
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
-        num_workers=8,
+        num_workers=args.num_workers,
         pin_memory=True,
     )
     val_loader = torch_geometric.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
-        num_workers=8,
+        num_workers=args.num_workers,
         pin_memory=True,
     )
 
@@ -462,6 +462,15 @@ if __name__ == "__main__":
         default=0.03,
         help="Weight decay",
     )
+    parser.add_argument(
+        "--num-workers",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="num_workers",
+        default=12,
+        help="Num workers",
+    )    
     parser.add_argument(
         "--include-global", dest="include_global", action="store_true"
     )
