@@ -264,8 +264,9 @@ def main(args):
     model = GRUModel(
         len(train_dataset.local_features),
         args.hidden_channels[0],
-        2,
-        1
+        num_layers=2,
+        output_size=1,
+        dropout=0.1
     )
 
     train(
@@ -373,7 +374,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
     )
-    parser.set_defaults(include_oci_variables=True)    
+    parser.set_defaults(include_oci_variables=False)    
     args = parser.parse_args()
 
     args.hidden_channels = [int(x) for x in args.hidden_channels.split(",")]
