@@ -43,18 +43,22 @@ class DatasetBuilder:
             "ndvi",
             "pop_dens",
         ]
-        self._oci_input_vars = [
-            "oci_wp",
-            "oci_pna",
-            "oci_nao",
-            "oci_soi",
-            "oci_gmsst",
-            "oci_pdo",
-            "oci_ea",
-            "oci_epo",
-            "oci_nina34_anom",
-            "oci_censo",
-        ] if include_oci_variables else []
+        self._oci_input_vars = (
+            [
+                "oci_wp",
+                "oci_pna",
+                "oci_nao",
+                "oci_soi",
+                "oci_gmsst",
+                "oci_pdo",
+                "oci_ea",
+                "oci_epo",
+                "oci_nina34_anom",
+                "oci_censo",
+            ]
+            if include_oci_variables
+            else []
+        )
 
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self._target_var = "gwis_ba"
@@ -92,7 +96,7 @@ class DatasetBuilder:
             self._lon_min = -179.5
             self._lon_max = 179.5
         else:
-            raise ValueError("Invalid cube resolution")        
+            raise ValueError("Invalid cube resolution")
         logger.info("Using cube resolution: {}".format(cube_resolution))
 
         self._global_sp_res = 1
@@ -103,8 +107,8 @@ class DatasetBuilder:
 
         # open global cube if present
         self._global_cube = None
-        if global_cube_path is None: 
-            if cube_resolution == "25km": 
+        if global_cube_path is None:
+            if cube_resolution == "25km":
                 raise ValueError("Global cube not found")
         else:
             logger.info("Opening global cube zarr file: {}".format(global_cube_path))
@@ -120,7 +124,7 @@ class DatasetBuilder:
                     coords=self._global_cube[var_name].coords,
                     dims=self._global_cube[var_name].dims,
                     attrs=self._global_cube[var_name].attrs,
-                )                
+                )
 
         # open local cube and display basic info
         logger.info("Opening local cube zarr file: {}".format(self._cube_path))
@@ -129,10 +133,10 @@ class DatasetBuilder:
             logger.info("Loading the whole cube in memory.")
             self._cube.load()
 
-        if self._global_cube is None: 
+        if self._global_cube is None:
             logger.info("Using local cube as global")
             self._global_cube = self._cube
-        
+
         logger.info("Cube: {}".format(self._cube))
         logger.info("Vars: {}".format(self._cube.data_vars))
 
@@ -222,7 +226,6 @@ class DatasetBuilder:
             self._start_time, self._end_time = self._time_test
         else:
             raise ValueError("Invalid split type")
-
 
     def _sample_wrt_threshold(
         self, sample_region, sample_region_gwsi_ba_per_area, strategy
@@ -352,7 +355,11 @@ class DatasetBuilder:
             sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
         )
 
-        return above_threshold_samples_list, below_threshold_samples_list, zero_threshold_samples_list
+        return (
+            above_threshold_samples_list,
+            below_threshold_samples_list,
+            zero_threshold_samples_list,
+        )
 
     def _generate_threshold_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         # define sample region
@@ -395,7 +402,11 @@ class DatasetBuilder:
             sample_region, sample_region_gwsi_ba_per_area, strategy="zero"
         )
 
-        return above_threshold_samples_list, below_threshold_samples_list, zero_threshold_samples_list
+        return (
+            above_threshold_samples_list,
+            below_threshold_samples_list,
+            zero_threshold_samples_list,
+        )
 
     def generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         logger.info("Generating sample list for split={}".format(self._split))
@@ -416,14 +427,18 @@ class DatasetBuilder:
 
     def _create_local_data(self, min_lat, min_lon, max_lat, max_lon):
         # add radius padding around location of interest
-        lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
-        lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
+        lat_slice = slice(
+            max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res
+        )
+        lon_slice = slice(
+            min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res
+        )
         data = (
             self._cube[self._input_vars + self._oci_input_vars]
             .sel(latitude=lat_slice, longitude=lon_slice)
             .load()
         )
-        return data        
+        return data
 
     def _create_global_data(self):
         global_region = self._global_cube
@@ -434,10 +449,7 @@ class DatasetBuilder:
             latitude=lat_target, longitude=lon_target
         ).mean(skipna=True)
 
-        data = (
-            global_agg[self._input_vars + self._oci_input_vars]
-            .load()
-        )
+        data = global_agg[self._input_vars + self._oci_input_vars].load()
         data = data.transpose("latitude", "longitude", "time")
         return data
 
@@ -446,23 +458,36 @@ class DatasetBuilder:
         if not os.path.exists(stats_filename):
             features = self._input_vars + self._oci_input_vars
             mean_std = np.zeros((len(features), 2))
-            for idx, var_name in enumerate(features): 
+            for idx, var_name in enumerate(features):
                 logger.info("Computing mean-std for variable={}".format(var_name))
-                mean_std[idx] = [data[var_name].mean().item(), data[var_name].std().item()]
+                mean_std[idx] = [
+                    data[var_name].mean().item(),
+                    data[var_name].std().item(),
+                ]
             logger.debug("mean-std={}".format(mean_std))
-            torch.save(mean_std, "{}/mean_std_stats_{}.pk".format(self._output_folder, name))
+            torch.save(
+                mean_std, "{}/mean_std_stats_{}.pk".format(self._output_folder, name)
+            )
         else:
-            logger.info("Skipping {} features stats computation. Found file: {}".format(name, stats_filename))
+            logger.info(
+                "Skipping {} features stats computation. Found file: {}".format(
+                    name, stats_filename
+                )
+            )
 
-    def _create_area_data(self): 
+    def _create_area_data(self):
         area = self._cube["area"]
         area_in_hectares = area / 10000.0
         return area_in_hectares
 
     def _create_target_var_data(self, min_lat, min_lon, max_lat, max_lon):
         # add radius padding around area of interest
-        lat_slice = slice(max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res)
-        lon_slice = slice(min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res)
+        lat_slice = slice(
+            max_lat + self._radius * self._sp_res, min_lat - self._radius * self._sp_res
+        )
+        lon_slice = slice(
+            min_lon - self._radius * self._sp_res, max_lon + self._radius * self._sp_res
+        )
         data = (
             self._cube[self._target_var]
             .sel(latitude=lat_slice, longitude=lon_slice)
@@ -470,27 +495,30 @@ class DatasetBuilder:
         )
         return data
 
-    def run(self):
-        # Africa
-        # min_lon = -18
-        # min_lat = -35
-        # max_lon = 51
-        # max_lat = 30
+    def run(self, area):
+        min_lat, min_lon, max_lat, max_lon = area
 
-        # Europe
-        min_lon = -25
-        min_lat = 36
-        max_lon = 50
-        max_lat = 72
+        logger.info(
+            "Running for min_lat={}, min_lon={}, max_lat={}, max_lon={}".format(
+                min_lat, min_lon, max_lat, max_lon
+            )
+        )
 
         # create list of samples to generate
-        gt_threshold_samples, le_threshold_samples, zero_threshold_samples = self.generate_samples_lists(
+        (
+            gt_threshold_samples,
+            le_threshold_samples,
+            zero_threshold_samples,
+        ) = self.generate_samples_lists(
             min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
         )
 
         logger.info("Creating global dataset")
         global_dataset = self._create_global_data()
-        global_latlon_shape = (global_dataset["latitude"].shape[0], global_dataset["longitude"].shape[0])
+        global_latlon_shape = (
+            global_dataset["latitude"].shape[0],
+            global_dataset["longitude"].shape[0],
+        )
         self._write_dataset_to_disk(global_dataset, "global")
         self._create_stats(global_dataset, "global")
 
@@ -504,17 +532,29 @@ class DatasetBuilder:
         self._write_dataset_to_disk(area_dataset, "area")
 
         logger.info("Creating ground truth data")
-        ground_truth_dataset = self._create_target_var_data(min_lat, min_lon, max_lat, max_lon)
+        ground_truth_dataset = self._create_target_var_data(
+            min_lat, min_lon, max_lat, max_lon
+        )
         self._write_dataset_to_disk(ground_truth_dataset, "ground_truth")
 
         logger.info("Creating samples index")
-        logger.info("About to create {} samples above the threshold".format(len(gt_threshold_samples)))
+        logger.info(
+            "About to create {} samples above the threshold".format(
+                len(gt_threshold_samples)
+            )
+        )
         self._write_data_to_disk(gt_threshold_samples, "gt_threshold_samples")
 
-        logger.info("About to create {} samples below the threshold".format(len(le_threshold_samples)))
+        logger.info(
+            "About to create {} samples below the threshold".format(
+                len(le_threshold_samples)
+            )
+        )
         self._write_data_to_disk(le_threshold_samples, "le_threshold_samples")
 
-        logger.info("About to create {} zero samples".format(len(zero_threshold_samples)))
+        logger.info(
+            "About to create {} zero samples".format(len(zero_threshold_samples))
+        )
         self._write_data_to_disk(zero_threshold_samples, "zero_threshold_samples")
 
         metadata = {
@@ -544,17 +584,22 @@ class DatasetBuilder:
 
     def _write_data_to_disk(self, data, name, index=None):
         if index is not None:
-            output_path = os.path.join(self._output_folder, "{}_{}.pt".format(name, index))
-        else: 
+            output_path = os.path.join(
+                self._output_folder, "{}_{}.pt".format(name, index)
+            )
+        else:
             output_path = os.path.join(self._output_folder, "{}.pt".format(name))
         torch.save(data, output_path)
 
     def _write_dataset_to_disk(self, dataset, name, index=None):
         if index is not None:
-            output_path = os.path.join(self._output_folder, "{}_{}.h5".format(name, index))
+            output_path = os.path.join(
+                self._output_folder, "{}_{}.h5".format(name, index)
+            )
         else:
             output_path = os.path.join(self._output_folder, "{}.h5".format(name))
         dataset.to_netcdf(output_path)
+
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -583,9 +628,8 @@ def main(args):
         args.include_oci_variables,
         args.global_scale_factor,
     )
-    builder.run()
 
-
+    builder.run(args.area)
 
 
 if __name__ == "__main__":
@@ -607,7 +651,7 @@ if __name__ == "__main__":
         dest="cube_resolution",
         default="100km",
         help="Cube resolution. Can be 100km or 25km.",
-    )    
+    )
     parser.add_argument(
         "--global-cube-path",
         metavar="PATH",
@@ -672,6 +716,16 @@ if __name__ == "__main__":
         help="Positive samples size.",
     )
     parser.add_argument(
+        "--area",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="area",
+        default="-35,-18,30,51",  # Africa
+        # default="36,-25,72,50", # Europe
+        help="Area as min_lat,min_lon,max_lat,max_lon",
+    )
+    parser.add_argument(
         "--generate-all-samples", dest="generate_all_samples", action="store_true"
     )
     parser.add_argument(
@@ -732,4 +786,17 @@ if __name__ == "__main__":
     parser.set_defaults(include_oci_variables=True)
 
     args = parser.parse_args()
+
+    args.area = args.area.split(",")
+    if len(args.area) != 4:
+        raise ValueError(
+            "Area should be in the form of min_lat, min_lon, max_lat, max_lon"
+        )
+    args.area = (
+        float(args.area[0]),
+        float(args.area[1]),
+        float(args.area[2]),
+        float(args.area[3]),
+    )
+
     main(args)
