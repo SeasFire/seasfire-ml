@@ -181,9 +181,11 @@ class GRUTransform:
     def __init__(
         self,
         root_dir,
+        timesteps,
         target_week,
     ):
         self.root_dir = root_dir
+        self._timesteps = timesteps
         self._target_week = target_week
         if target_week < 1 or target_week > 24:
             raise ValueError("Target week is not valid")
@@ -208,15 +210,18 @@ class GRUTransform:
         x, y = data
 
         features_count = x.shape[0]
+        if self._timesteps <= 0 or self._timesteps > x.shape[1]: 
+            logger.warning("Invalid timesteps requested, should be in [1,{}]".format(x.shape[1]))
+        timesteps = max(1, min(self._timesteps, x.shape[1]))
         local_mean_std = self._local_mean_std_per_feature[:features_count, :]
         local_mean_std = np.transpose(local_mean_std)
         local_mu = local_mean_std[0]
-        local_mu = np.repeat(local_mu, x.shape[1])
+        local_mu = np.repeat(local_mu, timesteps)
         local_mu = np.reshape(local_mu, (features_count, -1))
         local_std = local_mean_std[1]
-        local_std = np.repeat(local_std, x.shape[1])
+        local_std = np.repeat(local_std, timesteps)
         local_std = np.reshape(local_std, (features_count, -1))
-        x = (x - local_mu) / local_std
+        x = (x[:,-timesteps:] - local_mu) / local_std
         x = np.nan_to_num(x, nan=-1.0)
         # transpose from feature x times to time x feature
         x = x.transpose()

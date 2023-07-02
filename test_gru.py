@@ -90,11 +90,12 @@ def main(args):
 
     logger.info("Using model={}".format(model_name))
     logger.info("Using target week={}".format(args.target_week))
+    logger.info("Using timesteps={}".format(args.timesteps))
 
     dataset = GRUDataset(
         root_dir=args.test_path,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.test_path, args.target_week),
+        transform=GRUTransform(args.test_path, args.timestemps, args.target_week),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))
@@ -143,6 +144,16 @@ if __name__ == "__main__":
         default=32,
         help="Batch size",
     )
+    parser.add_argument(
+        "-lt",
+        "--timesteps",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="timesteps",
+        default=24,
+        help="Time steps in the past",
+    )    
     parser.add_argument(
         "--target-week",
         metavar="KEY",

@@ -241,14 +241,14 @@ def main(args):
     train_dataset = GRUDataset(
         root_dir=args.train_path,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.train_path, args.target_week),
+        transform=GRUTransform(args.train_path, args.timesteps, args.target_week),
     )
     train_balanced_sampler = train_dataset.balanced_sampler()
 
     val_dataset = GRUDataset(
         root_dir=args.val_path,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.val_path, args.target_week),
+        transform=GRUTransform(args.val_path, args.timesteps, args.target_week),
     )
 
     logger.info("Train dataset length: {}".format(len(train_dataset)))
