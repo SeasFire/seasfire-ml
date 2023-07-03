@@ -175,7 +175,7 @@ class GRUDataset(Dataset):
         le = np.full(self._le_threshold_samples_count, le_threshold_weight)
         zero = np.full(self._zero_threshold_samples_count, zero_threshold_weight)
         samples_weights = np.concatenate((gt, le, zero))
-        samples_weights = torch.from_numpy(samples_weights).to(device)
+        samples_weights = torch.as_tensor(samples_weights, dtype=torch.double, device=device)        
         logger.debug("samples_weights = {}".format(samples_weights))
 
         return WeightedRandomSampler(
