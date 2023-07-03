@@ -3,6 +3,7 @@ import logging
 import argparse
 from tqdm import tqdm
 
+import os
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
@@ -82,11 +83,15 @@ def main(args):
     criterion = model_info["criterion"]
     model_name = model_info["name"]
 
+    if not os.path.exists(args.out_dir):
+        logger.info("Creating output folder {}".format(args.out_dir))
+        os.makedirs(args.out_dir)
+
     if args.log_file is None:
-        log_file = "{}.test.logs".format(model_name)
+        log_file = "{}/{}.test.logs".format(args.out_dir, model_name)
     else: 
         log_file = args.log_file
-    logger.addHandler(logging.FileHandler(log_file))        
+    logger.addHandler(logging.FileHandler(log_file))
 
     logger.info("Using model={}".format(model_name))
     logger.info("Using target week={}".format(args.target_week))
@@ -170,7 +175,16 @@ if __name__ == "__main__":
         dest="num_workers",
         default=12,
         help="Num workers",
-    )    
+    )
+    parser.add_argument(
+        "--out-dir",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="out_dir",
+        default="runs",
+        help="Default output directory",
+    )        
     parser.add_argument(
         "--log-file",
         metavar="KEY",

@@ -36,7 +36,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, model_name):
+def train(model, train_loader, epochs, val_loader, model_name, out_dir):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -183,11 +183,11 @@ def train(model, train_loader, epochs, val_loader, model_name):
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
-        save_model(model, criterion, "last", model_name)
+        save_model(model, criterion, "last", model_name, out_dir)
         if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
-            save_model(model, criterion, "best", model_name)
+            save_model(model, criterion, "best", model_name, out_dir)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
@@ -207,9 +207,10 @@ def build_model_name(args):
     return "{}_{}_{}_{}".format(model_type, target, oci, timesteps)
 
 
-def save_model(model, criterion, model_prefix, model_name): 
+def save_model(model, criterion, model_type, model_name, out_dir): 
+    filename = "{}/{}.{}_model.pt".format(out_dir, model_name, model_type)
     logger.info(
-        "Saving model as {}_{}.pt".format(model_prefix, model_name)
+        "Saving model as {}".format(filename)
     )
     torch.save(
         {
@@ -217,7 +218,7 @@ def save_model(model, criterion, model_prefix, model_name):
             "criterion": criterion,
             "name": model_name,
         },
-        "{}_{}.pt".format(model_prefix, model_name),
+        filename,
     )
 
 
@@ -225,9 +226,13 @@ def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level)
 
+    if not os.path.exists(args.out_dir):
+        logger.info("Creating output folder {}".format(args.out_dir))
+        os.makedirs(args.out_dir)
+
     if args.log_file is None:
         model_name=build_model_name(args)
-        log_file = "{}.train.logs".format(model_name)
+        log_file = "{}/{}.train.logs".format(args.out_dir, model_name)
     else: 
         log_file = args.log_file
     logger.addHandler(logging.FileHandler(log_file))
@@ -284,7 +289,8 @@ def main(args):
         train_loader=train_loader,
         epochs=args.epochs,
         val_loader=val_loader,
-        model_name=build_model_name(args)
+        model_name=build_model_name(args), 
+        out_dir=args.out_dir,
     )
 
 
@@ -396,6 +402,15 @@ if __name__ == "__main__":
         default=12,
         help="Num workers",
     )
+    parser.add_argument(
+        "--out-dir",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="out_dir",
+        default="runs",
+        help="Default output directory",
+    )    
     parser.add_argument(
         "--log-file",
         metavar="KEY",
