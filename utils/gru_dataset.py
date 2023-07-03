@@ -154,7 +154,7 @@ class GRUDataset(Dataset):
 
         return local_data.values, y
 
-    def balanced_sampler(self):
+    def balanced_sampler(self, num_samples=None):
         logger.info("Creating weighted random sampler")
         gt_threshold_target = 0.3
         le_threshold_target = 0.2
@@ -178,8 +178,11 @@ class GRUDataset(Dataset):
         samples_weights = torch.as_tensor(samples_weights, dtype=torch.double, device=device)        
         logger.debug("samples_weights = {}".format(samples_weights))
 
+        if num_samples is None: 
+            num_samples=len(samples_weights)
+
         return WeightedRandomSampler(
-            weights=samples_weights, num_samples=len(samples_weights), replacement=True
+            weights=samples_weights, num_samples=num_samples, replacement=True
         )
 
 

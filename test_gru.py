@@ -106,7 +106,6 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True,
     )
 
     test(model=model, loader=loader, criterion=criterion, model_name=model_name)
@@ -192,7 +191,7 @@ if __name__ == "__main__":
     )
     parser.set_defaults(include_oci_variables=False)
 
-    torch.multiprocessing.set_start_method('spawn') 
+    #torch.multiprocessing.set_start_method('spawn') 
 
     args = parser.parse_args()
     main(args)

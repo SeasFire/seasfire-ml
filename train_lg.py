@@ -214,7 +214,7 @@ def train(model, train_loader, epochs, val_loader, model_name):
             metric.reset()
 
         save_model(model, criterion, "last", model_name)
-        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg:
+        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
             save_model(model, criterion, "best", model_name)
@@ -277,7 +277,12 @@ def main(args):
         include_oci_variables=args.include_oci_variables,
         transform=LocalGlobalTransform(args.train_path, args.target_week, args.include_global, args.append_pos_as_features),
     )
-    train_balanced_sampler = train_dataset.balanced_sampler()
+
+    num_samples = None
+    if args.batches_per_epoch is not None: 
+        num_samples = args.batches_per_epoch * args.batch_size
+        logger.info("Will sample {} samples".format(num_samples))
+    train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples)
 
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
@@ -297,13 +302,11 @@ def main(args):
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
-        pin_memory=True,
     )
     val_loader = torch_geometric.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        pin_memory=True,
     )
 
     model = LocalGlobalModel(
@@ -388,6 +391,15 @@ if __name__ == "__main__":
         default=100,
         help="Epochs",
     )
+    parser.add_argument(
+        "--batches-per-epoch",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="batches_per_epoch",
+        default=None,
+        help="Batches per epoch.",
+    )    
     parser.add_argument(
         "--local-radius",
         metavar="KEY",
@@ -514,6 +526,6 @@ if __name__ == "__main__":
 
     args.decoder_hidden_channels = [int(x) for x in args.decoder_hidden_channels.split(",")]
 
-    torch.multiprocessing.set_start_method('spawn') 
+    #torch.multiprocessing.set_start_method('spawn') 
 
     main(args)

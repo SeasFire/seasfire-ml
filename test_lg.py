@@ -119,7 +119,6 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True,
     )
 
     test(model=model, loader=loader, criterion=criterion, model_name=model_name)

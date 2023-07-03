@@ -123,6 +123,7 @@ def train(model, train_loader, epochs, val_loader, model_name):
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
+            #optimizer.zero_grad(set_to_none=True)
             train_loss.backward()
             optimizer.step()
 
@@ -183,7 +184,7 @@ def train(model, train_loader, epochs, val_loader, model_name):
             metric.reset()
 
         save_model(model, criterion, "last", model_name)
-        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg:
+        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
             save_model(model, criterion, "best", model_name)
@@ -243,7 +244,11 @@ def main(args):
         include_oci_variables=args.include_oci_variables,
         transform=GRUTransform(args.train_path, args.timesteps, args.target_week),
     )
-    train_balanced_sampler = train_dataset.balanced_sampler()
+    num_samples = None
+    if args.batches_per_epoch is not None: 
+        num_samples = args.batches_per_epoch * args.batch_size
+        logger.info("Will sample {} samples".format(num_samples))
+    train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples)    
 
     val_dataset = GRUDataset(
         root_dir=args.val_path,
@@ -259,13 +264,11 @@ def main(args):
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
-        pin_memory=True,
     )
     val_loader = torch_geometric.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        pin_memory=True,
     )
 
     model = GRUModel(
@@ -333,9 +336,18 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=100,
+        default=75,
         help="Epochs",
     )
+    parser.add_argument(
+        "--batches-per-epoch",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="batches_per_epoch",
+        default=None,
+        help="Batches per epoch.",
+    )    
     parser.add_argument(
         "--target-week",
         metavar="KEY",
@@ -406,6 +418,6 @@ if __name__ == "__main__":
 
     args.hidden_channels = [int(x) for x in args.hidden_channels.split(",")]
 
-    torch.multiprocessing.set_start_method('spawn') 
+    #torch.multiprocessing.set_start_method('spawn') 
 
     main(args)
