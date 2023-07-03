@@ -226,7 +226,7 @@ if __name__ == "__main__":
     )
     parser.set_defaults(include_oci_variables=True)
 
-    torch.multiprocessing.set_start_method('spawn') 
+    #torch.multiprocessing.set_start_method('spawn') 
 
     args = parser.parse_args()
     main(args)
