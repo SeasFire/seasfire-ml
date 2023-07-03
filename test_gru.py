@@ -8,7 +8,7 @@ import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
 from utils import (
     GRUDataset,
-    GRUTransform,
+    GRUTransform
 )
 
 
@@ -191,6 +191,8 @@ if __name__ == "__main__":
         "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
     )
     parser.set_defaults(include_oci_variables=False)
+
+    torch.multiprocessing.set_start_method('spawn') 
 
     args = parser.parse_args()
     main(args)

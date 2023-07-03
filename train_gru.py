@@ -405,4 +405,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     args.hidden_channels = [int(x) for x in args.hidden_channels.split(",")]
+
+    torch.multiprocessing.set_start_method('spawn') 
+
     main(args)

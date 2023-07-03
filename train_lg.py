@@ -513,4 +513,7 @@ if __name__ == "__main__":
     args.hidden_channels = (int(args.hidden_channels[0]), int(args.hidden_channels[1]))
 
     args.decoder_hidden_channels = [int(x) for x in args.decoder_hidden_channels.split(",")]
+
+    torch.multiprocessing.set_start_method('spawn') 
+
     main(args)

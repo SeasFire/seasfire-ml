@@ -379,6 +379,141 @@ class LocalGlobalTransform:
         self._target_week = target_week
         if target_week < 1 or target_week > 24:
             raise ValueError("Target week is not valid")
+        self._local_mean_std_per_feature = torch.load(
+            "{}/{}".format(self.root_dir, "mean_std_stats_local.pk")
+        )
+        logger.debug(
+            "Loaded local dataset mean, std={}".format(self._local_mean_std_per_feature)
+        )
+
+        self._include_global = include_global
+        if include_global:
+            self._global_mean_std_per_feature = torch.load(
+                "{}/{}".format(self.root_dir, "mean_std_stats_global.pk")
+            )
+            logger.debug(
+                "Loaded global dataset mean, std={}".format(
+                    self._global_mean_std_per_feature
+                )
+            )
+
+        self._append_position_as_feature = append_position_as_feature
+
+    @property
+    def target_week(self):
+        return self._target_week
+
+    @target_week.setter
+    def target_week(self, value):
+        if value < 1 or value > 24:
+            raise ValueError("Target week is not valid")
+        self._target_week = value
+
+    def __call__(self, data):
+        # local graph features
+        features_count = data.x.shape[1]
+        local_mean_std = self._local_mean_std_per_feature[:features_count, :]
+        local_mean_std = np.transpose(local_mean_std)
+        local_mu = local_mean_std[0]
+        local_mu = np.repeat(local_mu, data.x.shape[2])
+        local_mu = np.reshape(local_mu, (features_count, -1))
+        local_std = local_mean_std[1]
+        local_std = np.repeat(local_std, data.x.shape[2])
+        local_std = np.reshape(local_std, (features_count, -1))
+        for i in range(0, data.x.shape[0]):
+            data.x[i, :, :] = (data.x[i, :, :] - local_mu) / local_std
+        data.x = np.nan_to_num(data.x, nan=-1.0)
+
+        if self._append_position_as_feature:
+            latlon = np.transpose(data.pos)
+            lat = latlon[0]
+            lon = latlon[1]
+            cos_lat = np.reshape(
+                np.repeat(np.cos(lat * np.pi / 180), data.x.shape[2]),
+                (-1, data.x.shape[2]),
+            )
+            sin_lat = np.reshape(
+                np.repeat(np.sin(lat * np.pi / 180), data.x.shape[2]),
+                (-1, data.x.shape[2]),
+            )
+            cos_lon = np.reshape(
+                np.repeat(np.cos(lon * np.pi / 180), data.x.shape[2]),
+                (-1, data.x.shape[2]),
+            )
+            sin_lon = np.reshape(
+                np.repeat(np.sin(lon * np.pi / 180), data.x.shape[2]),
+                (-1, data.x.shape[2]),
+            )
+            pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
+            data.x = np.concatenate((data.x, pos), axis=1)
+
+        data.x = torch.from_numpy(data.x)
+
+        if self._include_global:
+            # global graph features
+            global_features_count = data.global_x.shape[1]
+            global_mean_std = self._global_mean_std_per_feature[
+                :global_features_count, :
+            ]
+            global_mean_std = np.transpose(global_mean_std)
+            global_mu = global_mean_std[0]
+            global_mu = np.repeat(global_mu, data.global_x.shape[2])
+            global_mu = np.reshape(global_mu, (global_features_count, -1))
+            global_std = global_mean_std[1]
+            global_std = np.repeat(global_std, data.global_x.shape[2])
+            global_std = np.reshape(global_std, (global_features_count, -1))
+            for i in range(0, data.global_x.shape[0]):
+                data.global_x[i, :, :] = (
+                    data.global_x[i, :, :] - global_mu
+                ) / global_std
+            data.global_x = np.nan_to_num(data.global_x, nan=-1.0)
+
+            if self._append_position_as_feature:
+                latlon = np.transpose(data.global_pos)
+                lat = latlon[0]
+                lon = latlon[1]
+                cos_lat = np.reshape(
+                    np.repeat(np.cos(lat * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                sin_lat = np.reshape(
+                    np.repeat(np.sin(lat * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                cos_lon = np.reshape(
+                    np.repeat(np.cos(lon * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                sin_lon = np.reshape(
+                    np.repeat(np.sin(lon * np.pi / 180), data.global_x.shape[2]),
+                    (-1, data.global_x.shape[2]),
+                )
+                pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
+                data.global_x = np.concatenate((data.global_x, pos), axis=1)
+
+            data.global_x = torch.from_numpy(data.global_x)
+
+        # label
+        y = np.where(data.y > 0.0, 1, 0)
+        y = np.expand_dims(y, axis=1)
+        y = y[self._target_week - 1]
+        data.y = torch.from_numpy(y)
+
+        return data
+
+
+class LocalGlobalAsTensorTransform:
+    def __init__(
+        self,
+        root_dir,
+        target_week,
+        include_global=True,
+        append_position_as_feature=True,
+    ):
+        self.root_dir = root_dir
+        self._target_week = target_week
+        if target_week < 1 or target_week > 24:
+            raise ValueError("Target week is not valid")
         self._local_mean_std_per_feature = torch.as_tensor(
             torch.load("{}/{}".format(self.root_dir, "mean_std_stats_local.pk")),
             device=device, dtype=torch.float32
