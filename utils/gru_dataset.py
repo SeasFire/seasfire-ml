@@ -5,7 +5,6 @@ import os
 import xarray as xr
 import numpy as np
 import logging
-from sklearn.neighbors import NearestNeighbors
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -50,9 +49,7 @@ class GRUDataset(Dataset):
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
         logger.info(
-            "Samples (>0 and <=threshold)={}".format(
-                self._le_threshold_samples_count
-            )
+            "Samples (>0 and <=threshold)={}".format(self._le_threshold_samples_count)
         )
 
         zero_threshold_samples = torch.load(
@@ -61,7 +58,9 @@ class GRUDataset(Dataset):
         self._zero_threshold_samples_count = len(zero_threshold_samples)
         logger.info("Samples (=0)={}".format(self._zero_threshold_samples_count))
 
-        self._samples = gt_threshold_samples + le_threshold_samples + zero_threshold_samples
+        self._samples = (
+            gt_threshold_samples + le_threshold_samples + zero_threshold_samples
+        )
 
         self._indices = list(
             range(
@@ -153,20 +152,25 @@ class GRUDataset(Dataset):
         local_data = local_data.transpose("values", "time")
         logger.debug("local_data={}".format(local_data.values))
 
-        return local_data.values, y 
+        return local_data.values, y
 
-
-    def balanced_sampler(self): 
+    def balanced_sampler(self):
         logger.info("Creating weighted random sampler")
         gt_threshold_target = 0.3
         le_threshold_target = 0.2
         zero_threshold_target = 0.5
-        logger.info("Target proportions (>,<=,0) = {}, {}, {}".format(gt_threshold_target, le_threshold_target, zero_threshold_target))
+        logger.info(
+            "Target proportions (>,<=,0) = {}, {}, {}".format(
+                gt_threshold_target, le_threshold_target, zero_threshold_target
+            )
+        )
 
         gt_threshold_weight = gt_threshold_target / self._gt_threshold_samples_count
         le_threshold_weight = le_threshold_target / self._le_threshold_samples_count
-        zero_threshold_weight = zero_threshold_target / self._zero_threshold_samples_count
-        
+        zero_threshold_weight = (
+            zero_threshold_target / self._zero_threshold_samples_count
+        )
+
         gt = np.full(self._gt_threshold_samples_count, gt_threshold_weight)
         le = np.full(self._le_threshold_samples_count, le_threshold_weight)
         zero = np.full(self._zero_threshold_samples_count, zero_threshold_weight)
@@ -174,7 +178,9 @@ class GRUDataset(Dataset):
         samples_weights = torch.from_numpy(samples_weights).to(device)
         logger.debug("samples_weights = {}".format(samples_weights))
 
-        return WeightedRandomSampler(weights=samples_weights, num_samples=len(samples_weights), replacement=True)
+        return WeightedRandomSampler(
+            weights=samples_weights, num_samples=len(samples_weights), replacement=True
+        )
 
 
 class GRUTransform:
@@ -189,8 +195,9 @@ class GRUTransform:
         self._target_week = target_week
         if target_week < 1 or target_week > 24:
             raise ValueError("Target week is not valid")
-        self._local_mean_std_per_feature = torch.load(
-            "{}/{}".format(self.root_dir, "mean_std_stats_local.pk")
+        self._local_mean_std_per_feature = torch.as_tensor(
+            torch.load("{}/{}".format(self.root_dir, "mean_std_stats_local.pk")),
+            device=device, dtype=torch.float32
         )
         logger.debug(
             "Loaded local dataset mean, std={}".format(self._local_mean_std_per_feature)
@@ -209,29 +216,30 @@ class GRUTransform:
     def __call__(self, data):
         x, y = data
 
+        x = torch.as_tensor(x, device=device)
         features_count = x.shape[0]
-        if self._timesteps <= 0 or self._timesteps > x.shape[1]: 
-            logger.warning("Invalid timesteps requested, should be in [1,{}]".format(x.shape[1]))
+        if self._timesteps <= 0 or self._timesteps > x.shape[1]:
+            logger.warning(
+                "Invalid timesteps requested, should be in [1,{}]".format(x.shape[1])
+            )
         timesteps = max(1, min(self._timesteps, x.shape[1]))
         local_mean_std = self._local_mean_std_per_feature[:features_count, :]
-        local_mean_std = np.transpose(local_mean_std)
+        local_mean_std = torch.transpose(local_mean_std, 0, 1)
         local_mu = local_mean_std[0]
-        local_mu = np.repeat(local_mu, timesteps)
-        local_mu = np.reshape(local_mu, (features_count, -1))
+        local_mu = torch.repeat_interleave(local_mu, timesteps)
+        local_mu = torch.reshape(local_mu, (features_count, -1))
         local_std = local_mean_std[1]
-        local_std = np.repeat(local_std, timesteps)
-        local_std = np.reshape(local_std, (features_count, -1))
-        x = (x[:,-timesteps:] - local_mu) / local_std
-        x = np.nan_to_num(x, nan=-1.0)
+        local_std = torch.repeat_interleave(local_std, timesteps)
+        local_std = torch.reshape(local_std, (features_count, -1))
+        x = (x[:, -timesteps:] - local_mu) / local_std
+        x = torch.nan_to_num(x, nan=-1.0)
         # transpose from feature x times to time x feature
-        x = x.transpose()
-        x = np.float32(x)
-        x = torch.from_numpy(x)
+        x = torch.transpose(x, 0, 1)
 
         # label
-        y = np.where(y > 0.0, 1, 0)
-        y = np.expand_dims(y, axis=1)
+        y = torch.as_tensor(y, device=device)
+        y = torch.where(y > 0.0, 1, 0)
+        y = torch.unsqueeze(y, dim=1)
         y = y[self._target_week - 1]
-        y = torch.from_numpy(y)
 
         return x, y
