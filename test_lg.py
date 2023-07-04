@@ -58,17 +58,17 @@ def test(model, loader, criterion, model_name):
                 None,
                 batch,
             )
-
-            predictions.append(preds)
-            labels.append(y.float())
-
             probs = torch.sigmoid(preds)
-
-            logger.debug("probs = {}".format(probs))
-            logger.debug("y = {}".format(y.float()))
 
             for metric in metrics:
                 metric.update(probs, y)
+
+            preds_cpu = preds.cpu()
+            y_cpu = y.float().cpu()
+            predictions.append(preds_cpu)
+            labels.append(y_cpu)
+            del preds 
+            del y
 
         loss = criterion(torch.cat(predictions), torch.cat(labels))
         logger.info(f"| Test Loss: {loss}")
@@ -125,7 +125,7 @@ def main(args):
     logger.info("Dataset length: {}".format(len(dataset)))
     logger.info("Using batch size={}".format(args.batch_size))
 
-    loader = torch_geometric.data.DataLoader(
+    loader = torch_geometric.loader.DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,

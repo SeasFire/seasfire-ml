@@ -117,25 +117,26 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
 
             preds = model(x)
 
-            train_predictions.append(preds)
-            train_labels.append(y.float())
-            
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
-            #optimizer.zero_grad(set_to_none=True)
             train_loss.backward()
             optimizer.step()
 
             scheduler.step(epoch - 1 + i / iters)
 
             probs = torch.sigmoid(preds)
-
             # logger.info("preds = {}".format((probs > 0.5).float()))
             # logger.info("y = {}".format(y.float()))
-
             for metric in train_metrics:
                 metric.update(probs, y)
+
+            preds_cpu = preds.cpu()
+            y_cpu = y.float().cpu()
+            train_predictions.append(preds_cpu)
+            train_labels.append(y_cpu)
+            del preds 
+            del y                
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
@@ -152,17 +153,18 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                 y = data[1].to(device)
 
                 preds = model(x)
-
-                val_predictions.append(preds)
-                val_labels.append(y.float())
-
                 probs = torch.sigmoid(preds)
-
                 # logger.info("preds = {}".format((probs > 0.5).float()))
                 # logger.info("y = {}".format(y.float()))
-
                 for metric in val_metrics:
                     metric.update(probs, y)
+ 
+                preds_cpu = preds.cpu()
+                y_cpu = y.float().cpu()
+                val_predictions.append(preds_cpu)
+                val_labels.append(y_cpu)
+                del preds 
+                del y
 
         train_loss = criterion(torch.cat(train_predictions), torch.cat(train_labels))
         val_loss = criterion(torch.cat(val_predictions), torch.cat(val_labels))
@@ -264,13 +266,13 @@ def main(args):
     logger.info("Train dataset length: {}".format(len(train_dataset)))
     logger.info("Using batch size={}".format(args.batch_size))
 
-    train_loader = torch_geometric.data.DataLoader(
+    train_loader = torch_geometric.loader.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
     )
-    val_loader = torch_geometric.data.DataLoader(
+    val_loader = torch_geometric.loader.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,

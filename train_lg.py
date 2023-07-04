@@ -312,13 +312,13 @@ def main(args):
     logger.info("Train dataset length: {}".format(len(train_dataset)))
     logger.info("Using batch size={}".format(args.batch_size))
 
-    train_loader = torch_geometric.data.DataLoader(
+    train_loader = torch_geometric.loader.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
     )
-    val_loader = torch_geometric.data.DataLoader(
+    val_loader = torch_geometric.loader.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
