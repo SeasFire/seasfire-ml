@@ -133,9 +133,6 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                 batch,
             )
 
-            train_predictions.append(preds)
-            train_labels.append(y.float())
-
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
@@ -145,12 +142,18 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             scheduler.step(epoch - 1 + i / iters)
 
             probs = torch.sigmoid(preds)
-
             # logger.info("preds = {}".format((probs > 0.5).float()))
             # logger.info("y = {}".format(y.float()))
-
             for metric in train_metrics:
                 metric.update(probs, y)
+
+            preds_cpu = preds.cpu()
+            y_cpu = y.float().cpu()
+            train_predictions.append(preds_cpu)
+            train_labels.append(y_cpu)
+            del preds 
+            del y
+
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
@@ -183,16 +186,18 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                     batch,
                 )
 
-                val_predictions.append(preds)
-                val_labels.append(y.float())
-
                 probs = torch.sigmoid(preds)
-
                 # logger.info("preds = {}".format((probs > 0.5).float()))
                 # logger.info("y = {}".format(y.float()))
-
                 for metric in val_metrics:
                     metric.update(probs, y)
+
+                preds_cpu = preds.cpu()
+                y_cpu = y.float().cpu()
+                val_predictions.append(preds_cpu)
+                val_labels.append(y_cpu)
+                del preds
+                del y
 
         train_loss = criterion(torch.cat(train_predictions), torch.cat(train_labels))
         val_loss = criterion(torch.cat(val_predictions), torch.cat(val_labels))
