@@ -399,7 +399,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=100,
+        default=75,
         help="Epochs",
     )
     parser.add_argument(
