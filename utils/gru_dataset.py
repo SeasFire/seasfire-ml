@@ -186,68 +186,6 @@ class GRUDataset(Dataset):
         )
 
 
-class GRUAsTensorTransform:
-    def __init__(
-        self,
-        root_dir,
-        timesteps,
-        target_week,
-    ):
-        self.root_dir = root_dir
-        self._timesteps = timesteps
-        self._target_week = target_week
-        if target_week < 1 or target_week > 24:
-            raise ValueError("Target week is not valid")
-        self._local_mean_std_per_feature = torch.as_tensor(
-            torch.load("{}/{}".format(self.root_dir, "mean_std_stats_local.pk")),
-            device=device, dtype=torch.float32
-        )
-        logger.debug(
-            "Loaded local dataset mean, std={}".format(self._local_mean_std_per_feature)
-        )
-
-    @property
-    def target_week(self):
-        return self._target_week
-
-    @target_week.setter
-    def target_week(self, value):
-        if value < 1 or value > 24:
-            raise ValueError("Target week is not valid")
-        self._target_week = value
-
-    def __call__(self, data):
-        x, y = data
-
-        x = torch.as_tensor(x, device=device)
-        features_count = x.shape[0]
-        if self._timesteps <= 0 or self._timesteps > x.shape[1]:
-            logger.warning(
-                "Invalid timesteps requested, should be in [1,{}]".format(x.shape[1])
-            )
-        timesteps = max(1, min(self._timesteps, x.shape[1]))
-        local_mean_std = self._local_mean_std_per_feature[:features_count, :]
-        local_mean_std = torch.transpose(local_mean_std, 0, 1)
-        local_mu = local_mean_std[0]
-        local_mu = torch.repeat_interleave(local_mu, timesteps)
-        local_mu = torch.reshape(local_mu, (features_count, -1))
-        local_std = local_mean_std[1]
-        local_std = torch.repeat_interleave(local_std, timesteps)
-        local_std = torch.reshape(local_std, (features_count, -1))
-        x = (x[:, -timesteps:] - local_mu) / local_std
-        x = torch.nan_to_num(x, nan=-1.0)
-        # transpose from feature x times to time x feature
-        x = torch.transpose(x, 0, 1)
-
-        # label
-        y = torch.as_tensor(y, device=device)
-        y = torch.where(y > 0.0, 1, 0)
-        y = torch.unsqueeze(y, dim=1)
-        y = y[self._target_week - 1]
-
-        return x, y
-
-
 class GRUTransform:
     def __init__(
         self,
