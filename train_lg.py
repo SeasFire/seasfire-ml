@@ -81,11 +81,12 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         StatScores(task="binary").to(device),
     ]
 
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.SGD(
         model.parameters(),
         lr=args.learning_rate,
+        momentum=0.9,
         weight_decay=args.weight_decay,
-    )
+    )    
     logger.info("Optimizer={}".format(optimizer))
     scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0=10, T_mult=1, eta_min=1e-4
