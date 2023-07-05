@@ -220,7 +220,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             metric.reset()
 
         save_model(model, criterion, "last", model_name, out_dir)
-        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
+        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10 and val_metrics_dict["F1Score"][epoch - 1] > 0.55:
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
             save_model(model, criterion, "best", model_name, out_dir)
