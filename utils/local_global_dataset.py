@@ -19,7 +19,8 @@ class LocalGlobalDataset(Dataset):
         local_k,
         global_k=2,
         include_global=True,
-        include_oci_variables=True,
+        include_local_oci_variables=True,
+        include_global_oci_variables=True,
         transform=None,
     ):
         self.root_dir = root_dir
@@ -34,11 +35,11 @@ class LocalGlobalDataset(Dataset):
         self._input_vars = self._metadata["input_vars"]
 
         logger.info("Found input vars={}".format(self._input_vars))
-        if include_oci_variables:
-            self._oci_input_vars = self._metadata["oci_input_vars"]
-            logger.info("Found oci input vars={}".format(self._oci_input_vars))
+        if include_local_oci_variables:
+            self._local_oci_input_vars = self._metadata["oci_input_vars"]
+            logger.info("Found local oci input vars={}".format(self._local_oci_input_vars))
         else:
-            self._oci_input_vars = []
+            self._local_oci_input_vars = []
 
         self._sp_res = self._metadata["sp_res"]
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
@@ -111,7 +112,7 @@ class LocalGlobalDataset(Dataset):
         logger.debug("local_ds={}".format(self._local_ds))
 
         # Compute local graph features
-        for oci_var in self._oci_input_vars:
+        for oci_var in self._local_oci_input_vars:
             self._local_ds[oci_var] = self._local_ds[oci_var].expand_dims(
                 dim={
                     "latitude": self._local_ds["latitude"],
@@ -123,6 +124,12 @@ class LocalGlobalDataset(Dataset):
         self._include_global = include_global
         if self._include_global:
             logger.info("Global data enabled in dataset")
+
+            if include_global_oci_variables:
+                self._global_oci_input_vars = self._metadata["oci_input_vars"]
+                logger.info("Found global oci input vars={}".format(self._global_oci_input_vars))
+            else:
+                self._global_oci_input_vars = []
 
             self._global_sp_res = self._metadata["global_sp_res"]
             logger.info(
@@ -149,7 +156,7 @@ class LocalGlobalDataset(Dataset):
             logger.debug("global_ds={}".format(self._global_ds))
 
             # Compute global graph features
-            for oci_var in self._oci_input_vars:
+            for oci_var in self._global_oci_input_vars:
                 self._global_ds[oci_var] = self._global_ds[oci_var].expand_dims(
                     dim={
                         "latitude": self._global_ds["latitude"],
@@ -182,12 +189,12 @@ class LocalGlobalDataset(Dataset):
 
     @property
     def local_features(self):
-        return tuple(self._input_vars + self._oci_input_vars)
+        return tuple(self._input_vars + self._local_oci_input_vars)
 
     @property
     def global_features(self):
         if self._include_global:
-            return tuple(self._input_vars + self._oci_input_vars)
+            return tuple(self._input_vars + self._global_oci_input_vars)
         return []
 
     @property
@@ -243,7 +250,7 @@ class LocalGlobalDataset(Dataset):
         )
 
         local_ds = (
-            self._local_ds[self._input_vars + self._oci_input_vars]
+            self._local_ds[self._input_vars + self._local_oci_input_vars]
             .sel(latitude=lat_slice, longitude=lon_slice)
             .isel(time=time_slice)
         )
@@ -251,7 +258,7 @@ class LocalGlobalDataset(Dataset):
         local_data = xr.concat(
             [
                 local_ds[var_name]
-                for var_name in self._input_vars + self._oci_input_vars
+                for var_name in self._input_vars + self._local_oci_input_vars
             ],
             dim="values",
         )
@@ -276,7 +283,7 @@ class LocalGlobalDataset(Dataset):
             global_data = xr.concat(
                 [
                     global_ds[var_name]
-                    for var_name in self._input_vars + self._oci_input_vars
+                    for var_name in self._input_vars + self._global_oci_input_vars
                 ],
                 dim="values",
             )

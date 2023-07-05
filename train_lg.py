@@ -86,7 +86,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         lr=args.learning_rate,
         momentum=0.9,
         weight_decay=args.weight_decay,
-    )    
+    )
     logger.info("Optimizer={}".format(optimizer))
     scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0=10, T_mult=1, eta_min=1e-4
@@ -152,9 +152,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             y_cpu = y.float().cpu()
             train_predictions.append(preds_cpu)
             train_labels.append(y_cpu)
-            del preds 
+            del preds
             del y
-
 
         # Validation
         logger.info("Epoch {} Validation".format(epoch))
@@ -166,7 +165,6 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             model.eval()
 
             for _, data in enumerate(tqdm(val_loader)):
-
                 data = data.to(device)
                 local_x = data.x
                 global_x = data.get("global_x")
@@ -220,14 +218,17 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             metric.reset()
 
         save_model(model, criterion, "last", model_name, out_dir)
-        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
+        if (
+            val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg
+            and epoch > 10
+        ):
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
             save_model(model, criterion, "best", model_name, out_dir)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
-        #scheduler.step()
+        # scheduler.step()
 
     with open("train_metrics.pkl", "wb") as file:
         pkl.dump(train_metrics_dict, file)
@@ -235,23 +236,26 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         pkl.dump(val_metrics_dict, file)
 
 
-def build_model_name(args): 
+def build_model_name(args):
     model_type = "local-global" if args.include_global else "local"
     target = "target-{}".format(args.target_week)
     local_radius = "radius-{}".format(args.local_radius)
-    oci = "oci-1" if args.include_oci_variables else "oci-0"
+
+    oci = "oci-l{}-g{}".format(
+        "1" if args.include_local_oci_variables else "0",
+        "1" if args.include_global_oci_variables else "0",
+    )
+
     if args.include_global:
         timesteps = "time-l{}-g{}".format(args.local_timesteps, args.global_timesteps)
-    else: 
+    else:
         timesteps = "time-l{}-g0".format(args.local_timesteps)
     return "{}_{}_{}_{}_{}".format(model_type, target, oci, local_radius, timesteps)
 
 
-def save_model(model, criterion, model_type, model_name, out_dir): 
+def save_model(model, criterion, model_type, model_name, out_dir):
     filename = "{}/{}.{}_model.pt".format(out_dir, model_name, model_type)
-    logger.info(
-        "Saving model as {}".format(filename)
-    )
+    logger.info("Saving model as {}".format(filename))
     torch.save(
         {
             "model": model,
@@ -271,9 +275,9 @@ def main(args):
         os.makedirs(args.out_dir)
 
     if args.log_file is None:
-        model_name=build_model_name(args)
+        model_name = build_model_name(args)
         log_file = "{}/{}.train.logs".format(args.out_dir, model_name)
-    else: 
+    else:
         log_file = args.log_file
     logger.addHandler(logging.FileHandler(log_file))
 
@@ -290,12 +294,18 @@ def main(args):
         local_k=args.local_k,
         global_k=args.global_k,
         include_global=args.include_global,
-        include_oci_variables=args.include_oci_variables,
-        transform=LocalGlobalTransform(args.train_path, args.target_week, args.include_global, args.append_pos_as_features),
+        include_local_oci_variables=args.include_local_oci_variables,
+        include_global_oci_variables=args.include_global_oci_variables,
+        transform=LocalGlobalTransform(
+            args.train_path,
+            args.target_week,
+            args.include_global,
+            args.append_pos_as_features,
+        ),
     )
 
     num_samples = None
-    if args.batches_per_epoch is not None: 
+    if args.batches_per_epoch is not None:
         num_samples = args.batches_per_epoch * args.batch_size
         logger.info("Will sample {} samples".format(num_samples))
     train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples)
@@ -306,8 +316,14 @@ def main(args):
         local_k=args.local_k,
         global_k=args.global_k,
         include_global=args.include_global,
-        include_oci_variables=args.include_oci_variables,
-        transform=LocalGlobalTransform(args.val_path, args.target_week, args.include_global, args.append_pos_as_features),
+        include_local_oci_variables=args.include_local_oci_variables,
+        include_global_oci_variables=args.include_global_oci_variables,
+        transform=LocalGlobalTransform(
+            args.val_path,
+            args.target_week,
+            args.include_global,
+            args.append_pos_as_features,
+        ),
     )
 
     logger.info("Train dataset length: {}".format(len(train_dataset)))
@@ -335,7 +351,7 @@ def main(args):
         args.global_timesteps,
         train_dataset.global_nodes,
         args.decoder_hidden_channels,
-        args.include_global
+        args.include_global,
     )
 
     train(
@@ -343,8 +359,8 @@ def main(args):
         train_loader=train_loader,
         epochs=args.epochs,
         val_loader=val_loader,
-        model_name=build_model_name(args), 
-        out_dir=args.out_dir
+        model_name=build_model_name(args),
+        out_dir=args.out_dir,
     )
 
 
@@ -397,7 +413,7 @@ if __name__ == "__main__":
         dest="decoder_hidden_channels",
         default="256,64",
         help="Hidden channels for decoder layers",
-    )    
+    )
     parser.add_argument(
         "-e",
         "--epochs",
@@ -416,7 +432,7 @@ if __name__ == "__main__":
         dest="batches_per_epoch",
         default=None,
         help="Batches per epoch.",
-    )    
+    )
     parser.add_argument(
         "--local-radius",
         metavar="KEY",
@@ -434,7 +450,7 @@ if __name__ == "__main__":
         dest="local_k",
         default=2,
         help="Local k for knn graph.",
-    )        
+    )
     parser.add_argument(
         "--target-week",
         metavar="KEY",
@@ -453,7 +469,7 @@ if __name__ == "__main__":
         dest="local_timesteps",
         default=24,
         help="Time steps in the past for the local part",
-    )    
+    )
     parser.add_argument(
         "-gt",
         "--global-timesteps",
@@ -472,7 +488,7 @@ if __name__ == "__main__":
         dest="global_k",
         default=2,
         help="Global k for knn graph.",
-    )            
+    )
     parser.add_argument(
         "-lr",
         "--learning-rate",
@@ -510,7 +526,7 @@ if __name__ == "__main__":
         dest="out_dir",
         default="runs",
         help="Default output directory",
-    )    
+    )
     parser.add_argument(
         "--log-file",
         metavar="KEY",
@@ -519,30 +535,45 @@ if __name__ == "__main__":
         dest="log_file",
         default=None,
         help="Filename to output all logs",
-    )        
-    parser.add_argument(
-        "--include-global", dest="include_global", action="store_true"
     )
+    parser.add_argument("--include-global", dest="include_global", action="store_true")
     parser.add_argument(
         "--no-include-global", dest="include_global", action="store_false"
     )
-    parser.set_defaults(include_global=True)    
+    parser.set_defaults(include_global=True)
     parser.add_argument(
         "--append-pos-as-features", dest="append_pos_as_features", action="store_true"
     )
     parser.add_argument(
-        "--no-append-pos-as-features", dest="append_pos_as_features", action="store_false"
+        "--no-append-pos-as-features",
+        dest="append_pos_as_features",
+        action="store_false",
     )
     parser.set_defaults(append_pos_as_features=True)
     parser.add_argument(
-        "--include-oci-variables", dest="include_oci_variables", action="store_true"
+        "--include-global-oci-variables",
+        dest="include_global_oci_variables",
+        action="store_true",
     )
     parser.add_argument(
-        "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
+        "--no-include-global-oci-variables",
+        dest="include_global_oci_variables",
+        action="store_false",
     )
-    parser.set_defaults(include_oci_variables=True)
+    parser.set_defaults(include_global_oci_variables=True)
+    parser.add_argument(
+        "--include-local-oci-variables",
+        dest="include_local_oci_variables",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--no-include-local-oci-variables",
+        dest="include_local_oci_variables",
+        action="store_false",
+    )
+    parser.set_defaults(include_local_oci_variables=True)
     parser.add_argument("--debug", dest="debug", action="store_true")
-    parser.add_argument("--no-debug", dest="debug", action="store_false")    
+    parser.add_argument("--no-debug", dest="debug", action="store_false")
     args = parser.parse_args()
 
     args.hidden_channels = args.hidden_channels.split(",")
@@ -550,8 +581,10 @@ if __name__ == "__main__":
         raise ValueError("Expected hidden channels to be a list of two elements")
     args.hidden_channels = (int(args.hidden_channels[0]), int(args.hidden_channels[1]))
 
-    args.decoder_hidden_channels = [int(x) for x in args.decoder_hidden_channels.split(",")]
+    args.decoder_hidden_channels = [
+        int(x) for x in args.decoder_hidden_channels.split(",")
+    ]
 
-    #torch.multiprocessing.set_start_method('spawn') 
+    # torch.multiprocessing.set_start_method('spawn')
 
     main(args)
