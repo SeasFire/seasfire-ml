@@ -80,18 +80,16 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         StatScores(task="binary").to(device),
     ]
 
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.SGD(
         model.parameters(),
         lr=args.learning_rate,
+        momentum=0.9,
         weight_decay=args.weight_decay,
-    )
+    )    
     logger.info("Optimizer={}".format(optimizer))
     scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=10, T_mult=1, eta_min=1e-4
+        optimizer, T_0=50, T_mult=1
     )
-    # scheduler = lr_scheduler.CosineAnnealingLR(
-    #     optimizer, T_max=epochs, eta_min=0, verbose=True
-    # )
     logger.info("LR scheduler={}".format(scheduler))
     model = model.to(device)
     iters = len(train_loader)

@@ -89,11 +89,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
     )
     logger.info("Optimizer={}".format(optimizer))
     scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=25, T_mult=1
+        optimizer, T_0=50, T_mult=1
     )
-    # scheduler = lr_scheduler.CosineAnnealingLR(
-    #     optimizer, T_max=epochs, eta_min=0, verbose=True
-    # )
     logger.info("LR scheduler={}".format(scheduler))
     model = model.to(device)
     iters = len(train_loader)
