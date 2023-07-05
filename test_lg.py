@@ -174,7 +174,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=3,
+        default=2,
         help="Local radius",
     )
     parser.add_argument(
