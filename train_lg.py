@@ -243,7 +243,7 @@ def build_model_name(args):
 
     oci = "oci-l{}-g{}".format(
         "1" if args.include_local_oci_variables else "0",
-        "1" if args.include_global_oci_variables else "0",
+        "1" if args.include_global_oci_variables and args.include_global else "0",
     )
 
     if args.include_global:
