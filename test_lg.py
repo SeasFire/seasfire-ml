@@ -117,7 +117,8 @@ def main(args):
         local_radius=args.local_radius,
         local_k=args.local_k,
         global_k=args.global_k,        
-        include_oci_variables=args.include_oci_variables,
+        include_local_oci_variables=args.include_local_oci_variables,
+        include_global_oci_variables=args.include_global_oci_variables,
         include_global=args.include_global,
         transform=LocalGlobalTransform(args.test_path, args.target_week, args.include_global, args.append_pos_as_features),
     )
@@ -248,12 +249,19 @@ if __name__ == "__main__":
     )
     parser.set_defaults(append_pos_as_features=True)
     parser.add_argument(
-        "--include-oci-variables", dest="include_oci_variables", action="store_true"
+        "--include-local-oci-variables", dest="include_local_oci_variables", action="store_true"
     )
     parser.add_argument(
-        "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
+        "--no-include-local-oci-variables", dest="include_local_oci_variables", action="store_false"
     )
-    parser.set_defaults(include_oci_variables=True)
+    parser.set_defaults(include_local_oci_variables=True)    
+    parser.add_argument(
+        "--include-global-oci-variables", dest="include_global_oci_variables", action="store_true"
+    )
+    parser.add_argument(
+        "--no-include-global-oci-variables", dest="include_global_oci_variables", action="store_false"
+    )
+    parser.set_defaults(include_global_oci_variables=True)
 
     #torch.multiprocessing.set_start_method('spawn') 
 
