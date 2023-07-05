@@ -89,7 +89,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
     )
     logger.info("Optimizer={}".format(optimizer))
     scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=10, T_mult=1, eta_min=1e-4
+        optimizer, T_0=25, T_mult=1
     )
     # scheduler = lr_scheduler.CosineAnnealingLR(
     #     optimizer, T_max=epochs, eta_min=0, verbose=True
@@ -219,8 +219,9 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
 
         save_model(model, criterion, "last", model_name, out_dir)
         if (
-            val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg
-            and epoch > 10
+            epoch > 10
+            and val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg
+            and val_metrics_dict["F1Score"][epoch - 1] > 0.5
         ):
             current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
             logger.info("Found new best model in epoch {}".format(epoch))
@@ -439,7 +440,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=7,
+        default=2,
         help="Local radius",
     )
     parser.add_argument(
