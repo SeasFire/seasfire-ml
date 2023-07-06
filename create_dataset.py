@@ -265,13 +265,16 @@ class DatasetBuilder:
             sample_region_target_var_per_area_wrt_threshold.values
         )
         if size > len(all_wrt_threshold_samples_index):
-            raise ValueError("Not enough samples to sample from.")
+            logger.warning("Cannot sample {} from {} elements. Will include all.".format(size, len(all_wrt_threshold_samples_index)))
 
-        wrt_threshold_samples_index = self._rng.choice(
-            all_wrt_threshold_samples_index,
-            size=size,
-            replace=False,
-        )
+        if size > len(all_wrt_threshold_samples_index): 
+            wrt_threshold_samples_index = all_wrt_threshold_samples_index
+        else:
+            wrt_threshold_samples_index = self._rng.choice(
+                all_wrt_threshold_samples_index,
+                size=size,
+                replace=False,
+            )
 
         for index in wrt_threshold_samples_index:
             result.append(
