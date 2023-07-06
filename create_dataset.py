@@ -226,30 +226,69 @@ class DatasetBuilder:
         else:
             raise ValueError("Invalid split type")
 
+    def _try_sample_wrt_threshold(
+        self,
+        sample_region,
+        sample_region_target_var_per_area,
+        sample_region_ndvi,
+        strategy,
+        threshold,
+        sample_size,
+        increase_threshold = False,
+    ):
+        cur_sample_size = sample_size
+        cur_threshold = threshold
+        idx = 0
+
+        while True:
+            if idx > 50 or cur_threshold <= 0.0:
+                logger.warning("Failed to find proper threshold") 
+                return sample
+            
+            sample = self._sample_wrt_threshold(
+                sample_region,
+                sample_region_target_var_per_area,
+                sample_region_ndvi,
+                strategy,
+                cur_threshold,
+                cur_sample_size,
+            )
+            if len(sample) >= sample_size: 
+                return sample
+
+            if increase_threshold: 
+                cur_threshold *= 2
+            else:
+                cur_threshold /= 2
+            idx += 1 
+
+
     def _sample_wrt_threshold(
         self,
         sample_region,
         sample_region_target_var_per_area,
         sample_region_ndvi,
         strategy,
+        threshold,
+        sample_size,
     ):
+        logger.info(
+            "Sampling for strategy={}, sample size={} and threshold={}".format(strategy, sample_size, threshold)
+        )
         if strategy == "above-threshold":
             sample_region_target_var_per_area_wrt_threshold = (
-                sample_region_target_var_per_area > self._positive_samples_threshold
+                sample_region_target_var_per_area > threshold
             ) & (~np.isnan(sample_region_ndvi))
-            size = self._positive_samples_size
         elif strategy == "positive-below-threshold":
             sample_region_target_var_per_area_wrt_threshold = (
-                (sample_region_target_var_per_area <= self._positive_samples_threshold)
+                (sample_region_target_var_per_area <= threshold)
                 & (sample_region_target_var_per_area > 0.0)
                 & (~np.isnan(sample_region_ndvi))
             )
-            size = self._positive_samples_size
         elif strategy == "zero":
             sample_region_target_var_per_area_wrt_threshold = (
                 sample_region_target_var_per_area <= 0.0
             ) & (~np.isnan(sample_region_ndvi))
-            size = 2 * self._positive_samples_size
         else:
             raise ValueError("Invalid strategy")
 
@@ -264,15 +303,19 @@ class DatasetBuilder:
         all_wrt_threshold_samples_index = np.argwhere(
             sample_region_target_var_per_area_wrt_threshold.values
         )
-        if size > len(all_wrt_threshold_samples_index):
-            logger.warning("Cannot sample {} from {} elements. Will include all.".format(size, len(all_wrt_threshold_samples_index)))
+        if sample_size > len(all_wrt_threshold_samples_index):
+            logger.warning(
+                "Cannot sample {} from {} elements. Will include all.".format(
+                    sample_size, len(all_wrt_threshold_samples_index)
+                )
+            )
 
-        if size > len(all_wrt_threshold_samples_index): 
+        if sample_size > len(all_wrt_threshold_samples_index):
             wrt_threshold_samples_index = all_wrt_threshold_samples_index
         else:
             wrt_threshold_samples_index = self._rng.choice(
                 all_wrt_threshold_samples_index,
-                size=size,
+                size=sample_size,
                 replace=False,
             )
 
@@ -332,7 +375,9 @@ class DatasetBuilder:
             )
         return result
 
-    def _generate_all_samples_lists(self, min_lon, min_lat, max_lon, max_lat, target_week):
+    def _generate_all_samples_lists(
+        self, min_lon, min_lat, max_lon, max_lat, target_week
+    ):
         # define sample region
         sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
@@ -389,7 +434,9 @@ class DatasetBuilder:
             zero_threshold_samples_list,
         )
 
-    def _generate_threshold_samples_lists(self, min_lon, min_lat, max_lon, max_lat, target_week):
+    def _generate_threshold_samples_lists(
+        self, min_lon, min_lat, max_lon, max_lat, target_week
+    ):
         # define sample region
         sample_region = self._cube.sel(
             latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
@@ -419,18 +466,23 @@ class DatasetBuilder:
             sample_region_target_var_shifted / sample_region_area
         )
 
-        above_threshold_samples_list = self._sample_wrt_threshold(
+        above_threshold_samples_list = self._try_sample_wrt_threshold(
             sample_region,
             sample_region_target_var_per_area,
             sample_region_ndvi,
             strategy="above-threshold",
+            threshold=self._positive_samples_threshold,
+            sample_size=self._positive_samples_size,
         )
 
-        below_threshold_samples_list = self._sample_wrt_threshold(
+        below_threshold_samples_list = self._try_sample_wrt_threshold(
             sample_region,
             sample_region_target_var_per_area,
             sample_region_ndvi,
             strategy="positive-below-threshold",
+            threshold=self._positive_samples_threshold,
+            sample_size=self._positive_samples_size,
+            increase_threshold=True
         )
 
         zero_threshold_samples_list = self._sample_wrt_threshold(
@@ -438,6 +490,8 @@ class DatasetBuilder:
             sample_region_target_var_per_area,
             sample_region_ndvi,
             strategy="zero",
+            threshold=self._positive_samples_threshold,
+            sample_size=2 * self._positive_samples_size,
         )
 
         return (
@@ -456,7 +510,9 @@ class DatasetBuilder:
 
         if self._generate_all_samples:
             logger.info("Will generate all samples")
-            return self._generate_all_samples_lists(min_lon, min_lat, max_lon, max_lat, target_week)
+            return self._generate_all_samples_lists(
+                min_lon, min_lat, max_lon, max_lat, target_week
+            )
         else:
             logger.info("Will samples based on threshold")
             return self._generate_threshold_samples_lists(
@@ -564,7 +620,7 @@ class DatasetBuilder:
         self._write_dataset_to_disk(ground_truth_dataset, "ground_truth")
 
         logger.info("Creating samples index")
-        for target_week in range(1, self._target_count+1):
+        for target_week in range(1, self._target_count + 1):
             logger.info("Creating from target week={}".format(target_week))
             # create list of samples to generate
             (
@@ -572,26 +628,36 @@ class DatasetBuilder:
                 le_threshold_samples,
                 zero_threshold_samples,
             ) = self._generate_samples_lists(
-                min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat, target_week=target_week
+                min_lon=min_lon,
+                min_lat=min_lat,
+                max_lon=max_lon,
+                max_lat=max_lat,
+                target_week=target_week,
             )
             logger.info(
                 "About to create {} samples above the threshold".format(
                     len(gt_threshold_samples)
                 )
             )
-            self._write_data_to_disk(gt_threshold_samples, "t{}_gt_threshold_samples".format(target_week))
+            self._write_data_to_disk(
+                gt_threshold_samples, "t{}_gt_threshold_samples".format(target_week)
+            )
 
             logger.info(
                 "About to create {} samples below the threshold".format(
                     len(le_threshold_samples)
                 )
             )
-            self._write_data_to_disk(le_threshold_samples, "t{}_le_threshold_samples".format(target_week))
+            self._write_data_to_disk(
+                le_threshold_samples, "t{}_le_threshold_samples".format(target_week)
+            )
 
             logger.info(
                 "About to create {} zero samples".format(len(zero_threshold_samples))
             )
-            self._write_data_to_disk(zero_threshold_samples, "t{}_zero_threshold_samples".format(target_week))
+            self._write_data_to_disk(
+                zero_threshold_samples, "t{}_zero_threshold_samples".format(target_week)
+            )
 
         metadata = {
             "input_vars": self._input_vars,
