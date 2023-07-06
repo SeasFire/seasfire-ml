@@ -14,6 +14,7 @@ class GRUDataset(Dataset):
     def __init__(
         self,
         root_dir,
+        target_week: int,
         include_oci_variables=True,
         transform=None,
     ):
@@ -25,6 +26,8 @@ class GRUDataset(Dataset):
 
         self._timeseries_weeks = self._metadata["timeseries_weeks"]
         self._target_count = self._metadata["target_count"]
+        if target_week < 1 or target_week > self._target_count: 
+            raise ValueError("Target week provided not supported by dataset")
         self._target_var = self._metadata["target_var"]
         self._input_vars = self._metadata["input_vars"]
 
@@ -39,13 +42,13 @@ class GRUDataset(Dataset):
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
 
         gt_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "gt_threshold_samples.pt")
+            os.path.join(self.root_dir, "t{}_gt_threshold_samples.pt".format(target_week))
         )
         self._gt_threshold_samples_count = len(gt_threshold_samples)
         logger.info("Samples (>threshold)={}".format(self._gt_threshold_samples_count))
 
         le_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "le_threshold_samples.pt")
+            os.path.join(self.root_dir, "t{}_le_threshold_samples.pt".format(target_week))
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
         logger.info(
@@ -53,7 +56,7 @@ class GRUDataset(Dataset):
         )
 
         zero_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "zero_threshold_samples.pt")
+            os.path.join(self.root_dir, "t{}_zero_threshold_samples.pt".format(target_week))
         )
         self._zero_threshold_samples_count = len(zero_threshold_samples)
         logger.info("Samples (=0)={}".format(self._zero_threshold_samples_count))

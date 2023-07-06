@@ -246,6 +246,7 @@ def main(args):
 
     train_dataset = GRUDataset(
         root_dir=args.train_path,
+        target_week=args.target_week,
         include_oci_variables=args.include_oci_variables,
         transform=GRUTransform(args.train_path, args.timesteps, args.target_week),
     )
@@ -257,6 +258,7 @@ def main(args):
 
     val_dataset = GRUDataset(
         root_dir=args.val_path,
+        target_week=args.target_week,        
         include_oci_variables=args.include_oci_variables,
         transform=GRUTransform(args.val_path, args.timesteps, args.target_week),
     )

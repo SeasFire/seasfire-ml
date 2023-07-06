@@ -114,6 +114,7 @@ def main(args):
 
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
+        target_week=args.target_week,
         local_radius=args.local_radius,
         local_k=args.local_k,
         global_k=args.global_k,        

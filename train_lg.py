@@ -288,6 +288,7 @@ def main(args):
 
     train_dataset = LocalGlobalDataset(
         root_dir=args.train_path,
+        target_week=args.target_week,
         local_radius=args.local_radius,
         local_k=args.local_k,
         global_k=args.global_k,
@@ -310,6 +311,7 @@ def main(args):
 
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
+        target_week=args.target_week,
         local_radius=args.local_radius,
         local_k=args.local_k,
         global_k=args.global_k,
