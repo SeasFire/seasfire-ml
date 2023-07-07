@@ -528,8 +528,8 @@ class DatasetBuilder:
             "timeseries_weeks": self._timeseries_weeks,
             "target_count": self._target_count,
             "positive_samples_threshold": self._positive_samples_threshold,
-            "gt_threshold_samples": len(gt_threshold_samples),
-            "le_threshold_samples": len(le_threshold_samples),
+            "positive_samples_size": self._positive_samples_size,
+            "negative_samples_size": self._negative_samples_size,
         }
         self._write_metadata_to_disk(metadata)
 
