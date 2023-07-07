@@ -61,24 +61,17 @@ class LocalGlobalDataset(Dataset):
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
         logger.info(
-            "Samples (>0 and <=threshold)={}".format(
+            "Samples (<=threshold)={}".format(
                 self._le_threshold_samples_count
             )
         )
 
-        zero_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "t{}_zero_threshold_samples.pt".format(target_week))
-        )
-        self._zero_threshold_samples_count = len(zero_threshold_samples)
-        logger.info("Samples (=0)={}".format(self._zero_threshold_samples_count))
-
-        self._samples = gt_threshold_samples + le_threshold_samples + zero_threshold_samples
+        self._samples = gt_threshold_samples + le_threshold_samples
 
         self._indices = list(
             range(
                 self._gt_threshold_samples_count
                 + self._le_threshold_samples_count
-                + self._zero_threshold_samples_count
             )
         )
 
@@ -190,7 +183,6 @@ class LocalGlobalDataset(Dataset):
         return (
             self._gt_threshold_samples_count
             + self._le_threshold_samples_count
-            + self._zero_threshold_samples_count
         )
 
     @property
@@ -216,7 +208,7 @@ class LocalGlobalDataset(Dataset):
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
         logger.debug(
-            "Generating sample for idx={},lat={}, lon={}, time={}".format(
+            "Generating sample for idx={}, lat={}, lon={}, time={}".format(
                 idx, lat, lon, time
             )
         )
@@ -361,19 +353,16 @@ class LocalGlobalDataset(Dataset):
 
     def balanced_sampler(self, num_samples=None): 
         logger.info("Creating weighted random sampler")
-        gt_threshold_target = 0.3
-        le_threshold_target = 0.2
-        zero_threshold_target = 0.5
-        logger.info("Target proportions (>,<=,0) = {}, {}, {}".format(gt_threshold_target, le_threshold_target, zero_threshold_target))
+        gt_threshold_target = 0.5
+        le_threshold_target = 0.5
+        logger.info("Target proportions (>,<=) = {}, {}".format(gt_threshold_target, le_threshold_target))
 
         gt_threshold_weight = gt_threshold_target / self._gt_threshold_samples_count
         le_threshold_weight = le_threshold_target / self._le_threshold_samples_count
-        zero_threshold_weight = zero_threshold_target / self._zero_threshold_samples_count
         
         gt = np.full(self._gt_threshold_samples_count, gt_threshold_weight)
         le = np.full(self._le_threshold_samples_count, le_threshold_weight)
-        zero = np.full(self._zero_threshold_samples_count, zero_threshold_weight)
-        samples_weights = np.concatenate((gt, le, zero))
+        samples_weights = np.concatenate((gt, le))
         samples_weights = torch.as_tensor(samples_weights, dtype=torch.double, device=device)
         logger.debug("samples_weights = {}".format(samples_weights))
 

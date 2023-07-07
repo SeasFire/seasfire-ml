@@ -78,6 +78,9 @@ def main(args):
     if torch.cuda.is_available():
         logger.info("Torch cuda version: {}".format(torch.version.cuda))
 
+    if args.model_path is None: 
+        raise ValueError("No model path provided")
+
     model_info = torch.load(args.model_path)
     model = model_info["model"]
     criterion = model_info["criterion"]
@@ -136,7 +139,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="LocalGlobal_target1.pt",
+        default=None,
         help="Path to load the trained model from",
     )
     parser.add_argument(

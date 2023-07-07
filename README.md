@@ -16,3 +16,12 @@ pip install torch-geometric
 pip install torch-geometric-temporal
 ```
 
+## Dataset creation 
+
+To create a dataset you need to call `create_dataset.py` three times. 
+
+```
+./create_dataset.py --split=test
+./create_dataset.py --split=train --positive-samples-size=50000 --negative-samples-size=50000
+./create_dataset.py --split=val --positive-samples-size=2500 --negative-samples-size=5000
+```

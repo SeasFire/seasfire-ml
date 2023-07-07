@@ -440,7 +440,7 @@ if __name__ == "__main__":
         action="store",
         dest="local_radius",
         default=2,
-        help="Local radius",
+        help="Local radius.",
     )
     parser.add_argument(
         "--local-k",

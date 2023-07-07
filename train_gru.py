@@ -255,14 +255,6 @@ def main(args):
         num_samples = args.batches_per_epoch * args.batch_size
         logger.info("Will sample {} samples".format(num_samples))
     train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples)    
-
-    val_dataset = GRUDataset(
-        root_dir=args.val_path,
-        target_week=args.target_week,        
-        include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.val_path, args.timesteps, args.target_week),
-    )
-
     logger.info("Train dataset length: {}".format(len(train_dataset)))
     logger.info("Using batch size={}".format(args.batch_size))
 
@@ -271,6 +263,13 @@ def main(args):
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
+    )
+
+    val_dataset = GRUDataset(
+        root_dir=args.val_path,
+        target_week=args.target_week,        
+        include_oci_variables=args.include_oci_variables,
+        transform=GRUTransform(args.val_path, args.timesteps, args.target_week),
     )
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset,
