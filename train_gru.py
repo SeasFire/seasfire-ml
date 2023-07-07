@@ -391,7 +391,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=0.03,
+        default=0.001,
         help="Weight decay",
     )
     parser.add_argument(
