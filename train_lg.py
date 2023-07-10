@@ -7,6 +7,8 @@ import pickle as pkl
 import random
 from tqdm import tqdm
 
+import resource 
+
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
@@ -334,11 +336,15 @@ def main(args):
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True,
     )
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
     model = LocalGlobalModel(
@@ -584,6 +590,9 @@ if __name__ == "__main__":
     args.decoder_hidden_channels = [
         int(x) for x in args.decoder_hidden_channels.split(",")
     ]
+
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
 
     # torch.multiprocessing.set_start_method('spawn')
 

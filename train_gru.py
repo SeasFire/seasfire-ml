@@ -7,6 +7,8 @@ import pickle as pkl
 import random
 from tqdm import tqdm
 
+import resource 
+
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
@@ -263,6 +265,8 @@ def main(args):
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
         num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
     val_dataset = GRUDataset(
@@ -275,6 +279,8 @@ def main(args):
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True,        
     )
 
     model = GRUModel(
@@ -434,6 +440,9 @@ if __name__ == "__main__":
 
     args.hidden_channels = [int(x) for x in args.hidden_channels.split(",")]
 
-    #torch.multiprocessing.set_start_method('spawn') 
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
+
+    #torch.multiprocessing.set_start_method('spawn')
 
     main(args)
