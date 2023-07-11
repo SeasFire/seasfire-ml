@@ -1,6 +1,7 @@
 import logging
 import xarray as xr
 import numpy as np
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +37,31 @@ class BaselineModel:
         lat_batch, lon_batch, time_batch = x
         batches = lat_batch.shape[0]
 
+        result_list = []
         for b in range(batches): 
             lat = lat_batch[b]
             lon = lon_batch[b]
             time = time_batch[b]
 
-            self._predict(lat, lon, time)    
+            result = self._predict(lat, lon, time)
+            result_list.append(result)
+
+        result_batch = torch.tensor(result_list)
+
+        logger.debug("results={}".format(result_batch))
+
+        return result_batch
 
     def _predict(self, lat, lon, time):
-        logger.info(
+        logger.debug(
             "Predicting for lat={}, lon={}, time={}".format(
                 lat, lon, time
             )
         )
 
         time_idx = np.where(self._cube["time"] == time)[0][0]
-        logger.info("time idx={}".format(time_idx))
+        logger.debug("time idx={}".format(time_idx))
 
-        # Compute ground truth - target
         target = (
             self._cube[self._target_var].sel(
                 latitude=lat,
@@ -61,8 +69,10 @@ class BaselineModel:
             )
             .fillna(0)
         )
-        logger.info("target={}".format(target))
-        logger.info("target shape={}".format(target.values.shape))
-        logger.info("target={}".format(target.values))
+        previous = target[time_idx-self._year_in_weeks::-self._year_in_weeks]
+        mean = previous.mean()
 
+        logger.debug("mean={}".format(mean.values))
+
+        return torch.as_tensor(mean.values)
 

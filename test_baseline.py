@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def test(model, loader, criterion, model_name):
+def test(model, loader, model_name):
     logger.info("Starting Test")
 
     with torch.no_grad():
@@ -32,13 +32,7 @@ def test(model, loader, criterion, model_name):
             StatScores(task="binary").to(device)
         ]
 
-        predictions = []
-        labels = []
-
         for _, data in enumerate(tqdm(loader)):
-
-            logger.info("item={}".format(data))
-
             lat = data.center_lat
             lon = data.center_lon
             time = data.center_time
@@ -46,21 +40,11 @@ def test(model, loader, criterion, model_name):
             y = data.y
 
             preds = model((lat, lon, time))
+            preds = preds.gt(0.0).float()
             y = y.gt(0.0)
-            probs = torch.sigmoid(preds)
 
             for metric in metrics:
-                metric.update(probs, y)
-
-            preds_cpu = preds.cpu()
-            y_cpu = y.float().cpu()
-            predictions.append(preds_cpu)
-            labels.append(y_cpu)
-            del preds 
-            del y
-
-        loss = criterion(torch.cat(predictions), torch.cat(labels))
-        logger.info(f"| Test Loss: {loss}")
+                metric.update(preds, y)
 
         result = "{}".format(model_name)
         for metric, metric_name in zip(
@@ -120,9 +104,8 @@ def main(args):
     )
 
     model = BaselineModel(args.cube_path, False)
-    criterion = torch.nn.BCEWithLogitsLoss()
 
-    test(model=model, loader=loader, criterion=criterion, model_name=model_name)
+    test(model=model, loader=loader, model_name=model_name)
 
 
 if __name__ == "__main__":
@@ -187,9 +170,6 @@ if __name__ == "__main__":
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     parser.set_defaults(debug=False)
-    parser.set_defaults(include_oci_variables=False)
-
-    #torch.multiprocessing.set_start_method('spawn') 
 
     args = parser.parse_args()
     main(args)
