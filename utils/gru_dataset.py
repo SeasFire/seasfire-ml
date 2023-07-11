@@ -228,7 +228,6 @@ class GRUTransform:
         x = torch.from_numpy(x)
 
         # label
-        y = np.where(y > 0.0, 1, 0)
         y = np.expand_dims(y, axis=1)
         y = y[self._target_week - 1]
         y = torch.from_numpy(y)

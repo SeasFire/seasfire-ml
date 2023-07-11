@@ -43,6 +43,7 @@ def test(model, loader, criterion, model_name):
             y = data[1].to(device)
 
             preds = model(x)
+            y = y.gt(0.0)
             probs = torch.sigmoid(preds)
 
             for metric in metrics:

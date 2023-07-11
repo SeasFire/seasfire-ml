@@ -11,7 +11,7 @@ import resource
 
 import torch
 import torch_geometric
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
+from torchmetrics import MeanAbsoluteError, MeanSquaredError, R2Score
 from torch.optim import lr_scheduler
 from models import (
     GRUModel
@@ -42,44 +42,30 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
-        "Accuracy": [],
-        "Recall": [],
-        "F1Score": [],
-        "AveragePrecision (AUPRC)": [],
-        "AUROC": [],
-        "StatsScore": [],
+        "MeanAbsoluteError": [],
+        "MeanSquaredError": [], 
+        "R2Score": [],
         "Loss": [],
     }
     val_metrics_dict = {
-        "Accuracy": [],
-        "Recall": [],
-        "F1Score": [],
-        "AveragePrecision (AUPRC)": [],
-        "AUROC": [],
-        "StatsScore": [],
+        "MeanAbsoluteError": [],
+        "MeanSquaredError": [], 
+        "R2Score": [],
         "Loss": [],
     }
 
-    # pos_weight = torch.FloatTensor([1.0]).to(device)
-    # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = torch.nn.MSELoss()
 
     train_metrics = [
-        Accuracy(task="binary").to(device),
-        Recall(task="binary").to(device),
-        F1Score(task="binary").to(device),
-        AveragePrecision(task="binary").to(device),
-        AUROC(task="binary").to(device),
-        StatScores(task="binary").to(device),
+        MeanAbsoluteError().to(device),
+        MeanSquaredError().to(device),
+        R2Score().to(device),
     ]
 
     val_metrics = [
-        Accuracy(task="binary").to(device),
-        Recall(task="binary").to(device),
-        F1Score(task="binary").to(device),
-        AveragePrecision(task="binary").to(device),
-        AUROC(task="binary").to(device),
-        StatScores(task="binary").to(device),
+        MeanAbsoluteError().to(device),
+        MeanSquaredError().to(device),
+        R2Score().to(device),
     ]
 
     optimizer = torch.optim.SGD(
@@ -116,7 +102,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             y = data[1].to(device)
 
             preds = model(x)
-            y = y.gt(0.0)
+            preds = torch.relu(preds)
+
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
@@ -125,11 +112,10 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
 
             scheduler.step(epoch - 1 + i / iters)
 
-            probs = torch.sigmoid(preds)
-            # logger.info("preds = {}".format((probs > 0.5).float()))
+            # logger.info("preds = {}".format(preds))
             # logger.info("y = {}".format(y.float()))
             for metric in train_metrics:
-                metric.update(probs, y)
+                metric.update(preds, y)
 
             preds_cpu = preds.cpu()
             y_cpu = y.float().cpu()
@@ -153,14 +139,11 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                 y = data[1].to(device)
 
                 preds = model(x)
-                y = y.gt(0.0)
-
-                probs = torch.sigmoid(preds)
-
-                # logger.info("preds = {}".format((probs > 0.5).float()))
+                # preds = torch.relu(preds)
+                # logger.info("preds = {}".format(preds))
                 # logger.info("y = {}".format(y.float()))
                 for metric in val_metrics:
-                    metric.update(probs, y)
+                    metric.update(preds, y)
  
                 preds_cpu = preds.cpu()
                 y_cpu = y.float().cpu()
@@ -189,20 +172,14 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             metric.reset()
 
         save_model(model, criterion, "last", model_name, out_dir)
-        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
-            current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
-            logger.info("Found new best model in epoch {}".format(epoch))
-            save_model(model, criterion, "best", model_name, out_dir)
+        # if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
+        #     current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
+        #     logger.info("Found new best model in epoch {}".format(epoch))
+        #     save_model(model, criterion, "best", model_name, out_dir)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
         #scheduler.step()
-
-    with open("train_metrics.pkl", "wb") as file:
-        pkl.dump(train_metrics_dict, file)
-    with open("val_metrics.pkl", "wb") as file:
-        pkl.dump(val_metrics_dict, file)
-
 
 def build_model_name(args): 
     model_type = "gru"
@@ -374,7 +351,6 @@ if __name__ == "__main__":
         help="Target week",
     )
     parser.add_argument(
-        "-lt",
         "--timesteps",
         metavar="KEY",
         type=int,
@@ -384,7 +360,6 @@ if __name__ == "__main__":
         help="Time steps in the past",
     )    
     parser.add_argument(
-        "-lr",
         "--learning-rate",
         metavar="KEY",
         type=float,
@@ -394,7 +369,6 @@ if __name__ == "__main__":
         help="Learning rate",
     )
     parser.add_argument(
-        "-w",
         "--weight-decay",
         metavar="KEY",
         type=float,

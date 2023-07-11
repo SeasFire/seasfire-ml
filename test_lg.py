@@ -58,6 +58,7 @@ def test(model, loader, criterion, model_name):
                 None,
                 batch,
             )
+            y = y.gt(0.0)
             probs = torch.sigmoid(preds)
 
             for metric in metrics:

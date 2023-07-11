@@ -132,6 +132,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                 None,
                 batch,
             )
+            y = y.gt(0.0)
 
             train_loss = criterion(preds, y.float())
 
@@ -183,6 +184,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                     None,
                     batch,
                 )
+                y = y.gt(0.0)
 
                 probs = torch.sigmoid(preds)
                 # logger.info("preds = {}".format((probs > 0.5).float()))

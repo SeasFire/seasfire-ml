@@ -499,8 +499,7 @@ class LocalGlobalTransform:
             data.global_x = torch.from_numpy(data.global_x)
 
         # label
-        y = np.where(data.y > 0.0, 1, 0)
-        y = np.expand_dims(y, axis=1)
+        y = np.expand_dims(data.y, axis=1)
         y = y[self._target_week - 1]
         data.y = torch.from_numpy(y)
 
