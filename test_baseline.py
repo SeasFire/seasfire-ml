@@ -1,195 +1,195 @@
-import torch
-import random
-import numpy as np
-import xarray as xr
-import pickle as pkl
-import matplotlib.pyplot as plt
-import os
-import torch.nn.functional as F
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score
+#!/usr/bin/env python3
+
+import logging
+import argparse
 from tqdm import tqdm
 
-number_of_train_years = 16
-days_per_week = 8
-timeseries_weeks = 48
-aggregation_in_weeks = 4  # aggregate per month
-year_in_weeks = 48
-max_week_with_data = 918
-target_count = 6
-target_length = 4
-
-# Europe
-min_lon = -25
-min_lat = 36
-max_lon = 50
-max_lat = 72
-
-cube_path = "../1d_SeasFireCube.zarr"
-cube = xr.open_zarr(cube_path, consolidated=False)
-
-time_train = (
-    timeseries_weeks,
-    year_in_weeks * number_of_train_years
-    - (target_count * target_length),
+import os
+import torch
+import torch_geometric
+from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
+from utils import (
+    LocalGlobalDataset,
+    LocalGlobalTransform
 )
-time_val = (
-    year_in_weeks * number_of_train_years + timeseries_weeks,
-    year_in_weeks * number_of_train_years
-    + 2 * timeseries_weeks,
-)
-time_test = (
-    year_in_weeks * number_of_train_years
-    + 2 * timeseries_weeks,
-    max_week_with_data - (target_count * target_length),
-)
-start_time, end_time = time_test
-print(time_test)
-end_time = 894
 
-sample_region = cube.sel(
-    latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)
-).isel(time=slice(start_time, end_time))
-sample_region.load()
+from models import BaselineModel
 
-###################### mean seasonal cycle per month ########################
-sample_region_group = sample_region.gwis_ba.groupby("time.month").mean()
-sample_region_group.load()
+logger = logging.getLogger(__name__)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-print(sample_region_group)
-# sample_region_gwsi_ba_values = sample_region.gwis_ba.values
 
-###################### True values ##########################
-sample_region_gwsi_ba_values = sample_region.gwis_ba.values
-sample_region_gwsi_non_nan = sample_region_gwsi_ba_values >= 0.0
+def test(model, loader, criterion, model_name):
+    logger.info("Starting Test")
 
-sample_len_non_nan =   np.sum(sample_region_gwsi_non_nan)
+    with torch.no_grad():
+        metrics = [
+            Accuracy(task="binary").to(device),
+            Recall(task="binary").to(device),
+            F1Score(task="binary").to(device),
+            AveragePrecision(task="binary").to(device),
+            AUROC(task="binary").to(device),
+            StatScores(task="binary").to(device)
+        ]
 
-samples = []
-all_samples_index = np.argwhere(sample_region_gwsi_non_nan)
+        predictions = []
+        labels = []
 
-for index in all_samples_index:
-    samples.append(
-        (
-            sample_region.latitude.values[index[1]],
-            sample_region.longitude.values[index[2]],
-            sample_region.time.values[index[0]],
-        ),
-    )
-print("Samples len:", len(samples))
+        for _, data in enumerate(tqdm(loader)):
 
-first_sample_index = 0
-ground_truth = []
-ground_truth_mean = []
+            logger.info("item={}".format(data))
 
-for idx in tqdm(range(0, len(samples))):
-    if idx < first_sample_index:
-        continue
-    if os.path.exists(os.path.join('data3/test', "graph_{}.pt".format(idx))):
-        # logger.info("Skipping sample {} generation.".format(idx))
-        continue
-    center_lat, center_lon, center_time = samples[idx]
+            lat = data.center_lat
+            lon = data.center_lon
+            time = data.center_time
 
-    start_time = center_time
-    end_time = center_time + np.timedelta64(
-        (target_count * target_length) * days_per_week, "D"
-    )
+            y = data.y
 
-    end_str = str(end_time)
-    
-    marker1 = end_str.find('-') + 1
-    marker2 = end_str.find('T', marker1)
-    substr = end_str[marker1:marker2]
+            preds = model((lat, lon, time))
+            y = y.gt(0.0)
+            probs = torch.sigmoid(preds)
 
-    month = int((substr.split('-'))[0])
-    day = (substr.split('-'))[1]
-    
-    
-    if int(day)<15:
-        if month == 1:
-            month = 12
-        elif month == 10:
-            month = 10
-        else:
-            month = month - 1
+            for metric in metrics:
+                metric.update(probs, y)
 
-    month = month + target_count
-    if month > 12:
-        month = month - 12
-    if month == 7:
-        month = 6
-    elif month == 8:
-        month = 6
-    elif month == 9:
-        month = 10
-    
-    val = sample_region_group.sel(
-        latitude=center_lat,
-        longitude=center_lon,
-        month=month,
-    ).values
+            preds_cpu = preds.cpu()
+            y_cpu = y.float().cpu()
+            predictions.append(preds_cpu)
+            labels.append(y_cpu)
+            del preds 
+            del y
 
-    if val > 0.0:
-        ground_truth_mean.append(1.0)
-    else:
-        ground_truth_mean.append(0.0)
+        loss = criterion(torch.cat(predictions), torch.cat(labels))
+        logger.info(f"| Test Loss: {loss}")
 
-    # Computing ground truth for lat=", center_lat," lon=", center_lon," time=[", start_time,",", end_time,"]
-    
-    values = cube["gwis_ba"].sel(
-        latitude=center_lat,
-        longitude=center_lon,
-        time=slice(
-            start_time,
-            end_time,
-        ),
+        result = "{}".format(model_name)
+        for metric, metric_name in zip(
+            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
+        ):
+            metric_value = metric.compute()
+            logger.info("| Test {}: {}".format(metric_name, metric_value))
+            result += ",{}".format(metric_value)
+            metric.reset()
+
+        logger.info(result)
+
+
+def main(args):
+    level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=level)
+
+    logger.info("Torch version: {}".format(torch.__version__))
+    logger.info("Cuda available: {}".format(torch.cuda.is_available()))
+    if torch.cuda.is_available():
+        logger.info("Torch cuda version: {}".format(torch.version.cuda))
+
+    model_name = "baseline"
+
+    if not os.path.exists(args.out_dir):
+        logger.info("Creating output folder {}".format(args.out_dir))
+        os.makedirs(args.out_dir)
+
+    if args.log_file is None:
+        log_file = "{}/{}.test.logs".format(args.out_dir, model_name)
+    else: 
+        log_file = args.log_file
+    logger.addHandler(logging.FileHandler(log_file))
+
+    logger.info("Using model={}".format(model_name))
+    logger.info("Using target week={}".format(args.target_week))
+
+    dataset = LocalGlobalDataset(
+        root_dir=args.test_path,
+        target_week=args.target_week,
+        local_radius=2,
+        local_k=2,
+        global_k=2,        
+        include_local_oci_variables=False,
+        include_global_oci_variables=False,
+        include_global=False,
+        transform=LocalGlobalTransform(args.test_path, args.target_week, False, True),
     )
 
-    aggregation_in_days = "{}D".format(target_length * days_per_week)
+    logger.info("Dataset length: {}".format(len(dataset)))
+    logger.info("Using batch size={}".format(args.batch_size))
 
-    aggregated_values = values.resample(
-        time=aggregation_in_days, closed="left"
-    ).sum(skipna=True)
+    loader = torch_geometric.loader.DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+    )
 
-    ground_truth.append(aggregated_values.values[: target_count])
+    model = BaselineModel(args.cube_path, False)
+    criterion = torch.nn.BCEWithLogitsLoss()
 
-###################### SAVING GROUND TRUTHS ###############################    
+    test(model=model, loader=loader, criterion=criterion, model_name=model_name)
 
-ground_truth_mean = np.array(ground_truth_mean)
-ground_truth_mean = torch.from_numpy(ground_truth_mean)
 
-torch.save(ground_truth_mean, 'ground_truth_mean.pt')
+if __name__ == "__main__":
 
-ground_truth = np.array(ground_truth)
-ground_truth = torch.from_numpy(ground_truth)
+    parser = argparse.ArgumentParser(description="Train Models")
+    parser.add_argument(
+        "--cube-path",
+        metavar="PATH",
+        type=str,
+        action="store",
+        dest="cube_path",
+        default="../seasfire_1deg.zarr",
+        help="Cube path",
+    )    
+    parser.add_argument(
+        "-t",
+        "--test-path",
+        metavar="PATH",
+        type=str,
+        action="store",
+        dest="test_path",
+        default="data/test",
+        help="Test set path",
+    )
+    parser.add_argument(
+        "-b",
+        "--batch-size",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="batch_size",
+        default=32,
+        help="Batch size",
+    )
+    parser.add_argument(
+        "--target-week",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="target_week",
+        default=1,
+        help="Target week",
+    )
+    parser.add_argument(
+        "--out-dir",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="out_dir",
+        default="runs",
+        help="Default output directory",
+    )        
+    parser.add_argument(
+        "--log-file",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="log_file",
+        default=None,
+        help="Filename to output all logs",
+    )        
+    parser.add_argument("--debug", dest="debug", action="store_true")
+    parser.add_argument("--no-debug", dest="debug", action="store_false")
+    parser.set_defaults(debug=False)
+    parser.set_defaults(include_oci_variables=False)
 
-torch.save(ground_truth, 'ground_truth.pt')
+    #torch.multiprocessing.set_start_method('spawn') 
 
-###################### LOADING AND PRINTING RESULTS ###############################
-
-mean_truth = torch.load("ground_truth_mean.pt")
-
-truth = torch.load("ground_truth.pt")
-truth = truth[:, [0]]
-
-for i in range(0, mean_truth.shape[0]):
-    mean_truth[i] = torch.where(mean_truth[i] > 0.0, 1, 0)
-
-for i in range(0, truth.shape[0]):
-    truth[i] = torch.where(truth[i] > 0.0, 1, 0)
-truth = truth.squeeze(1)
-
-acc = Accuracy(task="binary")
-prec = acc(mean_truth, truth)
-print("Accuracy: ", prec)
-
-average_precision = AveragePrecision(task="binary")
-prec = average_precision(mean_truth, truth)
-print("AveragePrecision: ", prec)
-
-f1 = F1Score(task="binary", average="macro")
-prec = f1(mean_truth, truth)
-print("F1Score: ", prec)
-
-auroc = AUROC(task="binary")
-prec = auroc(mean_truth, truth)
-print("AUROC: ", prec)
+    args = parser.parse_args()
+    main(args)
