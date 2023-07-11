@@ -3,7 +3,6 @@ import logging
 import os
 import argparse
 import numpy as np
-import pickle as pkl
 import random
 from tqdm import tqdm
 
@@ -102,7 +101,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             y = data[1].to(device)
 
             preds = model(x)
-            preds = torch.relu(preds)
+            #preds = torch.relu(preds)
 
             train_loss = criterion(preds, y.float())
 
