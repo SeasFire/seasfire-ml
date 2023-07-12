@@ -181,7 +181,7 @@ class DatasetBuilder:
 
         self._number_of_train_years = 16
         self._days_per_week = 8
-        self._timeseries_weeks = timeseries_weeks  # 12 months before = 48 weeks
+        self._timeseries_weeks = timeseries_weeks  # 6 months before = 24 weeks
         self._year_in_weeks = 48
 
         self._max_week_with_data = 918
@@ -193,27 +193,25 @@ class DatasetBuilder:
         self._target_count = target_count
 
         logger.info(
-            "Will generate {} target periods (weeks).".format(self._target_count)
+            "Will support up to {} target periods (weeks) in the future.".format(self._target_count)
         )
 
         # split time periods
         self._time_train = (
-            self._timeseries_weeks,
-            self._year_in_weeks * self._number_of_train_years - self._target_count,
+            self._timeseries_weeks + self._target_count,
+            self._year_in_weeks * self._number_of_train_years,
         )
         logger.info("Train time in weeks: {}".format(self._time_train))
 
         self._time_val = (
             self._year_in_weeks * self._number_of_train_years + self._timeseries_weeks,
-            self._year_in_weeks * self._number_of_train_years
-            + 2 * self._timeseries_weeks,
+            self._year_in_weeks * (self._number_of_train_years+1) + self._timeseries_weeks,
         )
         logger.info("Val time in weeks: {}".format(self._time_val))
 
         self._time_test = (
-            self._year_in_weeks * self._number_of_train_years
-            + 2 * self._timeseries_weeks,
-            self._max_week_with_data - self._target_count,
+            self._year_in_weeks * (self._number_of_train_years+1) + self._timeseries_weeks,
+            self._max_week_with_data,
         )
         logger.info("Test time in weeks: {}".format(self._time_test))
 
@@ -321,10 +319,10 @@ class DatasetBuilder:
             )
         return result
 
-    def _generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat, target_week):
+    def _generate_samples_lists(self, min_lon, min_lat, max_lon, max_lat):
         logger.info(
-            "Generating sample list for split={} from week={} to week={} using target week={}".format(
-                self._split, self._start_time, self._end_time, target_week
+            "Generating sample list for split={} from week={} to week={}".format(
+                self._split, self._start_time, self._end_time
             )
         )
 
@@ -347,14 +345,9 @@ class DatasetBuilder:
         # Convert area in hectars
         sample_region_area = sample_region_area / 10000.0
 
-        # Shift target var by amount of target in the future
-        sample_region_target_var_shifted = sample_region_target_var.shift(
-            time=-target_week, fill_value=0
-        )
-
         # compute target variable per area
         sample_region_target_var_per_area = (
-            sample_region_target_var_shifted / sample_region_area
+            sample_region_target_var / sample_region_area
         )
 
         above_threshold_samples_list = self._try_sample_wrt_threshold(
@@ -482,36 +475,33 @@ class DatasetBuilder:
         self._write_dataset_to_disk(ground_truth_dataset, "ground_truth")
 
         logger.info("Creating samples index")
-        for target_week in range(1, self._target_count + 1):
-            logger.info("Creating from target week={}".format(target_week))
-            # create list of samples to generate
-            (
-                gt_threshold_samples,
-                le_threshold_samples,
-            ) = self._generate_samples_lists(
-                min_lon=min_lon,
-                min_lat=min_lat,
-                max_lon=max_lon,
-                max_lat=max_lat,
-                target_week=target_week,
+        # create list of samples to generate
+        (
+            gt_threshold_samples,
+            le_threshold_samples,
+        ) = self._generate_samples_lists(
+            min_lon=min_lon,
+            min_lat=min_lat,
+            max_lon=max_lon,
+            max_lat=max_lat,
+        )
+        logger.info(
+            "About to create {} samples above the threshold".format(
+                len(gt_threshold_samples)
             )
-            logger.info(
-                "About to create {} samples above the threshold".format(
-                    len(gt_threshold_samples)
-                )
-            )
-            self._write_data_to_disk(
-                gt_threshold_samples, "t{}_gt_threshold_samples".format(target_week)
-            )
+        )
+        self._write_data_to_disk(
+            gt_threshold_samples, "gt_threshold_samples"
+        )
 
-            logger.info(
-                "About to create {} samples below the threshold".format(
-                    len(le_threshold_samples)
-                )
+        logger.info(
+            "About to create {} samples below the threshold".format(
+                len(le_threshold_samples)
             )
-            self._write_data_to_disk(
-                le_threshold_samples, "t{}_le_threshold_samples".format(target_week)
-            )
+        )
+        self._write_data_to_disk(
+            le_threshold_samples, "le_threshold_samples"
+        )
 
         metadata = {
             "input_vars": self._input_vars,
@@ -721,7 +711,7 @@ if __name__ == "__main__":
         action="store",
         dest="target_count",
         default=24,
-        help="Target count. How many targets in the future to generate.",
+        help="Target count. How many targets in the future to support.",
     )
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")

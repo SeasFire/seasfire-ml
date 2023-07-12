@@ -105,7 +105,7 @@ def main(args):
         root_dir=args.test_path,
         target_week=args.target_week,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.test_path, args.timesteps, args.target_week),
+        transform=GRUTransform(args.test_path, args.timesteps),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))

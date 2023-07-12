@@ -26,7 +26,7 @@ class GRUDataset(Dataset):
 
         self._timeseries_weeks = self._metadata["timeseries_weeks"]
         self._target_count = self._metadata["target_count"]
-        if target_week < 1 or target_week > self._target_count: 
+        if target_week < 1 or target_week > self._target_count:
             raise ValueError("Target week provided not supported by dataset")
         self._target_var = self._metadata["target_var"]
         self._input_vars = self._metadata["input_vars"]
@@ -42,28 +42,21 @@ class GRUDataset(Dataset):
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
 
         gt_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "t{}_gt_threshold_samples.pt".format(target_week))
+            os.path.join(self.root_dir, "gt_threshold_samples.pt")
         )
         self._gt_threshold_samples_count = len(gt_threshold_samples)
         logger.info("Samples (>threshold)={}".format(self._gt_threshold_samples_count))
 
         le_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "t{}_le_threshold_samples.pt".format(target_week))
+            os.path.join(self.root_dir, "le_threshold_samples.pt")
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
-        logger.info(
-            "Samples (<=threshold)={}".format(self._le_threshold_samples_count)
-        )
+        logger.info("Samples (<=threshold)={}".format(self._le_threshold_samples_count))
 
-        self._samples = (
-            gt_threshold_samples + le_threshold_samples
-        )
+        self._samples = gt_threshold_samples + le_threshold_samples
 
         self._indices = list(
-            range(
-                self._gt_threshold_samples_count
-                + self._le_threshold_samples_count
-            )
+            range(self._gt_threshold_samples_count + self._le_threshold_samples_count)
         )
 
         logger.info("Loading ground truth dataset")
@@ -86,12 +79,15 @@ class GRUDataset(Dataset):
             )
         logger.debug("local_ds={}".format(self._local_ds))
 
+        # Shift all input data by target week
+        for var_name in self._input_vars + self._oci_input_vars:
+            self._local_ds[var_name] = self._local_ds[var_name].shift(
+                time=target_week, fill_value=0
+            )
+
     @property
     def len(self):
-        return (
-            self._gt_threshold_samples_count
-            + self._le_threshold_samples_count
-        )
+        return self._gt_threshold_samples_count + self._le_threshold_samples_count
 
     @property
     def local_features(self):
@@ -106,27 +102,9 @@ class GRUDataset(Dataset):
         )
 
         # Compute ground truth - target
-        time_idx = np.where(self._ground_truth_ds["time"] == time)[0][0]
-        time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
-        target = (
-            self._ground_truth_ds.sel(
-                latitude=lat,
-                longitude=lon,
-            )
-            .isel(time=time_slice)
-            .fillna(0)
-        )
-
-        timeseries_len = len(target.coords["time"])
-        if timeseries_len != self._target_count:
-            logger.warning(
-                "Invalid time series length {} != {}".format(
-                    timeseries_len, self._target_count
-                )
-            )
-            raise ValueError("Invalid time series length")
-
-        y = target[self._target_var].values
+        y = self._ground_truth_ds[self._target_var].sel(
+            latitude=lat, longitude=lon, time=time
+        ).fillna(0)
         logger.debug("y={}".format(y))
 
         # compute local data
@@ -147,7 +125,7 @@ class GRUDataset(Dataset):
         local_data = local_data.transpose("values", "time")
         logger.debug("local_data={}".format(local_data.values))
 
-        return local_data.values, y
+        return local_data.values, y.values
 
     def balanced_sampler(self, num_samples=None):
         logger.info("Creating weighted random sampler")
@@ -165,11 +143,13 @@ class GRUDataset(Dataset):
         gt = np.full(self._gt_threshold_samples_count, gt_threshold_weight)
         le = np.full(self._le_threshold_samples_count, le_threshold_weight)
         samples_weights = np.concatenate((gt, le))
-        samples_weights = torch.as_tensor(samples_weights, dtype=torch.double, device=device)        
+        samples_weights = torch.as_tensor(
+            samples_weights, dtype=torch.double, device=device
+        )
         logger.debug("samples_weights = {}".format(samples_weights))
 
-        if num_samples is None: 
-            num_samples=len(samples_weights)
+        if num_samples is None:
+            num_samples = len(samples_weights)
 
         return WeightedRandomSampler(
             weights=samples_weights, num_samples=num_samples, replacement=True
@@ -181,13 +161,9 @@ class GRUTransform:
         self,
         root_dir,
         timesteps,
-        target_week,
     ):
         self.root_dir = root_dir
         self._timesteps = timesteps
-        self._target_week = target_week
-        if target_week < 1 or target_week > 24:
-            raise ValueError("Target week is not valid")
         self._local_mean_std_per_feature = torch.load(
             "{}/{}".format(self.root_dir, "mean_std_stats_local.pk")
         )
@@ -195,22 +171,14 @@ class GRUTransform:
             "Loaded local dataset mean, std={}".format(self._local_mean_std_per_feature)
         )
 
-    @property
-    def target_week(self):
-        return self._target_week
-
-    @target_week.setter
-    def target_week(self, value):
-        if value < 1 or value > 24:
-            raise ValueError("Target week is not valid")
-        self._target_week = value
-
     def __call__(self, data):
         x, y = data
 
         features_count = x.shape[0]
-        if self._timesteps <= 0 or self._timesteps > x.shape[1]: 
-            logger.warning("Invalid timesteps requested, should be in [1,{}]".format(x.shape[1]))
+        if self._timesteps <= 0 or self._timesteps > x.shape[1]:
+            logger.warning(
+                "Invalid timesteps requested, should be in [1,{}]".format(x.shape[1])
+            )
         timesteps = max(1, min(self._timesteps, x.shape[1]))
         local_mean_std = self._local_mean_std_per_feature[:features_count, :]
         local_mean_std = np.transpose(local_mean_std)
@@ -220,7 +188,7 @@ class GRUTransform:
         local_std = local_mean_std[1]
         local_std = np.repeat(local_std, timesteps)
         local_std = np.reshape(local_std, (features_count, -1))
-        x = (x[:,-timesteps:] - local_mu) / local_std
+        x = (x[:, -timesteps:] - local_mu) / local_std
         x = np.nan_to_num(x, nan=-1.0)
         # transpose from feature x times to time x feature
         x = x.transpose()
@@ -228,8 +196,7 @@ class GRUTransform:
         x = torch.from_numpy(x)
 
         # label
-        y = np.expand_dims(y, axis=1)
-        y = y[self._target_week - 1]
-        y = torch.from_numpy(y)
+        y = torch.tensor(y)
+        y = torch.unsqueeze(y, dim=0)
 
         return x, y

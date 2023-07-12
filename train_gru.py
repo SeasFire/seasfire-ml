@@ -126,7 +126,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             scheduler.step(epoch - 1 + i / iters)
 
             probs = torch.sigmoid(preds)
-            # logger.info("preds = {}".format((probs > 0.5).float()))
+            # logger.info("preds = {}".format(preds))
             # logger.info("y = {}".format(y.float()))
             for metric in train_metrics:
                 metric.update(probs, y)
@@ -253,7 +253,7 @@ def main(args):
         root_dir=args.train_path,
         target_week=args.target_week,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.train_path, args.timesteps, args.target_week),
+        transform=GRUTransform(args.train_path, args.timesteps),
     )
     num_samples = None
     if args.batches_per_epoch is not None: 
@@ -276,7 +276,7 @@ def main(args):
         root_dir=args.val_path,
         target_week=args.target_week,        
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.val_path, args.timesteps, args.target_week),
+        transform=GRUTransform(args.val_path, args.timesteps),
     )
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset,
