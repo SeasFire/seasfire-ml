@@ -105,6 +105,7 @@ class GRUDataset(Dataset):
         y = self._ground_truth_ds[self._target_var].sel(
             latitude=lat, longitude=lon, time=time
         ).fillna(0)
+        # y = y / 10000
         logger.debug("y={}".format(y))
 
         # compute local data

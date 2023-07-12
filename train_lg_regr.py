@@ -119,6 +119,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             )
             #preds = torch.relu(preds)
 
+            y = torch.log10(1 + y)
+
             train_loss = criterion(preds, y.float())
 
             optimizer.zero_grad()
@@ -169,6 +171,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
                     batch,
                 )
                 # preds = torch.relu(preds)
+
+                y = torch.log10(1 + y)
 
                 # logger.info("preds = {}".format(preds))
                 # logger.info("y = {}".format(y.float()))
@@ -279,7 +283,6 @@ def main(args):
         include_global_oci_variables=args.include_global_oci_variables,
         transform=LocalGlobalTransform(
             args.train_path,
-            args.target_week,
             args.include_global,
             args.append_pos_as_features,
         ),
@@ -302,7 +305,6 @@ def main(args):
         include_global_oci_variables=args.include_global_oci_variables,
         transform=LocalGlobalTransform(
             args.val_path,
-            args.target_week,
             args.include_global,
             args.append_pos_as_features,
         ),

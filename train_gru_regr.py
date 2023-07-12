@@ -100,6 +100,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             x = data[0].to(device)
             y = data[1].to(device)
 
+            y = torch.log10(1 + y)
+
             preds = model(x)
             #preds = torch.relu(preds)
 
@@ -136,6 +138,8 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
 
                 x = data[0].to(device)
                 y = data[1].to(device)
+
+                y = torch.log10(1 + y)
 
                 preds = model(x)
                 # preds = torch.relu(preds)
