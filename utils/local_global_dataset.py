@@ -229,7 +229,7 @@ class LocalGlobalDataset(Dataset):
         y = self._ground_truth_ds[self._target_var].sel(
             latitude=lat, longitude=lon, time=time
         ).fillna(0)
-        logger.debug("y={}".format(y))
+        logger.debug("y={}".format(y.values))
 
         # compute local data
         time_idx = np.where(self._local_ds["time"] == time)[0][0]
