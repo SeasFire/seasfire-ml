@@ -271,7 +271,7 @@ class LocalGlobalDataset(Dataset):
             # compute global data
             time_idx = np.where(self._global_ds["time"] == time)[0][0]
             time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
-            global_ds = self._global_ds.isel(time=time_slice).load()
+            global_ds = self._global_ds.isel(time=time_slice)
             global_data = xr.concat(
                 [
                     global_ds[var_name]

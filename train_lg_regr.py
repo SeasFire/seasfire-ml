@@ -129,6 +129,9 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
 
             scheduler.step(epoch - 1 + i / iters)
 
+            if torch.any(torch.isnan(preds)): 
+                logger.warning("Nan value found in prediction!")
+
             # logger.info("preds = {}".format(preds))
             # logger.info("y = {}".format(y.float()))
             for metric in train_metrics:

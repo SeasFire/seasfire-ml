@@ -143,8 +143,11 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             scheduler.step(epoch - 1 + i / iters)
 
             probs = torch.sigmoid(preds)
-            # logger.info("preds = {}".format((probs > 0.5).float()))
-            # logger.info("y = {}".format(y.float()))
+            logger.debug("probs = {}".format(probs))
+            if torch.any(torch.isnan(probs)): 
+                logger.warning("Nan value found in prediction!")
+            logger.debug("preds = {}".format((probs > 0.5).float()))
+            logger.debug("y = {}".format(y.float()))
             for metric in train_metrics:
                 metric.update(probs, y)
 
