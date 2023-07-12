@@ -217,7 +217,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
 
 
 def build_model_name(args):
-    model_type = "local-global" if args.include_global else "local"
+    model_type = "local-global-regr" if args.include_global else "local-regr"
     target = "target-{}".format(args.target_week)
     local_radius = "radius-{}".format(args.local_radius)
 

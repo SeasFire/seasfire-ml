@@ -181,7 +181,7 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         #scheduler.step()
 
 def build_model_name(args): 
-    model_type = "gru"
+    model_type = "gru-regr"
     target = "target-{}".format(args.target_week)
     oci = "oci-1" if args.include_oci_variables else "oci-0"
     timesteps = "time-l{}".format(args.timesteps)
@@ -229,7 +229,7 @@ def main(args):
         root_dir=args.train_path,
         target_week=args.target_week,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.train_path, args.timesteps, args.target_week),
+        transform=GRUTransform(args.train_path, args.timesteps),
     )
     num_samples = None
     if args.batches_per_epoch is not None: 
@@ -252,7 +252,7 @@ def main(args):
         root_dir=args.val_path,
         target_week=args.target_week,        
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.val_path, args.timesteps, args.target_week),
+        transform=GRUTransform(args.val_path, args.timesteps),
     )
     val_loader = torch_geometric.loader.DataLoader(
         val_dataset,
