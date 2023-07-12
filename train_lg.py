@@ -301,7 +301,6 @@ def main(args):
         include_global_oci_variables=args.include_global_oci_variables,
         transform=LocalGlobalTransform(
             args.train_path,
-            args.target_week,
             args.include_global,
             args.append_pos_as_features,
         ),
@@ -324,7 +323,6 @@ def main(args):
         include_global_oci_variables=args.include_global_oci_variables,
         transform=LocalGlobalTransform(
             args.val_path,
-            args.target_week,
             args.include_global,
             args.append_pos_as_features,
         ),

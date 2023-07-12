@@ -122,7 +122,7 @@ def main(args):
         include_local_oci_variables=args.include_local_oci_variables,
         include_global_oci_variables=args.include_global_oci_variables,
         include_global=args.include_global,
-        transform=LocalGlobalTransform(args.test_path, args.target_week, args.include_global, args.append_pos_as_features),
+        transform=LocalGlobalTransform(args.test_path, args.include_global, args.append_pos_as_features),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))

@@ -51,13 +51,13 @@ class LocalGlobalDataset(Dataset):
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
 
         gt_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "t{}_gt_threshold_samples.pt".format(target_week))
+            os.path.join(self.root_dir, "gt_threshold_samples.pt")
         )
         self._gt_threshold_samples_count = len(gt_threshold_samples)
         logger.info("Samples (>threshold)={}".format(self._gt_threshold_samples_count))
 
         le_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "t{}_le_threshold_samples.pt".format(target_week))
+            os.path.join(self.root_dir, "le_threshold_samples.pt")
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
         logger.info(
@@ -120,6 +120,12 @@ class LocalGlobalDataset(Dataset):
             )
         logger.debug("local_ds={}".format(self._local_ds))
 
+        # Shift all input data by target week
+        for var_name in self._input_vars + self._local_oci_input_vars:
+            self._local_ds[var_name] = self._local_ds[var_name].shift(
+                time=target_week, fill_value=0
+            )
+
         self._include_global = include_global
         if self._include_global:
             logger.info("Global data enabled in dataset")
@@ -163,6 +169,12 @@ class LocalGlobalDataset(Dataset):
                     }
                 )
             logger.debug("global_ds={}".format(self._global_ds))
+
+            # Shift all input data by target week
+            for var_name in self._input_vars + self._global_oci_input_vars:
+                self._global_ds[var_name] = self._global_ds[var_name].shift(
+                    time=target_week, fill_value=0
+                )
 
             logger.info("Precomputing global positions")
             self._global_pos = np.array(
@@ -214,27 +226,9 @@ class LocalGlobalDataset(Dataset):
         )
 
         # Compute ground truth - target
-        time_idx = np.where(self._ground_truth_ds["time"] == time)[0][0]
-        time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
-        target = (
-            self._ground_truth_ds.sel(
-                latitude=lat,
-                longitude=lon,
-            )
-            .isel(time=time_slice)
-            .fillna(0)
-        )
-
-        timeseries_len = len(target.coords["time"])
-        if timeseries_len != self._target_count:
-            logger.warning(
-                "Invalid time series length {} != {}".format(
-                    timeseries_len, self._target_count
-                )
-            )
-            raise ValueError("Invalid time series length")
-
-        y = target[self._target_var].values
+        y = self._ground_truth_ds[self._target_var].sel(
+            latitude=lat, longitude=lon, time=time
+        ).fillna(0)
         logger.debug("y={}".format(y))
 
         # compute local data
@@ -303,7 +297,7 @@ class LocalGlobalDataset(Dataset):
             center_time=time,
             center_vertex_idx=local_data.values.shape[0] // 2,
             area=area_data.values[0],
-            y=y,
+            y=y.values,
             global_x=global_x if self._include_global else None,
             global_pos=global_pos if self._include_global else None,
             global_latlon_shape=global_latlon_shape if self._include_global else None,
@@ -376,14 +370,10 @@ class LocalGlobalTransform:
     def __init__(
         self,
         root_dir,
-        target_week,
         include_global=True,
         append_position_as_feature=True,
     ):
         self.root_dir = root_dir
-        self._target_week = target_week
-        if target_week < 1 or target_week > 24:
-            raise ValueError("Target week is not valid")
         self._local_mean_std_per_feature = torch.load(
             "{}/{}".format(self.root_dir, "mean_std_stats_local.pk")
         )
@@ -403,16 +393,6 @@ class LocalGlobalTransform:
             )
 
         self._append_position_as_feature = append_position_as_feature
-
-    @property
-    def target_week(self):
-        return self._target_week
-
-    @target_week.setter
-    def target_week(self, value):
-        if value < 1 or value > 24:
-            raise ValueError("Target week is not valid")
-        self._target_week = value
 
     def __call__(self, data):
         # local graph features
@@ -499,9 +479,7 @@ class LocalGlobalTransform:
             data.global_x = torch.from_numpy(data.global_x)
 
         # label
-        y = np.expand_dims(data.y, axis=1)
-        y = y[self._target_week - 1]
-        data.y = torch.from_numpy(y)
+        y = torch.tensor(data.y)
+        data.y = torch.unsqueeze(y, dim=0)
 
         return data
-
