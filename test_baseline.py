@@ -84,14 +84,14 @@ def main(args):
 
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
-        target_week=args.target_week,
+        target_week=1,
         local_radius=2,
         local_k=2,
         global_k=2,        
         include_local_oci_variables=False,
         include_global_oci_variables=False,
         include_global=False,
-        transform=LocalGlobalTransform(args.test_path, args.target_week, False, True),
+        transform=LocalGlobalTransform(args.test_path, False, True),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))

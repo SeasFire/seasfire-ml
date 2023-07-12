@@ -374,7 +374,6 @@ if __name__ == "__main__":
         help="Target week",
     )
     parser.add_argument(
-        "-lt",
         "--timesteps",
         metavar="KEY",
         type=int,
@@ -384,7 +383,6 @@ if __name__ == "__main__":
         help="Time steps in the past",
     )    
     parser.add_argument(
-        "-lr",
         "--learning-rate",
         metavar="KEY",
         type=float,
@@ -394,7 +392,6 @@ if __name__ == "__main__":
         help="Learning rate",
     )
     parser.add_argument(
-        "-w",
         "--weight-decay",
         metavar="KEY",
         type=float,
