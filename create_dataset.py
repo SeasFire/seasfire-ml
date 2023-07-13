@@ -701,7 +701,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="timeseries_weeks",
-        default=24,
+        default=36,
         help="How many weeks will each timeseries contain.",
     )
     parser.add_argument(
