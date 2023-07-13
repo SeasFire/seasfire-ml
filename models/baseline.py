@@ -80,4 +80,3 @@ class BaselineModel:
             majority = 1.0 if np.count_nonzero(previous) >= 8 else 0.0
             logger.debug("majority={}".format(majority))
             return torch.as_tensor(majority)
-
