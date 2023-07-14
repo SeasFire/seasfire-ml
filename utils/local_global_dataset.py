@@ -15,11 +15,13 @@ class LocalGlobalDataset(Dataset):
     def __init__(
         self,
         root_dir,
+        target_week: int,        
         local_radius,
         local_k,
         global_k=2,
         include_global=True,
-        include_oci_variables=True,
+        include_local_oci_variables=True,
+        include_global_oci_variables=True,
         transform=None,
     ):
         self.root_dir = root_dir
@@ -29,16 +31,21 @@ class LocalGlobalDataset(Dataset):
         logger.info("Metadata={}".format(self._metadata))
 
         self._timeseries_weeks = self._metadata["timeseries_weeks"]
+        logger.info("Dataset supports timeseries up to {} weeks".format(self._timeseries_weeks))
         self._target_count = self._metadata["target_count"]
+        logger.info("Dataset supports target up to {} weeks in the future".format(self._target_count))
+        if target_week < 1 or target_week > self._target_count: 
+            raise ValueError("Target week provided not supported by dataset")
         self._target_var = self._metadata["target_var"]
+        logger.info("Dataset target var={}".format(self._target_var))
         self._input_vars = self._metadata["input_vars"]
 
         logger.info("Found input vars={}".format(self._input_vars))
-        if include_oci_variables:
-            self._oci_input_vars = self._metadata["oci_input_vars"]
-            logger.info("Found oci input vars={}".format(self._oci_input_vars))
+        if include_local_oci_variables:
+            self._local_oci_input_vars = self._metadata["oci_input_vars"]
+            logger.info("Found local oci input vars={}".format(self._local_oci_input_vars))
         else:
-            self._oci_input_vars = []
+            self._local_oci_input_vars = []
 
         self._sp_res = self._metadata["sp_res"]
         logger.info("spatial resolution (sp_res)={}".format(self._sp_res))
@@ -54,24 +61,17 @@ class LocalGlobalDataset(Dataset):
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
         logger.info(
-            "Samples (>0 and <=threshold)={}".format(
+            "Samples (<=threshold)={}".format(
                 self._le_threshold_samples_count
             )
         )
 
-        zero_threshold_samples = torch.load(
-            os.path.join(self.root_dir, "zero_threshold_samples.pt")
-        )
-        self._zero_threshold_samples_count = len(zero_threshold_samples)
-        logger.info("Samples (=0)={}".format(self._zero_threshold_samples_count))
-
-        self._samples = gt_threshold_samples + le_threshold_samples + zero_threshold_samples
+        self._samples = gt_threshold_samples + le_threshold_samples
 
         self._indices = list(
             range(
                 self._gt_threshold_samples_count
                 + self._le_threshold_samples_count
-                + self._zero_threshold_samples_count
             )
         )
 
@@ -111,7 +111,7 @@ class LocalGlobalDataset(Dataset):
         logger.debug("local_ds={}".format(self._local_ds))
 
         # Compute local graph features
-        for oci_var in self._oci_input_vars:
+        for oci_var in self._local_oci_input_vars:
             self._local_ds[oci_var] = self._local_ds[oci_var].expand_dims(
                 dim={
                     "latitude": self._local_ds["latitude"],
@@ -120,9 +120,21 @@ class LocalGlobalDataset(Dataset):
             )
         logger.debug("local_ds={}".format(self._local_ds))
 
+        # Shift all input data by target week
+        for var_name in self._input_vars + self._local_oci_input_vars:
+            self._local_ds[var_name] = self._local_ds[var_name].shift(
+                time=target_week, fill_value=0
+            )
+
         self._include_global = include_global
         if self._include_global:
             logger.info("Global data enabled in dataset")
+
+            if include_global_oci_variables:
+                self._global_oci_input_vars = self._metadata["oci_input_vars"]
+                logger.info("Found global oci input vars={}".format(self._global_oci_input_vars))
+            else:
+                self._global_oci_input_vars = []
 
             self._global_sp_res = self._metadata["global_sp_res"]
             logger.info(
@@ -149,7 +161,7 @@ class LocalGlobalDataset(Dataset):
             logger.debug("global_ds={}".format(self._global_ds))
 
             # Compute global graph features
-            for oci_var in self._oci_input_vars:
+            for oci_var in self._global_oci_input_vars:
                 self._global_ds[oci_var] = self._global_ds[oci_var].expand_dims(
                     dim={
                         "latitude": self._global_ds["latitude"],
@@ -157,6 +169,12 @@ class LocalGlobalDataset(Dataset):
                     }
                 )
             logger.debug("global_ds={}".format(self._global_ds))
+
+            # Shift all input data by target week
+            for var_name in self._input_vars + self._global_oci_input_vars:
+                self._global_ds[var_name] = self._global_ds[var_name].shift(
+                    time=target_week, fill_value=0
+                )
 
             logger.info("Precomputing global positions")
             self._global_pos = np.array(
@@ -177,17 +195,16 @@ class LocalGlobalDataset(Dataset):
         return (
             self._gt_threshold_samples_count
             + self._le_threshold_samples_count
-            + self._zero_threshold_samples_count
         )
 
     @property
     def local_features(self):
-        return tuple(self._input_vars + self._oci_input_vars)
+        return tuple(self._input_vars + self._local_oci_input_vars)
 
     @property
     def global_features(self):
         if self._include_global:
-            return tuple(self._input_vars + self._oci_input_vars)
+            return tuple(self._input_vars + self._global_oci_input_vars)
         return []
 
     @property
@@ -203,34 +220,16 @@ class LocalGlobalDataset(Dataset):
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
         logger.debug(
-            "Generating sample for idx={},lat={}, lon={}, time={}".format(
+            "Generating sample for idx={}, lat={}, lon={}, time={}".format(
                 idx, lat, lon, time
             )
         )
 
         # Compute ground truth - target
-        time_idx = np.where(self._ground_truth_ds["time"] == time)[0][0]
-        time_slice = slice(time_idx + 1, time_idx + 1 + self._target_count)
-        target = (
-            self._ground_truth_ds.sel(
-                latitude=lat,
-                longitude=lon,
-            )
-            .isel(time=time_slice)
-            .fillna(0)
-        )
-
-        timeseries_len = len(target.coords["time"])
-        if timeseries_len != self._target_count:
-            logger.warning(
-                "Invalid time series length {} != {}".format(
-                    timeseries_len, self._target_count
-                )
-            )
-            raise ValueError("Invalid time series length")
-
-        y = target[self._target_var].values
-        logger.debug("y={}".format(y))
+        y = self._ground_truth_ds[self._target_var].sel(
+            latitude=lat, longitude=lon, time=time
+        ).fillna(0)
+        logger.debug("y={}".format(y.values))
 
         # compute local data
         time_idx = np.where(self._local_ds["time"] == time)[0][0]
@@ -243,7 +242,7 @@ class LocalGlobalDataset(Dataset):
         )
 
         local_ds = (
-            self._local_ds[self._input_vars + self._oci_input_vars]
+            self._local_ds[self._input_vars + self._local_oci_input_vars]
             .sel(latitude=lat_slice, longitude=lon_slice)
             .isel(time=time_slice)
         )
@@ -251,7 +250,7 @@ class LocalGlobalDataset(Dataset):
         local_data = xr.concat(
             [
                 local_ds[var_name]
-                for var_name in self._input_vars + self._oci_input_vars
+                for var_name in self._input_vars + self._local_oci_input_vars
             ],
             dim="values",
         )
@@ -272,11 +271,11 @@ class LocalGlobalDataset(Dataset):
             # compute global data
             time_idx = np.where(self._global_ds["time"] == time)[0][0]
             time_slice = slice(time_idx - self._timeseries_weeks + 1, time_idx + 1)
-            global_ds = self._global_ds.isel(time=time_slice).load()
+            global_ds = self._global_ds.isel(time=time_slice)
             global_data = xr.concat(
                 [
                     global_ds[var_name]
-                    for var_name in self._input_vars + self._oci_input_vars
+                    for var_name in self._input_vars + self._global_oci_input_vars
                 ],
                 dim="values",
             )
@@ -298,7 +297,7 @@ class LocalGlobalDataset(Dataset):
             center_time=time,
             center_vertex_idx=local_data.values.shape[0] // 2,
             area=area_data.values[0],
-            y=y,
+            y=y.values,
             global_x=global_x if self._include_global else None,
             global_pos=global_pos if self._include_global else None,
             global_latlon_shape=global_latlon_shape if self._include_global else None,
@@ -348,19 +347,16 @@ class LocalGlobalDataset(Dataset):
 
     def balanced_sampler(self, num_samples=None): 
         logger.info("Creating weighted random sampler")
-        gt_threshold_target = 0.3
-        le_threshold_target = 0.2
-        zero_threshold_target = 0.5
-        logger.info("Target proportions (>,<=,0) = {}, {}, {}".format(gt_threshold_target, le_threshold_target, zero_threshold_target))
+        gt_threshold_target = 0.5
+        le_threshold_target = 0.5
+        logger.info("Target proportions (>,<=) = {}, {}".format(gt_threshold_target, le_threshold_target))
 
         gt_threshold_weight = gt_threshold_target / self._gt_threshold_samples_count
         le_threshold_weight = le_threshold_target / self._le_threshold_samples_count
-        zero_threshold_weight = zero_threshold_target / self._zero_threshold_samples_count
         
         gt = np.full(self._gt_threshold_samples_count, gt_threshold_weight)
         le = np.full(self._le_threshold_samples_count, le_threshold_weight)
-        zero = np.full(self._zero_threshold_samples_count, zero_threshold_weight)
-        samples_weights = np.concatenate((gt, le, zero))
+        samples_weights = np.concatenate((gt, le))
         samples_weights = torch.as_tensor(samples_weights, dtype=torch.double, device=device)
         logger.debug("samples_weights = {}".format(samples_weights))
 
@@ -374,14 +370,10 @@ class LocalGlobalTransform:
     def __init__(
         self,
         root_dir,
-        target_week,
         include_global=True,
         append_position_as_feature=True,
     ):
         self.root_dir = root_dir
-        self._target_week = target_week
-        if target_week < 1 or target_week > 24:
-            raise ValueError("Target week is not valid")
         self._local_mean_std_per_feature = torch.load(
             "{}/{}".format(self.root_dir, "mean_std_stats_local.pk")
         )
@@ -401,16 +393,6 @@ class LocalGlobalTransform:
             )
 
         self._append_position_as_feature = append_position_as_feature
-
-    @property
-    def target_week(self):
-        return self._target_week
-
-    @target_week.setter
-    def target_week(self, value):
-        if value < 1 or value > 24:
-            raise ValueError("Target week is not valid")
-        self._target_week = value
 
     def __call__(self, data):
         # local graph features
@@ -497,10 +479,7 @@ class LocalGlobalTransform:
             data.global_x = torch.from_numpy(data.global_x)
 
         # label
-        y = np.where(data.y > 0.0, 1, 0)
-        y = np.expand_dims(y, axis=1)
-        y = y[self._target_week - 1]
-        data.y = torch.from_numpy(y)
+        y = torch.tensor(data.y)
+        data.y = torch.unsqueeze(y, dim=0)
 
         return data
-

@@ -26,12 +26,12 @@ def test(model, loader, criterion, model_name):
         model.eval()
 
         metrics = [
-            Accuracy(task="binary").to(device),
-            Recall(task="binary").to(device),
-            F1Score(task="binary").to(device),
-            AveragePrecision(task="binary").to(device),
-            AUROC(task="binary").to(device),
-            StatScores(task="binary").to(device)
+            ("Accuracy", Accuracy(task="binary").to(device)),
+            ("Recall", Recall(task="binary").to(device)),
+            ("F1Score", F1Score(task="binary").to(device)),
+            ("AveragePrecision (AUPRC)", AveragePrecision(task="binary").to(device)),
+            ("AUROC", AUROC(task="binary").to(device)),
+            ("StatScores", StatScores(task="binary").to(device))
         ]
 
         predictions = []
@@ -43,9 +43,10 @@ def test(model, loader, criterion, model_name):
             y = data[1].to(device)
 
             preds = model(x)
+            y = y.gt(0.0)
             probs = torch.sigmoid(preds)
 
-            for metric in metrics:
+            for _, metric in metrics:
                 metric.update(probs, y)
 
             preds_cpu = preds.cpu()
@@ -59,9 +60,7 @@ def test(model, loader, criterion, model_name):
         logger.info(f"| Test Loss: {loss}")
 
         result = "{}".format(model_name)
-        for metric, metric_name in zip(
-            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
-        ):
+        for metric_name, metric in metrics:
             metric_value = metric.compute()
             logger.info("| Test {}: {}".format(metric_name, metric_value))
             result += ",{}".format(metric_value)
@@ -77,6 +76,9 @@ def main(args):
     logger.info("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
         logger.info("Torch cuda version: {}".format(torch.version.cuda))
+
+    if args.model_path is None: 
+        raise ValueError("No model path provided")
 
     model_info = torch.load(args.model_path)
     model = model_info["model"]
@@ -99,8 +101,9 @@ def main(args):
 
     dataset = GRUDataset(
         root_dir=args.test_path,
+        target_week=args.target_week,
         include_oci_variables=args.include_oci_variables,
-        transform=GRUTransform(args.test_path, args.timesteps, args.target_week),
+        transform=GRUTransform(args.test_path, args.timesteps),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))
@@ -135,7 +138,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="LocalGlobal_target1.pt",
+        default=None,
         help="Path to load the trained model from",
     )
     parser.add_argument(
