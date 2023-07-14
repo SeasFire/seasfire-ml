@@ -116,7 +116,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../1d_SeasFireCube.zarr",
+        default="../seasfire_1deg.zarr",
         help="Cube path",
     )    
     parser.add_argument(
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data.24/test",
+        default="data/test",
         help="Test set path",
     )
     parser.add_argument(

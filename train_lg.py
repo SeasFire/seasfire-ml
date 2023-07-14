@@ -558,7 +558,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="num_workers",
-        default=4,
+        default=16,
         help="Num workers",
     )
     parser.add_argument(
