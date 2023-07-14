@@ -535,11 +535,10 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="global_k",
-        default=2,
-        help="Global k for knn graph.",
+        default=9,
+        help="Global k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
-        "-lr",
         "--learning-rate",
         metavar="KEY",
         type=float,
@@ -549,7 +548,6 @@ if __name__ == "__main__":
         help="Learning rate",
     )
     parser.add_argument(
-        "-w",
         "--weight-decay",
         metavar="KEY",
         type=float,

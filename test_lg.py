@@ -173,7 +173,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=3,
+        default=2,
         help="Local radius",
     )
     parser.add_argument(
@@ -182,8 +182,8 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_k",
-        default=2,
-        help="Local k for knn graph.",
+        default=9,
+        help="Local k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
         "--global-k",
@@ -191,9 +191,9 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="global_k",
-        default=2,
-        help="Global k for knn graph.",
-    )                
+        default=9,
+        help="Global k for how many nearest neighbors in spatial graph.",
+    )    
     parser.add_argument(
         "--target-week",
         metavar="KEY",
