@@ -38,7 +38,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_name, out_dir, cur_epoch=1):
+def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_name, out_dir, cur_epoch=1, best_so_far=0):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -88,8 +88,6 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
     model = model.to(device)
     iters = len(train_loader)
 
-    current_max_avg = 0
-
     for epoch in range(cur_epoch, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
         logger.info("Current lr={}".format(scheduler.get_last_lr()))
@@ -102,9 +100,9 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
         train_labels = []
 
         for i, data in enumerate(tqdm(train_loader)):
-            # logger.info("Data={}".format(data))
 
             data = data.to(device)
+
             local_x = data.x
             global_x = data.get("global_x")
             local_edge_index = data.edge_index
@@ -212,15 +210,15 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
-        save_checkpoint(model, epoch, optimizer, scheduler, model_name, out_dir)
+        save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir)
         save_model(model, criterion, "last", model_name, out_dir)
 
         if (
             epoch > 10
-            and val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg
-            and val_metrics_dict["F1Score"][epoch - 1] > 0.5
+            and val_metrics_dict["AveragePrecision (AUPRC)"][-1] > best_so_far
+            and val_metrics_dict["F1Score"][-1] > 0.5
         ):
-            current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
+            best_so_far = val_metrics_dict["AveragePrecision (AUPRC)"][-1]
             logger.info("Found new best model in epoch {}".format(epoch))
             save_model(model, criterion, "best", model_name, out_dir)
 
@@ -258,7 +256,7 @@ def save_model(model, criterion, model_type, model_name, out_dir):
         filename,
     )
 
-def save_checkpoint(model, epoch, optimizer, scheduler, model_name, out_dir):
+def save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir):
     filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
     logger.info("Saving checkpoint as {}".format(filename))
     torch.save(
@@ -267,6 +265,7 @@ def save_checkpoint(model, epoch, optimizer, scheduler, model_name, out_dir):
             "model": model,
             "optimizer": optimizer,
             "scheduler": scheduler,
+            "best_so_far": best_so_far
         },
         filename,
     )
@@ -281,8 +280,9 @@ def load_checkpoint(model_name, out_dir):
     model = checkpoint["model"]
     optimizer = checkpoint["optimizer"]
     scheduler = checkpoint["scheduler"]
+    best_so_far = checkpoint.get("best_so_far", 0)
 
-    return (model, optimizer, scheduler, epoch)
+    return (model, optimizer, scheduler, epoch, best_so_far)
 
 
 def main(args):
@@ -370,11 +370,12 @@ def main(args):
     if args.from_checkpoint: 
         checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
         if checkpoint is not None: 
-            model, optimizer, scheduler, cur_epoch = checkpoint
+            model, optimizer, scheduler, cur_epoch, best_so_far = checkpoint
             cur_epoch += 1
 
     if model is None:
         cur_epoch = 1
+        best_so_far = 0
 
         model = LocalGlobalModel(
             len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
@@ -406,6 +407,7 @@ def main(args):
         scheduler=scheduler,
         train_loader=train_loader,
         epochs=args.epochs,
+        best_so_far=best_so_far,
         val_loader=val_loader,
         model_name=model_name,
         out_dir=args.out_dir,
