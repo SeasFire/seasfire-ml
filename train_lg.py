@@ -418,27 +418,24 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t",
         "--train-path",
         metavar="PATH",
         type=str,
         action="store",
         dest="train_path",
-        default="data.36/train",
+        default="data/train",
         help="Train set path",
     )
     parser.add_argument(
-        "-v",
         "--val-path",
         metavar="PATH",
         type=str,
         action="store",
         dest="val_path",
-        default="data.36/val",
+        default="data/val",
         help="Validation set path",
     )
     parser.add_argument(
-        "-b",
         "--batch-size",
         metavar="KEY",
         type=int,
@@ -466,7 +463,6 @@ if __name__ == "__main__":
         help="Hidden channels for decoder layers",
     )
     parser.add_argument(
-        "-e",
         "--epochs",
         metavar="KEY",
         type=int,

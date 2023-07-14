@@ -58,6 +58,7 @@ def test(model, loader, criterion, model_name):
                 None,
                 batch,
             )
+            y = y.gt(0.0)
             probs = torch.sigmoid(preds)
 
             for _, metric in metrics:
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="LocalGlobal_target1.pt",
+        default=None,
         help="Path to load the trained model from",
     )
     parser.add_argument(
