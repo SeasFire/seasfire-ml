@@ -11,6 +11,7 @@ class BaselineModel:
         self,
         cube_path,
         load_cube_in_memory,
+        method,
     ):
         # one of gwis_ba, BurntArea, frpfire, co2fire, FCCI_BA, co2fire
         self._target_var = "gwis_ba"
@@ -18,7 +19,7 @@ class BaselineModel:
 
         logger.info("Cube path={}".format(cube_path))
         self._cube_path = cube_path
-
+        self._method = method
         # open local cube and display basic info
         logger.info("Opening local cube zarr file: {}".format(self._cube_path))
         self._cube = xr.open_zarr(self._cube_path, consolidated=False)
@@ -70,9 +71,12 @@ class BaselineModel:
             .fillna(0)
         )
         previous = target[time_idx-self._year_in_weeks::-self._year_in_weeks]
-        mean = previous.mean()
 
-        logger.debug("mean={}".format(mean.values))
-
-        return torch.as_tensor(mean.values)
-
+        if self._method == "mean":
+            mean = previous.mean()
+            logger.debug("mean={}".format(mean.values))
+            return torch.as_tensor(mean.values)
+        elif self._method == "majority":
+            majority = 1.0 if np.count_nonzero(previous) >= 8 else 0.0
+            logger.debug("majority={}".format(majority))
+            return torch.as_tensor(majority)

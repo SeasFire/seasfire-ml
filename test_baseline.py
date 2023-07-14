@@ -24,12 +24,12 @@ def test(model, loader, model_name):
 
     with torch.no_grad():
         metrics = [
-            ("Accuracy", Accuracy(task="binary").to(device)),
-            ("Recall", Recall(task="binary").to(device)),
-            ("F1Score", F1Score(task="binary").to(device)),
-            ("AveragePrecision (AUPRC)", AveragePrecision(task="binary").to(device)),
-            ("AUROC", AUROC(task="binary").to(device)),
-            ("StatScores", StatScores(task="binary").to(device))
+            Accuracy(task="binary").to(device),
+            Recall(task="binary").to(device),
+            F1Score(task="binary").to(device),
+            AveragePrecision(task="binary").to(device),
+            AUROC(task="binary").to(device),
+            StatScores(task="binary").to(device)
         ]
 
         for _, data in enumerate(tqdm(loader)):
@@ -38,17 +38,18 @@ def test(model, loader, model_name):
             time = data.center_time
 
             y = data.y
-
             preds = model((lat, lon, time))
+
             preds = preds.gt(0.0).float()
             y = y.gt(0.0)
 
-            for _, metric in metrics:
+            for metric in metrics:
                 metric.update(preds, y)
 
-
         result = "{}".format(model_name)
-        for metric_name, metric in metrics:
+        for metric, metric_name in zip(
+            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
+        ):
             metric_value = metric.compute()
             logger.info("| Test {}: {}".format(metric_name, metric_value))
             result += ",{}".format(metric_value)
@@ -79,6 +80,7 @@ def main(args):
     logger.addHandler(logging.FileHandler(log_file))
 
     logger.info("Using model={}".format(model_name))
+    logger.info("Using target week={}".format(args.target_week))
 
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
@@ -101,21 +103,21 @@ def main(args):
         shuffle=False,
     )
 
-    model = BaselineModel(args.cube_path, False)
+    model = BaselineModel(args.cube_path, False, args.method)
 
     test(model=model, loader=loader, model_name=model_name)
 
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="Test baseline model")
+    parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
         "--cube-path",
         metavar="PATH",
         type=str,
         action="store",
         dest="cube_path",
-        default="../seasfire_1deg.zarr",
+        default="../1d_SeasFireCube.zarr",
         help="Cube path",
     )    
     parser.add_argument(
@@ -125,8 +127,17 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data/test",
+        default="data.24/test",
         help="Test set path",
+    )
+    parser.add_argument(
+        "--method",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="method",
+        default="mean",
+        help="Method to calculate the baseline results (mean or majority)",
     )
     parser.add_argument(
         "-b",
@@ -137,6 +148,15 @@ if __name__ == "__main__":
         dest="batch_size",
         default=32,
         help="Batch size",
+    )
+    parser.add_argument(
+        "--target-week",
+        metavar="KEY",
+        type=int,
+        action="store",
+        dest="target_week",
+        default=1,
+        help="Target week",
     )
     parser.add_argument(
         "--out-dir",
