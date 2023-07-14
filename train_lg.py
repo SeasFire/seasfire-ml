@@ -499,8 +499,8 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_k",
-        default=2,
-        help="Local k for knn graph.",
+        default=9,
+        help="Local k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
         "--target-week",
@@ -512,7 +512,6 @@ if __name__ == "__main__":
         help="Target week",
     )
     parser.add_argument(
-        "-lt",
         "--local-timesteps",
         metavar="KEY",
         type=int,
@@ -522,7 +521,6 @@ if __name__ == "__main__":
         help="Time steps in the past for the local part",
     )
     parser.add_argument(
-        "-gt",
         "--global-timesteps",
         metavar="KEY",
         type=int,

@@ -18,7 +18,7 @@ class LocalGlobalDataset(Dataset):
         target_week: int,        
         local_radius,
         local_k,
-        global_k=2,
+        global_k=9,
         include_global=True,
         include_local_oci_variables=True,
         include_global_oci_variables=True,
@@ -84,14 +84,8 @@ class LocalGlobalDataset(Dataset):
         self._latlon_shape = (2 * self._radius + 1, 2 * self._radius + 1)
         logger.info("Local grid shape={}".format(self._latlon_shape))
         self._local_k = local_k
-        logger.info("Using k-nn with k={}".format(self._local_k))
-        if self._local_k > self._radius:
-            logger.warning(
-                "k-nn with large k={} more than local radius={}".format(
-                    self._local_k, self._radius
-                )
-            )
-        self._edge_index = self._get_knn_for_grid(
+        logger.info("Will build spatial graph with {} closest neighbors".format(self._local_k))
+        self._edge_index = self._get_grid_graph(
             self._latlon_shape[0], self._latlon_shape[1], self._local_k
         )
 
@@ -144,11 +138,11 @@ class LocalGlobalDataset(Dataset):
             )
 
             self._global_k = global_k
-            logger.info("Will use k-nn for global with k={}".format(self._global_k))
+            logger.info("Will build spatial global graph with {} closest neighbors".format(self._global_k))
 
             logger.info("Precomputing global graph")
             self._global_latlon_shape = self._metadata["global_latlon_shape"]
-            self._global_edge_index = self._get_knn_for_grid(
+            self._global_edge_index = self._get_grid_graph(
                 self._global_latlon_shape[0],
                 self._global_latlon_shape[1],
                 self._global_k,
@@ -304,30 +298,30 @@ class LocalGlobalDataset(Dataset):
             global_edge_index=global_edge_index if self._include_global else None,
         )
 
-    def _get_knn_for_grid(self, lat_dim, lon_dim, k, add_self_loops=True):
+    def _get_grid_graph(self, lat_dim, lon_dim, k, add_self_loops=True):
         filename = os.path.join(
             self.root_dir,
-            "knn_{}_{}_{}_{}.pt".format(lat_dim, lon_dim, k, add_self_loops),
+            "graph_{}_{}_{}_{}.pt".format(lat_dim, lon_dim, k, add_self_loops),
         )
         try:
-            knn = torch.load(filename)
-            return knn
+            graph = torch.load(filename)
+            return graph
         except FileNotFoundError:
             pass
 
-        knn = self._generate_knn_for_grid(
+        graph = self._generate_grid_graph(
             lat_dim, lon_dim, k, add_self_loops=add_self_loops
         )
-        torch.save(knn, filename)
-        return knn
+        torch.save(graph, filename)
+        return graph
 
-    def _generate_knn_for_grid(self, lat_dim, lon_dim, k, add_self_loops=True):
+    def _generate_grid_graph(self, lat_dim, lon_dim, k, add_self_loops=True):
         points = np.zeros((lat_dim * lon_dim, 2))
         for i in range(lat_dim):
             for j in range(lon_dim):
                 points[i * lon_dim + j] = [i, j]
 
-        nbrs = NearestNeighbors(n_neighbors=k, algorithm="ball_tree").fit(points)
+        nbrs = NearestNeighbors(n_neighbors=k, metric="euclidean").fit(points)
         _, indices = nbrs.kneighbors(points)
 
         edges = []
