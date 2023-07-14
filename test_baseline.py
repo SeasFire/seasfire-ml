@@ -18,7 +18,6 @@ from models import BaselineModel
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 def test(model, loader, model_name):
     logger.info("Starting Test")
 

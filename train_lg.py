@@ -424,7 +424,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train",
+        default="data.36/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -434,7 +434,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val",
+        default="data.36/val",
         help="Validation set path",
     )
     parser.add_argument(
@@ -564,7 +564,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="num_workers",
-        default=12,
+        default=4,
         help="Num workers",
     )
     parser.add_argument(
