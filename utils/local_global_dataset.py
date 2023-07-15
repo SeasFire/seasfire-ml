@@ -324,14 +324,15 @@ class LocalGlobalDataset(Dataset):
         nbrs = NearestNeighbors(n_neighbors=k, metric="euclidean").fit(points)
         _, indices = nbrs.kneighbors(points)
 
-        edges = []
+        edges = set()
         for i in range(lat_dim * lon_dim):
             for j in indices[i]:
                 if i != j:
-                    edges.append((i, j))
-                    edges.append((j, i))
+                    edges.add((i, j))
+                    edges.add((j, i))
                 elif add_self_loops:
-                    edges.append((i, j))
+                    edges.add((i, j))
+        edges = sorted(list(edges))
 
         sources, targets = zip(*edges)
         edge_index = torch.tensor([sources, targets], dtype=torch.long)
