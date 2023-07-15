@@ -85,8 +85,8 @@ def main(args):
         root_dir=args.test_path,
         target_week=1,
         local_radius=2,
-        local_k=2,
-        global_k=2,        
+        local_k=9,
+        global_k=9,        
         include_local_oci_variables=False,
         include_global_oci_variables=False,
         include_global=False,
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../1d_SeasFireCube.zarr",
+        default="../seasfire_1deg.zarr",
         help="Cube path",
     )    
     parser.add_argument(
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data.24/test",
+        default="data/test",
         help="Test set path",
     )
     parser.add_argument(

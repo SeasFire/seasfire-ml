@@ -418,27 +418,24 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t",
         "--train-path",
         metavar="PATH",
         type=str,
         action="store",
         dest="train_path",
-        default="data.36/train",
+        default="data/train",
         help="Train set path",
     )
     parser.add_argument(
-        "-v",
         "--val-path",
         metavar="PATH",
         type=str,
         action="store",
         dest="val_path",
-        default="data.36/val",
+        default="data/val",
         help="Validation set path",
     )
     parser.add_argument(
-        "-b",
         "--batch-size",
         metavar="KEY",
         type=int,
@@ -466,7 +463,6 @@ if __name__ == "__main__":
         help="Hidden channels for decoder layers",
     )
     parser.add_argument(
-        "-e",
         "--epochs",
         metavar="KEY",
         type=int,
@@ -499,8 +495,8 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_k",
-        default=2,
-        help="Local k for knn graph.",
+        default=9,
+        help="Local k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
         "--target-week",
@@ -512,7 +508,6 @@ if __name__ == "__main__":
         help="Target week",
     )
     parser.add_argument(
-        "-lt",
         "--local-timesteps",
         metavar="KEY",
         type=int,
@@ -522,7 +517,6 @@ if __name__ == "__main__":
         help="Time steps in the past for the local part",
     )
     parser.add_argument(
-        "-gt",
         "--global-timesteps",
         metavar="KEY",
         type=int,
@@ -537,11 +531,10 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="global_k",
-        default=2,
-        help="Global k for knn graph.",
+        default=9,
+        help="Global k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
-        "-lr",
         "--learning-rate",
         metavar="KEY",
         type=float,
@@ -551,7 +544,6 @@ if __name__ == "__main__":
         help="Learning rate",
     )
     parser.add_argument(
-        "-w",
         "--weight-decay",
         metavar="KEY",
         type=float,
@@ -566,7 +558,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="num_workers",
-        default=4,
+        default=16,
         help="Num workers",
     )
     parser.add_argument(

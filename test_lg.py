@@ -26,12 +26,12 @@ def test(model, loader, criterion, model_name):
         model.eval()
 
         metrics = [
-            Accuracy(task="binary").to(device),
-            Recall(task="binary").to(device),
-            F1Score(task="binary").to(device),
-            AveragePrecision(task="binary").to(device),
-            AUROC(task="binary").to(device),
-            StatScores(task="binary").to(device)
+            ("Accuracy", Accuracy(task="binary").to(device)),
+            ("Recall", Recall(task="binary").to(device)),
+            ("F1Score", F1Score(task="binary").to(device)),
+            ("AveragePrecision (AUPRC)", AveragePrecision(task="binary").to(device)),
+            ("AUROC", AUROC(task="binary").to(device)),
+            ("StatScores", StatScores(task="binary").to(device))
         ]
 
         predictions = []
@@ -58,9 +58,10 @@ def test(model, loader, criterion, model_name):
                 None,
                 batch,
             )
+            y = y.gt(0.0)
             probs = torch.sigmoid(preds)
 
-            for metric in metrics:
+            for _, metric in metrics:
                 metric.update(probs, y)
 
             preds_cpu = preds.cpu()
@@ -74,9 +75,7 @@ def test(model, loader, criterion, model_name):
         logger.info(f"| Test Loss: {loss}")
 
         result = "{}".format(model_name)
-        for metric, metric_name in zip(
-            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
-        ):
+        for metric_name, metric  in metrics:
             metric_value = metric.compute()
             logger.info("| Test {}: {}".format(metric_name, metric_value))
             result += ",{}".format(metric_value)
@@ -114,12 +113,14 @@ def main(args):
 
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
+        target_week=args.target_week,
         local_radius=args.local_radius,
         local_k=args.local_k,
         global_k=args.global_k,        
-        include_oci_variables=args.include_oci_variables,
         include_global=args.include_global,
-        transform=LocalGlobalTransform(args.test_path, args.target_week, args.include_global, args.append_pos_as_features),
+        include_local_oci_variables=args.include_local_oci_variables,
+        include_global_oci_variables=args.include_global_oci_variables,
+        transform=LocalGlobalTransform(args.test_path, args.include_global, args.append_pos_as_features),
     )
 
     logger.info("Dataset length: {}".format(len(dataset)))
@@ -139,7 +140,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t",
         "--test-path",
         metavar="PATH",
         type=str,
@@ -154,11 +154,10 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="model_path",
-        default="LocalGlobal_target1.pt",
+        default=None,
         help="Path to load the trained model from",
     )
     parser.add_argument(
-        "-b",
         "--batch-size",
         metavar="KEY",
         type=int,
@@ -173,7 +172,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=3,
+        default=2,
         help="Local radius",
     )
     parser.add_argument(
@@ -182,8 +181,8 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_k",
-        default=2,
-        help="Local k for knn graph.",
+        default=9,
+        help="Local k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
         "--global-k",
@@ -191,9 +190,9 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="global_k",
-        default=2,
-        help="Global k for knn graph.",
-    )                
+        default=9,
+        help="Global k for how many nearest neighbors in spatial graph.",
+    )    
     parser.add_argument(
         "--target-week",
         metavar="KEY",
@@ -248,12 +247,19 @@ if __name__ == "__main__":
     )
     parser.set_defaults(append_pos_as_features=True)
     parser.add_argument(
-        "--include-oci-variables", dest="include_oci_variables", action="store_true"
+        "--include-local-oci-variables", dest="include_local_oci_variables", action="store_true"
     )
     parser.add_argument(
-        "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
+        "--no-include-local-oci-variables", dest="include_local_oci_variables", action="store_false"
     )
-    parser.set_defaults(include_oci_variables=True)
+    parser.set_defaults(include_local_oci_variables=False)
+    parser.add_argument(
+        "--include-global-oci-variables", dest="include_global_oci_variables", action="store_true"
+    )
+    parser.add_argument(
+        "--no-include-global-oci-variables", dest="include_global_oci_variables", action="store_false"
+    )
+    parser.set_defaults(include_global_oci_variables=False)    
 
     #torch.multiprocessing.set_start_method('spawn') 
 
