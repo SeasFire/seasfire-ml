@@ -38,7 +38,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, model_name, out_dir):
+def train(model, train_loader, epochs, val_loader, model_name, out_dir, best_so_far=100):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -81,8 +81,6 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
     logger.info("LR scheduler={}".format(scheduler))
     model = model.to(device)
     iters = len(train_loader)
-
-    current_max_avg = 0
 
     for epoch in range(1, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
@@ -208,15 +206,17 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
+        save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir)
         save_model(model, criterion, "last", model_name, out_dir)
-        # if (
-        #     epoch > 10
-        #     and val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg
-        #     and val_metrics_dict["F1Score"][epoch - 1] > 0.5
-        # ):
-        #     current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
-        #     logger.info("Found new best model in epoch {}".format(epoch))
-        #     save_model(model, criterion, "best", model_name, out_dir)
+
+
+        if (
+            epoch > 10
+            and val_metrics_dict["MeanSquaredError"][-1] < best_so_far
+        ):
+            best_so_far = val_metrics_dict["MeanSquaredError"][-1]
+            logger.info("Found new best model in epoch {}".format(epoch))
+            save_model(model, criterion, "best", model_name, out_dir)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
@@ -252,6 +252,33 @@ def save_model(model, criterion, model_type, model_name, out_dir):
         filename,
     )
 
+def save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir):
+    filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
+    logger.info("Saving checkpoint as {}".format(filename))
+    torch.save(
+        {
+            "epoch": epoch,
+            "model": model,
+            "optimizer": optimizer,
+            "scheduler": scheduler,
+            "best_so_far": best_so_far
+        },
+        filename,
+    )
+
+def load_checkpoint(model_name, out_dir):
+    filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
+    if not os.path.exists(filename): 
+        return None
+    logger.info("Loading checkpoint from {}".format(filename))
+    checkpoint = torch.load(filename)
+    epoch = checkpoint["epoch"]
+    model = checkpoint["model"]
+    optimizer = checkpoint["optimizer"]
+    scheduler = checkpoint["scheduler"]
+    best_so_far = checkpoint.get("best_so_far", 0)
+
+    return (model, optimizer, scheduler, epoch, best_so_far)
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -332,23 +359,49 @@ def main(args):
         persistent_workers=True,
     )
 
-    model = LocalGlobalModel(
-        len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
-        args.hidden_channels,
-        args.local_timesteps,
-        train_dataset.local_nodes,
-        len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
-        args.hidden_channels,
-        args.global_timesteps,
-        train_dataset.global_nodes,
-        args.decoder_hidden_channels,
-        args.include_global,
-    )
+
+    model = None
+    model_name=build_model_name(args)
+
+    if args.from_checkpoint: 
+        checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
+        if checkpoint is not None: 
+            model, optimizer, scheduler, cur_epoch, best_so_far = checkpoint
+            cur_epoch += 1
+
+    if model is None:
+        cur_epoch = 1
+        best_so_far = 100
+
+        model = LocalGlobalModel(
+            len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
+            args.hidden_channels,
+            args.local_timesteps,
+            train_dataset.local_nodes,
+            len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
+            args.hidden_channels,
+            args.global_timesteps,
+            train_dataset.global_nodes,
+            args.decoder_hidden_channels,
+            args.include_global,
+        )
+
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=args.learning_rate,
+            momentum=0.9,
+            weight_decay=args.weight_decay,
+        )
+
+        scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=50, T_mult=1
+        )
 
     train(
         model=model,
         train_loader=train_loader,
         epochs=args.epochs,
+        best_so_far=best_so_far,
         val_loader=val_loader,
         model_name=build_model_name(args),
         out_dir=args.out_dir,
@@ -363,7 +416,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train",
+        default="data.36/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -372,7 +425,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val",
+        default="data.36/val",
         help="Validation set path",
     )
     parser.add_argument(
@@ -557,6 +610,11 @@ if __name__ == "__main__":
         action="store_false",
     )
     parser.set_defaults(include_local_oci_variables=True)
+    parser.add_argument("--from-checkpoint", dest="from_checkpoint", action="store_true")
+    parser.add_argument(
+        "--no-from-checkpoint", dest="from_checkpoint", action="store_false"
+    )
+    parser.set_defaults(from_checkpoint=False)  
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     args = parser.parse_args()
