@@ -3,22 +3,29 @@ import logging
 import argparse
 from tqdm import tqdm
 
+import resource 
+
 import os
 import torch
 import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
+
+from models import (
+    GRUModel,
+)
 from utils import (
     GRUDataset,
     GRUTransform
 )
 
-
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def test(model, loader, criterion, model_name):
+def test(model, loader, model_name):
     logger.info("Starting Test")
+
+    criterion = torch.nn.BCEWithLogitsLoss()
 
     model = model.to(device)
 
@@ -68,6 +75,15 @@ def test(model, loader, criterion, model_name):
 
         logger.info(result)
 
+
+def build_model_name(args): 
+    model_type = "gru"
+    target = "target-{}".format(args.target_week)
+    oci = "oci-1" if args.include_oci_variables else "oci-0"
+    timesteps = "time-l{}".format(args.timesteps)
+    return "{}_{}_{}_{}".format(model_type, target, oci, timesteps)
+
+
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level)
@@ -77,27 +93,20 @@ def main(args):
     if torch.cuda.is_available():
         logger.info("Torch cuda version: {}".format(torch.version.cuda))
 
-    if args.model_path is None: 
-        raise ValueError("No model path provided")
-
-    model_info = torch.load(args.model_path)
-    model = model_info["model"]
-    criterion = model_info["criterion"]
-    model_name = model_info["name"]
-
     if not os.path.exists(args.out_dir):
         logger.info("Creating output folder {}".format(args.out_dir))
         os.makedirs(args.out_dir)
 
+    model_name = build_model_name(args)
+    logger.info("Using model={}".format(model_name))
+    logger.info("Using timesteps={}".format(args.timesteps))    
     if args.log_file is None:
         log_file = "{}/{}.test.logs".format(args.out_dir, model_name)
     else: 
         log_file = args.log_file
     logger.addHandler(logging.FileHandler(log_file))
 
-    logger.info("Using model={}".format(model_name))
     logger.info("Using target week={}".format(args.target_week))
-    logger.info("Using timesteps={}".format(args.timesteps))
 
     dataset = GRUDataset(
         root_dir=args.test_path,
@@ -109,6 +118,15 @@ def main(args):
     logger.info("Dataset length: {}".format(len(dataset)))
     logger.info("Using batch size={}".format(args.batch_size))
 
+    model = GRUModel(
+        len(dataset.local_features),
+        args.hidden_channels[0],
+        num_layers=2,
+        output_size=1,
+        dropout=0.1
+    )
+    model.load_state_dict(torch.load(args.model_path))
+
     loader = torch_geometric.loader.DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -116,14 +134,13 @@ def main(args):
         num_workers=args.num_workers,
     )
 
-    test(model=model, loader=loader, criterion=criterion, model_name=model_name)
+    test(model=model, loader=loader, model_name=model_name)
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t",
         "--test-path",
         metavar="PATH",
         type=str,
@@ -142,7 +159,6 @@ if __name__ == "__main__":
         help="Path to load the trained model from",
     )
     parser.add_argument(
-        "-b",
         "--batch-size",
         metavar="KEY",
         type=int,
@@ -152,7 +168,15 @@ if __name__ == "__main__":
         help="Batch size",
     )
     parser.add_argument(
-        "-lt",
+        "--hidden-channels",
+        metavar="KEY",
+        type=str,
+        action="store",
+        dest="hidden_channels",
+        default="64",
+        help="Hidden channels for layers of the GRU",
+    )    
+    parser.add_argument(
         "--timesteps",
         metavar="KEY",
         type=int,
@@ -208,7 +232,12 @@ if __name__ == "__main__":
     )
     parser.set_defaults(include_oci_variables=False)
 
-    #torch.multiprocessing.set_start_method('spawn') 
-
     args = parser.parse_args()
+
+    args.hidden_channels = [int(x) for x in args.hidden_channels.split(",")]
+
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))    
+
+    #torch.multiprocessing.set_start_method('spawn') 
     main(args)

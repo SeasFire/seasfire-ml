@@ -290,8 +290,8 @@ def main(args):
         logger.info("Creating output folder {}".format(args.out_dir))
         os.makedirs(args.out_dir)
 
+    model_name=build_model_name(args)
     if args.log_file is None:
-        model_name = build_model_name(args)
         log_file = "{}/{}.train.logs".format(args.out_dir, model_name)
     else:
         log_file = args.log_file
@@ -360,8 +360,6 @@ def main(args):
         pin_memory=True,
         persistent_workers=True,
     )
-
-    model_name=build_model_name(args)
 
     model_state_dict = None
     optimizer_state_dict = None

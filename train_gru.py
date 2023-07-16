@@ -38,7 +38,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, train_loader, epochs, val_loader, model_name, out_dir):
+def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_name, out_dir, cur_epoch=1, best_so_far=None):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -60,8 +60,6 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         "Loss": [],
     }
 
-    # pos_weight = torch.FloatTensor([1.0]).to(device)
-    # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     criterion = torch.nn.BCEWithLogitsLoss()
 
     train_metrics = [
@@ -82,23 +80,15 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         StatScores(task="binary").to(device),
     ]
 
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=args.learning_rate,
-        momentum=0.9,
-        weight_decay=args.weight_decay,
-    )    
     logger.info("Optimizer={}".format(optimizer))
-    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=50, T_mult=1
-    )
     logger.info("LR scheduler={}".format(scheduler))
+    
     model = model.to(device)
     iters = len(train_loader)
 
     current_max_avg = 0
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(cur_epoch, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
         logger.info("Current lr={}".format(scheduler.get_last_lr()))
 
@@ -110,7 +100,6 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
         train_labels = []
 
         for i, data in enumerate(tqdm(train_loader)):
-            # logger.info("Data={}".format(data))
 
             x = data[0].to(device)
             y = data[1].to(device)
@@ -126,8 +115,12 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             scheduler.step(epoch - 1 + i / iters)
 
             probs = torch.sigmoid(preds)
-            # logger.info("preds = {}".format(preds))
-            # logger.info("y = {}".format(y.float()))
+            logger.debug("probs = {}".format(probs))
+            if torch.any(torch.isnan(probs)): 
+                logger.warning("Nan value found in prediction!")
+            logger.debug("preds = {}".format((probs > 0.5).float()))
+            logger.debug("y = {}".format(y.float()))            
+
             for metric in train_metrics:
                 metric.update(probs, y)
 
@@ -188,21 +181,21 @@ def train(model, train_loader, epochs, val_loader, model_name, out_dir):
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
-        save_model(model, criterion, "last", model_name, out_dir)
-        if val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1] > current_max_avg and epoch > 10:
-            current_max_avg = val_metrics_dict["AveragePrecision (AUPRC)"][epoch - 1]
+        save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir)
+        save_model(model, "last", model_name, out_dir)
+
+        if (
+            epoch > 10
+            and (best_so_far is None or val_metrics_dict["AveragePrecision (AUPRC)"][-1] > best_so_far)
+            and val_metrics_dict["F1Score"][-1] > 0.5
+        ):
+            best_so_far = val_metrics_dict["AveragePrecision (AUPRC)"][-1]
             logger.info("Found new best model in epoch {}".format(epoch))
-            save_model(model, criterion, "best", model_name, out_dir)
+            save_model(model, "best", model_name, out_dir)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
         #scheduler.step()
-
-    with open("train_metrics.pkl", "wb") as file:
-        pkl.dump(train_metrics_dict, file)
-    with open("val_metrics.pkl", "wb") as file:
-        pkl.dump(val_metrics_dict, file)
-
 
 def build_model_name(args): 
     model_type = "gru"
@@ -211,21 +204,43 @@ def build_model_name(args):
     timesteps = "time-l{}".format(args.timesteps)
     return "{}_{}_{}_{}".format(model_type, target, oci, timesteps)
 
-
-def save_model(model, criterion, model_type, model_name, out_dir): 
+def save_model(model, model_type, model_name, out_dir):
     filename = "{}/{}.{}_model.pt".format(out_dir, model_name, model_type)
-    logger.info(
-        "Saving model as {}".format(filename)
-    )
-    torch.save(
-        {
-            "model": model,
-            "criterion": criterion,
-            "name": model_name,
-        },
-        filename,
-    )
+    logger.info("Saving model as {}".format(filename))
+    torch.save(model.state_dict(),filename)
 
+def save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir):
+    filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
+    logger.info("Saving checkpoint as {}".format(filename))
+
+    torch.save(model.state_dict(), "{}/{}.checkpoint.model.pt".format(out_dir, model_name))
+    torch.save(optimizer.state_dict(), "{}/{}.checkpoint.optimizer.pt".format(out_dir, model_name))
+    torch.save(scheduler.state_dict(), "{}/{}.checkpoint.scheduler.pt".format(out_dir, model_name))
+    torch.save(epoch, "{}/{}.checkpoint.epoch.pt".format(out_dir, model_name))
+    torch.save(best_so_far, "{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name))
+
+def load_checkpoint(model_name, out_dir):
+    epoch = 0
+    if os.path.exists("{}/{}.checkpoint.epoch.pt".format(out_dir, model_name)): 
+        epoch = torch.load("{}/{}.checkpoint.epoch.pt".format(out_dir, model_name))
+
+    model_state_dict = None
+    if os.path.exists("{}/{}.checkpoint.model.pt".format(out_dir, model_name)): 
+        model_state_dict = torch.load("{}/{}.checkpoint.model.pt".format(out_dir, model_name), map_location=device)
+
+    optimizer_state_dict = None
+    if os.path.exists("{}/{}.checkpoint.optimizer.pt".format(out_dir, model_name)): 
+        optimizer_state_dict = torch.load("{}/{}.checkpoint.optimizer.pt".format(out_dir, model_name), map_location=device)
+
+    scheduler_state_dict = None
+    if os.path.exists("{}/{}.checkpoint.scheduler.pt".format(out_dir, model_name)): 
+        scheduler_state_dict = torch.load("{}/{}.checkpoint.scheduler.pt".format(out_dir, model_name), map_location=device)
+
+    best_so_far = None
+    if os.path.exists("{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name)): 
+        best_so_far = torch.load("{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name))    
+
+    return (model_state_dict, optimizer_state_dict, scheduler_state_dict, epoch, best_so_far)
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -235,8 +250,8 @@ def main(args):
         logger.info("Creating output folder {}".format(args.out_dir))
         os.makedirs(args.out_dir)
 
+    model_name=build_model_name(args)
     if args.log_file is None:
-        model_name=build_model_name(args)
         log_file = "{}/{}.train.logs".format(args.out_dir, model_name)
     else: 
         log_file = args.log_file
@@ -286,6 +301,17 @@ def main(args):
         persistent_workers=True,        
     )
 
+    model_state_dict = None
+    optimizer_state_dict = None
+    scheduler_state_dict = None
+    cur_epoch = 1
+    best_so_far = None
+    if args.from_checkpoint: 
+        checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
+        if checkpoint is not None: 
+            model_state_dict, optimizer_state_dict, scheduler_state_dict, cur_epoch, best_so_far = checkpoint
+            cur_epoch += 1
+
     model = GRUModel(
         len(train_dataset.local_features),
         args.hidden_channels[0],
@@ -294,20 +320,44 @@ def main(args):
         dropout=0.1
     )
 
+    if model_state_dict is not None:
+        # Important to set the device here, otherwise we get a strange exception. 
+        # See https://discuss.pytorch.org/t/loading-a-model-runtimeerror-expected-all-tensors-to-be-on-the-same-device-but-found-at-least-two-devices-cuda-0-and-cpu/143897
+        model.to(device)
+        model.load_state_dict(model_state_dict)
+
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=args.learning_rate,
+        momentum=0.9,
+        weight_decay=args.weight_decay,
+    )
+    if optimizer_state_dict is not None: 
+        optimizer.load_state_dict(optimizer_state_dict)
+
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=50, T_mult=1
+    )
+    if scheduler_state_dict is not None:
+        scheduler.load_state_dict(scheduler_state_dict)
+
     train(
         model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
         train_loader=train_loader,
         epochs=args.epochs,
+        best_so_far=best_so_far,
         val_loader=val_loader,
-        model_name=build_model_name(args), 
+        model_name=model_name, 
         out_dir=args.out_dir,
+        cur_epoch=cur_epoch,
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
-        "-t",
         "--train-path",
         metavar="PATH",
         type=str,
@@ -317,7 +367,6 @@ if __name__ == "__main__":
         help="Train set path",
     )
     parser.add_argument(
-        "-v",
         "--val-path",
         metavar="PATH",
         type=str,
@@ -327,7 +376,6 @@ if __name__ == "__main__":
         help="Validation set path",
     )
     parser.add_argument(
-        "-b",
         "--batch-size",
         metavar="KEY",
         type=int,
@@ -346,7 +394,6 @@ if __name__ == "__main__":
         help="Hidden channels for layers of the GRU",
     )
     parser.add_argument(
-        "-e",
         "--epochs",
         metavar="KEY",
         type=int,
@@ -434,6 +481,11 @@ if __name__ == "__main__":
         "--no-include-oci-variables", dest="include_oci_variables", action="store_false"
     )
     parser.set_defaults(include_oci_variables=False)
+    parser.add_argument("--from-checkpoint", dest="from_checkpoint", action="store_true")
+    parser.add_argument(
+        "--no-from-checkpoint", dest="from_checkpoint", action="store_false"
+    )
+    parser.set_defaults(from_checkpoint=False)        
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")    
     args = parser.parse_args()
