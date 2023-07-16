@@ -259,7 +259,7 @@ def save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name,
     torch.save(best_so_far, "{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name))
 
 def load_checkpoint(model_name, out_dir):
-    epoch = 1
+    epoch = 0
     if os.path.exists("{}/{}.checkpoint.epoch.pt".format(out_dir, model_name)): 
         epoch = torch.load("{}/{}.checkpoint.epoch.pt".format(out_dir, model_name))
 
@@ -372,6 +372,7 @@ def main(args):
         checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
         if checkpoint is not None: 
             model_state_dict, optimizer_state_dict, scheduler_state_dict, cur_epoch, best_so_far = checkpoint
+            cur_epoch += 1
 
     model = LocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
