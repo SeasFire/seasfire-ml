@@ -38,7 +38,7 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_name, out_dir, cur_epoch=1, best_so_far=0):
+def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_name, out_dir, cur_epoch=1, best_so_far=None):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
@@ -215,7 +215,7 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
 
         if (
             epoch > 10
-            and val_metrics_dict["AveragePrecision (AUPRC)"][-1] > best_so_far
+            and (best_so_far is None or val_metrics_dict["AveragePrecision (AUPRC)"][-1] > best_so_far)
             and val_metrics_dict["F1Score"][-1] > 0.5
         ):
             best_so_far = val_metrics_dict["AveragePrecision (AUPRC)"][-1]
@@ -272,7 +272,7 @@ def load_checkpoint(model_name, out_dir):
     model = checkpoint["model"]
     optimizer = checkpoint["optimizer"]
     scheduler = checkpoint["scheduler"]
-    best_so_far = checkpoint.get("best_so_far", 0)
+    best_so_far = checkpoint.get("best_so_far", None)
 
     return (model, optimizer, scheduler, epoch, best_so_far)
 
@@ -367,7 +367,7 @@ def main(args):
 
     if model is None:
         cur_epoch = 1
-        best_so_far = 0
+        best_so_far = None
 
         model = LocalGlobalModel(
             len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
