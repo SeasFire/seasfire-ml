@@ -211,7 +211,7 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
             metric.reset()
 
         save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir)
-        save_model(model, criterion, "last", model_name, out_dir)
+        save_model(model, "last", model_name, out_dir)
 
         if (
             epoch > 10
@@ -220,7 +220,7 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
         ):
             best_so_far = val_metrics_dict["AveragePrecision (AUPRC)"][-1]
             logger.info("Found new best model in epoch {}".format(epoch))
-            save_model(model, criterion, "best", model_name, out_dir)
+            save_model(model, "best", model_name, out_dir)
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
@@ -243,18 +243,10 @@ def build_model_name(args):
         timesteps = "time-l{}-g0".format(args.local_timesteps)
     return "{}_{}_{}_{}_{}".format(model_type, target, oci, local_radius, timesteps)
 
-
-def save_model(model, criterion, model_type, model_name, out_dir):
+def save_model(model, model_type, model_name, out_dir):
     filename = "{}/{}.{}_model.pt".format(out_dir, model_name, model_type)
     logger.info("Saving model as {}".format(filename))
-    torch.save(
-        {
-            "model": model,
-            "criterion": criterion,
-            "name": model_name,
-        },
-        filename,
-    )
+    torch.save(model.state_dict(),filename)
 
 def save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir):
     filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
