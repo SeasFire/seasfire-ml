@@ -372,7 +372,6 @@ def main(args):
         checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
         if checkpoint is not None: 
             model_state_dict, optimizer_state_dict, scheduler_state_dict, cur_epoch, best_so_far = checkpoint
-            cur_epoch += 1
 
     model = LocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
