@@ -251,30 +251,35 @@ def save_model(model, model_type, model_name, out_dir):
 def save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir):
     filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
     logger.info("Saving checkpoint as {}".format(filename))
-    torch.save(
-        {
-            "epoch": epoch,
-            "model": model,
-            "optimizer": optimizer,
-            "scheduler": scheduler,
-            "best_so_far": best_so_far
-        },
-        filename,
-    )
+
+    torch.save(model.state_dict(), "{}/{}.checkpoint.model.pt".format(out_dir, model_name))
+    torch.save(optimizer.state_dict(), "{}/{}.checkpoint.optimizer.pt".format(out_dir, model_name))
+    torch.save(scheduler.state_dict(), "{}/{}.checkpoint.scheduler.pt".format(out_dir, model_name))
+    torch.save(epoch, "{}/{}.checkpoint.epoch.pt".format(out_dir, model_name))
+    torch.save(best_so_far, "{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name))
 
 def load_checkpoint(model_name, out_dir):
-    filename = "{}/{}.checkpoint.pt".format(out_dir, model_name)
-    if not os.path.exists(filename): 
-        return None
-    logger.info("Loading checkpoint from {}".format(filename))
-    checkpoint = torch.load(filename)
-    epoch = checkpoint["epoch"]
-    model = checkpoint["model"]
-    optimizer = checkpoint["optimizer"]
-    scheduler = checkpoint["scheduler"]
-    best_so_far = checkpoint.get("best_so_far", None)
+    epoch = 1
+    if os.path.exists("{}/{}.checkpoint.epoch.pt".format(out_dir, model_name)): 
+        epoch = torch.load("{}/{}.checkpoint.epoch.pt".format(out_dir, model_name))
 
-    return (model, optimizer, scheduler, epoch, best_so_far)
+    model_state_dict = None
+    if os.path.exists("{}/{}.checkpoint.model.pt".format(out_dir, model_name)): 
+        model_state_dict = torch.load("{}/{}.checkpoint.model.pt".format(out_dir, model_name), map_location=device)
+
+    optimizer_state_dict = None
+    if os.path.exists("{}/{}.checkpoint.optimizer.pt".format(out_dir, model_name)): 
+        optimizer_state_dict = torch.load("{}/{}.checkpoint.optimizer.pt".format(out_dir, model_name), map_location=device)
+
+    scheduler_state_dict = None
+    if os.path.exists("{}/{}.checkpoint.scheduler.pt".format(out_dir, model_name)): 
+        scheduler_state_dict = torch.load("{}/{}.checkpoint.scheduler.pt".format(out_dir, model_name), map_location=device)
+
+    best_so_far = None
+    if os.path.exists("{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name)): 
+        best_so_far = torch.load("{}/{}.checkpoint.best_so_far.pt".format(out_dir, model_name))    
+
+    return (model_state_dict, optimizer_state_dict, scheduler_state_dict, epoch, best_so_far)
 
 
 def main(args):
@@ -356,42 +361,52 @@ def main(args):
         persistent_workers=True,
     )
 
-    model = None
     model_name=build_model_name(args)
 
+    model_state_dict = None
+    optimizer_state_dict = None
+    scheduler_state_dict = None
+    cur_epoch = 1
+    best_so_far = None
     if args.from_checkpoint: 
         checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
         if checkpoint is not None: 
-            model, optimizer, scheduler, cur_epoch, best_so_far = checkpoint
+            model_state_dict, optimizer_state_dict, scheduler_state_dict, cur_epoch, best_so_far = checkpoint
             cur_epoch += 1
 
-    if model is None:
-        cur_epoch = 1
-        best_so_far = None
+    model = LocalGlobalModel(
+        len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
+        args.hidden_channels,
+        args.local_timesteps,
+        train_dataset.local_nodes,
+        len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
+        args.hidden_channels,
+        args.global_timesteps,
+        train_dataset.global_nodes,
+        args.decoder_hidden_channels,
+        args.include_global,
+    )
 
-        model = LocalGlobalModel(
-            len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
-            args.hidden_channels,
-            args.local_timesteps,
-            train_dataset.local_nodes,
-            len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
-            args.hidden_channels,
-            args.global_timesteps,
-            train_dataset.global_nodes,
-            args.decoder_hidden_channels,
-            args.include_global,
-        )
+    if model_state_dict is not None:
+        # Important to set the device here, otherwise we get a strange exception. 
+        # See https://discuss.pytorch.org/t/loading-a-model-runtimeerror-expected-all-tensors-to-be-on-the-same-device-but-found-at-least-two-devices-cuda-0-and-cpu/143897
+        model.to(device)
+        model.load_state_dict(model_state_dict)
 
-        optimizer = torch.optim.SGD(
-            model.parameters(),
-            lr=args.learning_rate,
-            momentum=0.9,
-            weight_decay=args.weight_decay,
-        )
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=args.learning_rate,
+        momentum=0.9,
+        weight_decay=args.weight_decay,
+    )
+    if optimizer_state_dict is not None: 
+        optimizer.load_state_dict(optimizer_state_dict)
 
-        scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer, T_0=50, T_mult=1
-        )
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=50, T_mult=1
+    )
+    if scheduler_state_dict is not None:
+        scheduler.load_state_dict(scheduler_state_dict)
 
     train(
         model=model,
