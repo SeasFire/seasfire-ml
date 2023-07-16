@@ -3,7 +3,6 @@ import logging
 import os
 import argparse
 import numpy as np
-import pickle as pkl
 import random
 from tqdm import tqdm
 
@@ -85,8 +84,6 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
     
     model = model.to(device)
     iters = len(train_loader)
-
-    current_max_avg = 0
 
     for epoch in range(cur_epoch, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
