@@ -2,7 +2,7 @@
 import logging
 import argparse
 from tqdm import tqdm
-
+import matplotlib.pyplot as plt
 import resource
 
 import os
@@ -83,13 +83,11 @@ def create_map(cube, model, loader, output_path, timestamp):
     )
 
     dataset.to_netcdf(output_path)
-    plot_map(dataset)
+    plot_map(dataset,timestamp)
 
 def find_closest_week(cube, target_date):
-    print(cube['time'].values[0])
     # Calculate the time difference (in nanoseconds) between target_date and each time in the dataset
     time_diff = np.abs((cube['time'].values - target_date) / np.timedelta64(1, 'ns'))
-    print(time_diff)
     # Find the index of the minimum time difference
     closest_index = np.argmin(time_diff)
 
@@ -99,7 +97,6 @@ def plot_map(predictions, timestamp):
     logger.info("Plot map for timestamp {}".format(timestamp))
 
     plot_data = predictions
-    print(plot_data)
     plot_data['gwis_ba_prediction'].plot()
     plt.savefig('your_plot.png')
     plt.show()
@@ -155,11 +152,12 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
     )
-
+    # dataset = xr.open_dataset("gwis_ba_pred.nc")
+    # plot_map(dataset, 852)
     cube = xr.open_zarr(args.cube_path, consolidated=False)
     timestamp = find_closest_week(cube, args.target_date)
     print(timestamp)
-    create_map(cube=cube, model=model, loader=loader, output_path=args.output_path, timestamp=args.timestamp)
+    create_map(cube=cube, model=model, loader=loader, output_path=args.output_path, timestamp=852)
 
 
 if __name__ == "__main__":
@@ -179,7 +177,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="output_path",
-        default="gwis_ba_pred.nc",
+        default="gwis_ba_pred_1.nc",
         help="Output path for predictions",
     )    
     parser.add_argument(
