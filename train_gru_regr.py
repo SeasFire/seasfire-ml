@@ -89,7 +89,7 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
             x = data[0].to(device)
             y = data[1].to(device)
 
-            y = torch.log10(1 + y)
+            y = torch.log10(10 + y)
 
             preds = model(x)
 
@@ -345,7 +345,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data/train",
+        default="data.36/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -354,7 +354,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data/val",
+        default="data.36/val",
         help="Validation set path",
     )
     parser.add_argument(
