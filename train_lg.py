@@ -381,7 +381,7 @@ def main(args):
         args.hidden_channels,
         args.global_timesteps,
         train_dataset.global_nodes,
-        args.decoder_hidden_channels,
+        args.decoder_hidden_channels if not args.include_global else None,
         args.include_global,
     )
 
@@ -608,7 +608,7 @@ if __name__ == "__main__":
         dest="include_global_oci_variables",
         action="store_false",
     )
-    parser.set_defaults(include_global_oci_variables=True)
+    parser.set_defaults(include_global_oci_variables=False)
     parser.add_argument(
         "--include-local-oci-variables",
         dest="include_local_oci_variables",
@@ -619,7 +619,7 @@ if __name__ == "__main__":
         dest="include_local_oci_variables",
         action="store_false",
     )
-    parser.set_defaults(include_local_oci_variables=True)
+    parser.set_defaults(include_local_oci_variables=False)
     parser.add_argument("--from-checkpoint", dest="from_checkpoint", action="store_true")
     parser.add_argument(
         "--no-from-checkpoint", dest="from_checkpoint", action="store_false"
