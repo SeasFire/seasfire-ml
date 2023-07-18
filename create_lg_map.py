@@ -21,29 +21,40 @@ from utils import (
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+min_lon = -18
+min_lat = -35
+max_lon = 51
+max_lat = 30
 
-
-def create_map(cube, model, loader, output_path):
+def create_map(cube, model, loader, output_path, timestamp):
     logger.info("Starting Inference")
 
     model = model.to(device)
 
     logger.info("{}".format(cube["gwis_ba"]))
 
-    gwis_ba = cube["gwis_ba"]
+    gwis_ba = cube["gwis_ba"].sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=timestamp)
+    prediction_time = gwis_ba.time.values
     gwis_ba_prediction = xr.zeros_like(gwis_ba, dtype=np.float32)
-
+    
     with torch.no_grad():
         model.eval()
 
-        for _, data in enumerate(tqdm(loader)):
+        for i, data in enumerate(tqdm(loader)):
             data = data.to(device)
-
+           
             local_x = data.x
             global_x = data.get("global_x")
             local_edge_index = data.edge_index
             global_edge_index = data.get("global_edge_index")
             batch = data.batch
+
+            center_lat = data.center_lat[0].cpu()
+            center_lon = data.center_lon[0].cpu()
+            center_time = data.center_time[0]
+            
+            if center_time != prediction_time:
+                continue
 
             preds = model(
                 local_x,
@@ -58,14 +69,10 @@ def create_map(cube, model, loader, output_path):
             )
             probs = torch.sigmoid(preds)
             probs_cpu = probs.cpu()
-
-            center_lat = data.center_lat[0]
-            center_lon = data.center_lon[0]
-            center_time = data.center_time[0]
             prob_value = probs_cpu[0]
-
+            
             gwis_ba_prediction.loc[
-                dict(latitude=center_lat, longitude=center_lon, time=center_time)
+                dict(latitude=center_lat, longitude=center_lon)
             ] = prob_value
 
     dataset = xr.Dataset(
@@ -76,7 +83,26 @@ def create_map(cube, model, loader, output_path):
     )
 
     dataset.to_netcdf(output_path)
+    plot_map(dataset)
 
+def find_closest_week(cube, target_date):
+    print(cube['time'].values[0])
+    # Calculate the time difference (in nanoseconds) between target_date and each time in the dataset
+    time_diff = np.abs((cube['time'].values - target_date) / np.timedelta64(1, 'ns'))
+    print(time_diff)
+    # Find the index of the minimum time difference
+    closest_index = np.argmin(time_diff)
+
+    return closest_index
+
+def plot_map(predictions, timestamp):
+    logger.info("Plot map for timestamp {}".format(timestamp))
+
+    plot_data = predictions
+    print(plot_data)
+    plot_data['gwis_ba_prediction'].plot()
+    plt.savefig('your_plot.png')
+    plt.show()
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -131,7 +157,9 @@ def main(args):
     )
 
     cube = xr.open_zarr(args.cube_path, consolidated=False)
-    create_map(cube=cube, model=model, loader=loader, output_path=args.output_path)
+    timestamp = find_closest_week(cube, args.target_date)
+    print(timestamp)
+    create_map(cube=cube, model=model, loader=loader, output_path=args.output_path, timestamp=args.timestamp)
 
 
 if __name__ == "__main__":
@@ -142,7 +170,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../seasfire_1deg.zarr",
+        default="../1d_SeasFireCube.zarr",
         help="Cube path",
     )
     parser.add_argument(
@@ -160,7 +188,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data/test",
+        default="data.36/test",
         help="Test set path",
     )
     parser.add_argument(
@@ -171,6 +199,15 @@ if __name__ == "__main__":
         dest="model_path",
         default=None,
         help="Path to load the trained model from",
+    )
+    parser.add_argument(
+        "--target-date",
+        metavar="KEY",
+        type=np.datetime64,
+        action="store",
+        dest="target_date",
+        default="2019-07-17T00:00:00.000000000",
+        help="Date to plot the fire map",
     )
     parser.add_argument(
         "--hidden-channels",
@@ -232,7 +269,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_timesteps",
-        default=24,
+        default=6,
         help="Time steps in the past for the local part",
     )
     parser.add_argument(
@@ -241,7 +278,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="global_timesteps",
-        default=24,
+        default=36,
         help="Time steps in the past for the global part",
     )
     parser.add_argument(
