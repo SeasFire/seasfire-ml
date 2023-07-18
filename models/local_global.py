@@ -20,18 +20,21 @@ class LocalGlobalModel(torch.nn.Module):
         global_hidden_channels,
         global_timesteps,
         global_nodes,
-        decoder_hidden_channels,
+        decoder_hidden_channels=None,
         include_global=True,
     ):
         super(LocalGlobalModel, self).__init__()
+
         if local_hidden_channels[-1] != global_hidden_channels[-1]:
-            raise ValueError("Output embedding of each TGCN should be the same")
+            raise ValueError("Output embedding of each TGCN (local and global) should be the same")
+        
         self.local_gnn = TGCN2(
             in_channels=local_node_features,
             out_channels=local_hidden_channels,
             add_graph_aggregation_layer=False,
         )
         self.local_timesteps = local_timesteps
+
         self._include_global = include_global
         if include_global:
             self.global_gnn = TGCN2(
@@ -41,15 +44,17 @@ class LocalGlobalModel(torch.nn.Module):
             )
             self.global_timesteps = global_timesteps
             total_nodes = local_nodes + global_nodes
+            self.attention = TransformerEncoder(
+                local_hidden_channels[-1],
+                total_nodes,
+                num_heads=4,
+                num_layers=3,
+                dropout=0.1,
+            )
         else: 
             total_nodes = local_nodes
-        self.attention = TransformerEncoder(
-            local_hidden_channels[-1],
-            total_nodes,
-            num_heads=4,
-            num_layers=3,
-            dropout=0.1,
-        )
+            self.attention = None
+
         if decoder_hidden_channels is None: 
             self.decoder = torch.nn.Linear(total_nodes * local_hidden_channels[-1], 1)
         else: 
@@ -98,10 +103,10 @@ class LocalGlobalModel(torch.nn.Module):
             global_vertex_count = global_H.shape[0] // batch_size
             global_H = global_H.view(batch_size, global_vertex_count, -1)
             h = torch.cat((local_H, global_H), dim=1)
+            h = self.attention(h)
         else:
             h = local_H
 
-        h = self.attention(h)
         h = h.view(batch_size, -1)
         h = self.decoder(h)
         return h.squeeze(1)
