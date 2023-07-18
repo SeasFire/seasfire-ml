@@ -77,6 +77,10 @@ class BaselineModel:
             logger.debug("mean={}".format(mean.values))
             return torch.as_tensor(mean.values)
         elif self._method == "majority":
-            majority = 1.0 if np.count_nonzero(previous) >= 8 else 0.0
-            logger.debug("majority={}".format(majority))
+            zero_count = (previous == 0).sum().values
+            non_zero_count = (previous != 0).sum().values
+            majority = 1.0 if non_zero_count >= zero_count else 0.0
+            logger.debug("majority={} since {} (non-zeros) >= {} (zeros)".format(majority, non_zero_count, zero_count))
             return torch.as_tensor(majority)
+        else: 
+            raise ValueError("Invalid method")

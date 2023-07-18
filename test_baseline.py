@@ -23,12 +23,12 @@ def test(model, loader, model_name):
 
     with torch.no_grad():
         metrics = [
-            Accuracy(task="binary").to(device),
-            Recall(task="binary").to(device),
-            F1Score(task="binary").to(device),
-            AveragePrecision(task="binary").to(device),
-            AUROC(task="binary").to(device),
-            StatScores(task="binary").to(device)
+            ("Accuracy", Accuracy(task="binary").to(device)),
+            ("Recall", Recall(task="binary").to(device)),
+            ("F1Score", F1Score(task="binary").to(device)),
+            ("AveragePrecision", AveragePrecision(task="binary").to(device)),
+            ("AUROC", AUROC(task="binary").to(device)),
+            ("StatScores", StatScores(task="binary").to(device))
         ]
 
         for _, data in enumerate(tqdm(loader)):
@@ -42,13 +42,11 @@ def test(model, loader, model_name):
             preds = preds.gt(0.0).float()
             y = y.gt(0.0)
 
-            for metric in metrics:
+            for _, metric in metrics:
                 metric.update(preds, y)
 
         result = "{}".format(model_name)
-        for metric, metric_name in zip(
-            metrics, ["Accuracy", "Recall", "F1Score", "Average Precision (AUPRC)", "AUROC", "Stats"]
-        ):
+        for metric_name, metric in metrics:
             metric_value = metric.compute()
             logger.info("| Test {}: {}".format(metric_name, metric_value))
             result += ",{}".format(metric_value)
@@ -120,7 +118,6 @@ if __name__ == "__main__":
         help="Cube path",
     )    
     parser.add_argument(
-        "-t",
         "--test-path",
         metavar="PATH",
         type=str,
@@ -139,7 +136,6 @@ if __name__ == "__main__":
         help="Method to calculate the baseline results (mean or majority)",
     )
     parser.add_argument(
-        "-b",
         "--batch-size",
         metavar="KEY",
         type=int,
