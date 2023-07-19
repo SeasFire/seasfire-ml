@@ -371,7 +371,7 @@ def main(args):
         optimizer.load_state_dict(optimizer_state_dict)
 
     scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=50, T_mult=1
+        optimizer, T_0=25, T_mult=3
     )
     if scheduler_state_dict is not None:
         scheduler.load_state_dict(scheduler_state_dict)
