@@ -35,12 +35,12 @@ def create_map(cube, model, loader, output_path, timestamp):
 
     gwis_ba = cube["gwis_ba"].sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=timestamp)
     prediction_time = gwis_ba.time.values
-    gwis_ba_prediction = xr.zeros_like(gwis_ba, dtype=np.float32)
+    gwis_ba_prediction = xr.full_like(gwis_ba, fill_value=np.nan, dtype=np.float32)
     
     with torch.no_grad():
         model.eval()
 
-        for i, data in enumerate(tqdm(loader)):
+        for _, data in enumerate(tqdm(loader)):
             data = data.to(device)
            
             local_x = data.x
@@ -83,23 +83,17 @@ def create_map(cube, model, loader, output_path, timestamp):
     )
 
     dataset.to_netcdf(output_path)
-    plot_map(dataset,timestamp)
+
+    dataset['gwis_ba_prediction'].plot()
+    plt.savefig('gwis_ba_prediction.png')
+
 
 def find_closest_week(cube, target_date):
     # Calculate the time difference (in nanoseconds) between target_date and each time in the dataset
     time_diff = np.abs((cube['time'].values - target_date) / np.timedelta64(1, 'ns'))
     # Find the index of the minimum time difference
     closest_index = np.argmin(time_diff)
-
     return closest_index
-
-def plot_map(predictions, timestamp):
-    logger.info("Plot map for timestamp {}".format(timestamp))
-
-    plot_data = predictions
-    plot_data['gwis_ba_prediction'].plot()
-    plt.savefig('your_plot.png')
-    plt.show()
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -141,7 +135,7 @@ def main(args):
         args.hidden_channels,
         args.global_timesteps,
         dataset.global_nodes,
-        args.decoder_hidden_channels if not args.include_global else None,
+        args.decoder_hidden_channels,
         args.include_global,
     )
     model.load_state_dict(torch.load(args.model_path))
@@ -152,12 +146,15 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
     )
-    # dataset = xr.open_dataset("gwis_ba_pred.nc")
-    # plot_map(dataset, 852)
+
+    logger.info("Opening cube={}".format(args.cube_path))
     cube = xr.open_zarr(args.cube_path, consolidated=False)
+
+    logger.info("Will plot only time={}".format(args.target_date))
     timestamp = find_closest_week(cube, args.target_date)
-    print(timestamp)
-    create_map(cube=cube, model=model, loader=loader, output_path=args.output_path, timestamp=852)
+    logger.info("As time index={}".format(timestamp))
+
+    create_map(cube=cube, model=model, loader=loader, output_path=args.output_path, timestamp=timestamp)
 
 
 if __name__ == "__main__":
@@ -168,7 +165,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="cube_path",
-        default="../1d_SeasFireCube.zarr",
+        default="../seasfire_1deg.zarr",
         help="Cube path",
     )
     parser.add_argument(
@@ -186,7 +183,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data.36/test",
+        default="data/test",
         help="Test set path",
     )
     parser.add_argument(

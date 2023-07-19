@@ -678,6 +678,7 @@ if __name__ == "__main__":
         # default="36,-25,72,50",    # Europe
         # default="-80,-170,80,170", # Global
         # default="-56,-82,11,-34",  # South America
+        # default="-44,112,-10,154", # Australia
         help="Area as min_lat,min_lon,max_lat,max_lon",
     )
     parser.add_argument(
