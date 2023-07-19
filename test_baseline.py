@@ -59,16 +59,17 @@ def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level)
 
-    logger.info("Torch version: {}".format(torch.__version__))
-    logger.info("Cuda available: {}".format(torch.cuda.is_available()))
+    logger.debug("Torch version: {}".format(torch.__version__))
+    logger.debug("Cuda available: {}".format(torch.cuda.is_available()))
     if torch.cuda.is_available():
-        logger.info("Torch cuda version: {}".format(torch.version.cuda))
-
-    model_name = "baseline"
+        logger.debug("Torch cuda version: {}".format(torch.version.cuda))
 
     if not os.path.exists(args.out_dir):
         logger.info("Creating output folder {}".format(args.out_dir))
         os.makedirs(args.out_dir)
+
+    model_name = "baseline_{}".format(args.method)
+    logger.info("Using model={}".format(model_name))
 
     if args.log_file is None:
         log_file = "{}/{}.test.logs".format(args.out_dir, model_name)
@@ -76,8 +77,7 @@ def main(args):
         log_file = args.log_file
     logger.addHandler(logging.FileHandler(log_file))
 
-    logger.info("Using model={}".format(model_name))
-    logger.info("Using target week={}".format(args.target_week))
+
 
     dataset = LocalGlobalDataset(
         root_dir=args.test_path,
@@ -100,7 +100,7 @@ def main(args):
         shuffle=False,
     )
 
-    model = BaselineModel(args.cube_path, False, args.method)
+    model = BaselineModel(args.cube_path, args.load_cube_in_memory, args.method)
 
     test(model=model, loader=loader, model_name=model_name)
 
@@ -145,15 +145,6 @@ if __name__ == "__main__":
         help="Batch size",
     )
     parser.add_argument(
-        "--target-week",
-        metavar="KEY",
-        type=int,
-        action="store",
-        dest="target_week",
-        default=1,
-        help="Target week",
-    )
-    parser.add_argument(
         "--out-dir",
         metavar="KEY",
         type=str,
@@ -170,7 +161,14 @@ if __name__ == "__main__":
         dest="log_file",
         default=None,
         help="Filename to output all logs",
-    )        
+    )
+    parser.add_argument(
+        "--load-cube-in-memory", dest="load_cube_in_memory", action="store_true"
+    )
+    parser.add_argument(
+        "--no-load-cube-in-memory", dest="load_cube_in_memory", action="store_false"
+    )
+    parser.set_defaults(load_cube_in_memory=False)            
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     parser.set_defaults(debug=False)
