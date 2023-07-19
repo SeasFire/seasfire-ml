@@ -26,7 +26,7 @@ def test(model, loader, model_name):
             ("Accuracy", Accuracy(task="binary").to(device)),
             ("Recall", Recall(task="binary").to(device)),
             ("F1Score", F1Score(task="binary").to(device)),
-            ("AveragePrecision", AveragePrecision(task="binary").to(device)),
+            ("AveragePrecision (AUPRC)", AveragePrecision(task="binary").to(device)),
             ("AUROC", AUROC(task="binary").to(device)),
             ("StatScores", StatScores(task="binary").to(device))
         ]

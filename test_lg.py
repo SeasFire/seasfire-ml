@@ -155,7 +155,7 @@ def main(args):
         args.hidden_channels,
         args.global_timesteps,
         dataset.global_nodes,
-        args.decoder_hidden_channels if not args.include_global else None,
+        args.decoder_hidden_channels,
         args.include_global,
     )
     model.load_state_dict(torch.load(args.model_path))

@@ -44,16 +44,16 @@ class LocalGlobalModel(torch.nn.Module):
             )
             self.global_timesteps = global_timesteps
             total_nodes = local_nodes + global_nodes
-            self.attention = TransformerEncoder(
-                local_hidden_channels[-1],
-                total_nodes,
-                num_heads=4,
-                num_layers=3,
-                dropout=0.1,
-            )
         else: 
             total_nodes = local_nodes
-            self.attention = None
+
+        self.attention = TransformerEncoder(
+            local_hidden_channels[-1],
+            total_nodes,
+            num_heads=4,
+            num_layers=3,
+            dropout=0.1,
+        )
 
         if decoder_hidden_channels is None: 
             self.decoder = torch.nn.Linear(total_nodes * local_hidden_channels[-1], 1)
@@ -103,10 +103,10 @@ class LocalGlobalModel(torch.nn.Module):
             global_vertex_count = global_H.shape[0] // batch_size
             global_H = global_H.view(batch_size, global_vertex_count, -1)
             h = torch.cat((local_H, global_H), dim=1)
-            h = self.attention(h)
         else:
             h = local_H
 
+        h = self.attention(h)
         h = h.view(batch_size, -1)
         h = self.decoder(h)
         return h.squeeze(1)
