@@ -6,7 +6,7 @@ import numpy as np
 import random
 from tqdm import tqdm
 
-import resource 
+import resource
 
 import torch
 import torch_geometric
@@ -18,7 +18,7 @@ from models import (
 from utils import (
     LocalGlobalDataset,
     LocalGlobalTransform,
-    load_checkpoint, 
+    load_checkpoint,
     save_checkpoint,
 )
 
@@ -40,23 +40,35 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_name, out_dir, cur_epoch=1, best_so_far=None):
+def train(
+    model,
+    optimizer,
+    scheduler,
+    train_loader,
+    epochs,
+    val_loader,
+    model_name,
+    out_dir,
+    cur_epoch=1,
+    best_so_far=None,
+):
     logger.info("Starting training for {} epochs".format(epochs))
 
     train_metrics_dict = {
         "MeanAbsoluteError": [],
-        "MeanSquaredError": [], 
+        "MeanSquaredError": [],
         "R2Score": [],
-        "Loss": [],        
+        "Loss": [],
     }
     val_metrics_dict = {
         "MeanAbsoluteError": [],
-        "MeanSquaredError": [], 
+        "MeanSquaredError": [],
         "R2Score": [],
         "Loss": [],
     }
 
-    criterion = torch.nn.MSELoss()
+    # criterion = torch.nn.MSELoss()
+    criterion = torch.nn.HuberLoss()
 
     train_metrics = [
         MeanAbsoluteError().to(device),
@@ -78,7 +90,6 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
 
     for epoch in range(cur_epoch, epochs + 1):
         logger.info("Starting Epoch {}".format(epoch))
-        logger.info("Current lr={}".format(scheduler.get_last_lr()))
 
         model.train()
 
@@ -88,7 +99,6 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
         train_labels = []
 
         for i, data in enumerate(tqdm(train_loader)):
-
             data = data.to(device)
 
             local_x = data.x
@@ -118,9 +128,7 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
             train_loss.backward()
             optimizer.step()
 
-            scheduler.step(epoch - 1 + i / iters)
-
-            if torch.any(torch.isnan(preds)): 
+            if torch.any(torch.isnan(preds)):
                 logger.warning("Nan value found in prediction!")
 
             # logger.info("preds = {}".format(preds))
@@ -199,12 +207,14 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
             val_metrics_dict[key].append(temp.cpu().detach().numpy())
             metric.reset()
 
-        save_checkpoint(model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir)
+        save_checkpoint(
+            model, epoch, best_so_far, optimizer, scheduler, model_name, out_dir
+        )
         save_model(model, "last", model_name, out_dir)
 
-        if (
-            epoch > 10
-            and (best_so_far is None or val_metrics_dict["MeanSquaredError"][-1] < best_so_far)
+        if epoch > 10 and (
+            best_so_far is None
+            or val_metrics_dict["MeanSquaredError"][-1] < best_so_far
         ):
             best_so_far = val_metrics_dict["MeanSquaredError"][-1]
             logger.info("Found new best model in epoch {}".format(epoch))
@@ -212,7 +222,8 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
 
         train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
         val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
-        # scheduler.step()
+
+        scheduler.step(val_loss)
 
 
 def build_model_name(args):
@@ -235,7 +246,7 @@ def build_model_name(args):
 def save_model(model, model_type, model_name, out_dir):
     filename = "{}/{}.{}_model.pt".format(out_dir, model_name, model_type)
     logger.info("Saving model as {}".format(filename))
-    torch.save(model.state_dict(),filename)
+    torch.save(model.state_dict(), filename)
 
 
 def main(args):
@@ -322,11 +333,20 @@ def main(args):
     scheduler_state_dict = None
     cur_epoch = 1
     best_so_far = None
-    if args.from_checkpoint: 
+    if args.from_checkpoint:
         checkpoint = load_checkpoint(model_name=model_name, out_dir=args.out_dir)
-        if checkpoint is not None: 
-            model_state_dict, optimizer_state_dict, scheduler_state_dict, cur_epoch, best_so_far = checkpoint
+        if checkpoint is not None:
+            (
+                model_state_dict,
+                optimizer_state_dict,
+                scheduler_state_dict,
+                cur_epoch,
+                best_so_far,
+            ) = checkpoint
             cur_epoch += 1
+
+    if model_state_dict is None and args.pretrained_model_path is not None:
+        model_state_dict = torch.load(args.pretrained_model_path, map_location=device)
 
     model = LocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
@@ -342,7 +362,7 @@ def main(args):
     )
 
     if model_state_dict is not None:
-        # Important to set the device here, otherwise we get a strange exception. 
+        # Important to set the device here, otherwise we get a strange exception.
         # See https://discuss.pytorch.org/t/loading-a-model-runtimeerror-expected-all-tensors-to-be-on-the-same-device-but-found-at-least-two-devices-cuda-0-and-cpu/143897
         model.to(device)
         model.load_state_dict(model_state_dict)
@@ -353,11 +373,11 @@ def main(args):
         momentum=0.9,
         weight_decay=args.weight_decay,
     )
-    if optimizer_state_dict is not None: 
+    if optimizer_state_dict is not None:
         optimizer.load_state_dict(optimizer_state_dict)
 
-    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=50, T_mult=1
+    scheduler = lr_scheduler.ReduceLROnPlateau(
+        optimizer, "min", factor=0.05, patience=10, cooldown=10, verbose=True
     )
     if scheduler_state_dict is not None:
         scheduler.load_state_dict(scheduler_state_dict)
@@ -375,6 +395,7 @@ def main(args):
         cur_epoch=cur_epoch,
     )
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Models")
     parser.add_argument(
@@ -383,7 +404,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="train_path",
-        default="data.36/train",
+        default="data/train",
         help="Train set path",
     )
     parser.add_argument(
@@ -392,8 +413,17 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="val_path",
-        default="data.36/val",
+        default="data/val",
         help="Validation set path",
+    )
+    parser.add_argument(
+        "--pretrained-model-path",
+        metavar="PATH",
+        type=str,
+        action="store",
+        dest="pretrained_model_path",
+        default=None,
+        help="Path to load the a pretrained model from",
     )
     parser.add_argument(
         "--batch-size",
@@ -401,7 +431,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=16,
+        default=32,
         help="Batch size",
     )
     parser.add_argument(
@@ -419,7 +449,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="decoder_hidden_channels",
-        default="256,64",
+        default="64,64",
         help="Hidden channels for decoder layers",
     )
     parser.add_argument(
@@ -428,7 +458,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="epochs",
-        default=100,
+        default=1000,
         help="Epochs",
     )
     parser.add_argument(
@@ -437,7 +467,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batches_per_epoch",
-        default=None,
+        default=500,
         help="Batches per epoch.",
     )
     parser.add_argument(
@@ -493,9 +523,8 @@ if __name__ == "__main__":
         dest="global_k",
         default=9,
         help="Global k for how many nearest neighbors in spatial graph.",
-    )        
+    )
     parser.add_argument(
-        "-lr",
         "--learning-rate",
         metavar="KEY",
         type=float,
@@ -505,7 +534,6 @@ if __name__ == "__main__":
         help="Learning rate",
     )
     parser.add_argument(
-        "-w",
         "--weight-decay",
         metavar="KEY",
         type=float,
@@ -577,11 +605,13 @@ if __name__ == "__main__":
         action="store_false",
     )
     parser.set_defaults(include_local_oci_variables=True)
-    parser.add_argument("--from-checkpoint", dest="from_checkpoint", action="store_true")
+    parser.add_argument(
+        "--from-checkpoint", dest="from_checkpoint", action="store_true"
+    )
     parser.add_argument(
         "--no-from-checkpoint", dest="from_checkpoint", action="store_false"
     )
-    parser.set_defaults(from_checkpoint=False)  
+    parser.set_defaults(from_checkpoint=False)
     parser.add_argument("--debug", dest="debug", action="store_true")
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     args = parser.parse_args()

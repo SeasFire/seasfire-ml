@@ -7,6 +7,10 @@ import os
 import torch
 import torch_geometric
 from torchmetrics import MeanAbsoluteError, MeanSquaredError, R2Score
+
+from models import (
+    LocalGlobalModel,
+)
 from utils import (
     LocalGlobalDataset,
     LocalGlobalTransform,
@@ -17,8 +21,11 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def test(model, loader, criterion, model_name):
+def test(model, loader, model_name):
     logger.info("Starting Test")
+
+    #criterion = torch.nn.MSELoss()
+    criterion = torch.nn.HuberLoss()
 
     model = model.to(device)
 
@@ -34,7 +41,7 @@ def test(model, loader, criterion, model_name):
         predictions = []
         labels = []
 
-        for _, data in enumerate(loader):
+        for _, data in enumerate(tqdm(loader)):
 
             data = data.to(device)
             local_x = data.x
@@ -80,7 +87,7 @@ def test(model, loader, criterion, model_name):
         logger.info(result)
 
 def build_model_name(args):
-    model_type = "local-global" if args.include_global else "local"
+    model_type = "local-global-regr" if args.include_global else "local-regr"
     target = "target-{}".format(args.target_week)
     local_radius = "radius-{}".format(args.local_radius)
 
@@ -154,7 +161,7 @@ def main(args):
         num_workers=args.num_workers,
     )
 
-    test(model=model, loader=loader, criterion=criterion, model_name=model_name)
+    test(model=model, loader=loader, model_name=model_name)
 
 
 if __name__ == "__main__":
@@ -166,7 +173,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="test_path",
-        default="data.36/test",
+        default="data/test",
         help="Test set path",
     )
     parser.add_argument(
@@ -202,7 +209,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="decoder_hidden_channels",
-        default="256,64",
+        default="64,64",
         help="Hidden channels for decoder layers",
     )  
     parser.add_argument(
