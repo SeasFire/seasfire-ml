@@ -340,10 +340,10 @@ class LocalGlobalDataset(Dataset):
 
         return edge_index
 
-    def balanced_sampler(self, num_samples=None): 
+    def balanced_sampler(self, num_samples=None, targets=[0.5, 0.5]): 
         logger.info("Creating weighted random sampler")
-        gt_threshold_target = 0.5
-        le_threshold_target = 0.5
+        gt_threshold_target = targets[0]
+        le_threshold_target = targets[1]
         logger.info("Target proportions (>,<=) = {}, {}".format(gt_threshold_target, le_threshold_target))
 
         gt_threshold_weight = gt_threshold_target / self._gt_threshold_samples_count

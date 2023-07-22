@@ -277,7 +277,7 @@ def main(args):
     if args.batches_per_epoch is not None:
         num_samples = args.batches_per_epoch * args.batch_size
         logger.info("Will sample {} samples".format(num_samples))
-    train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples)
+    train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples, targets=[0.75, 0.25])
 
     val_dataset = LocalGlobalDataset(
         root_dir=args.val_path,
