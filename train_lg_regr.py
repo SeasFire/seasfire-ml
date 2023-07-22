@@ -20,24 +20,23 @@ from utils import (
     LocalGlobalTransform,
     load_checkpoint,
     save_checkpoint,
+    set_seed,
 )
+from collections import defaultdict
 
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def set_seed(seed: int = 42) -> None:
-    logger.info("Using random seed={}".format(seed))
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    # When running on the CuDNN backend, two further options must be set
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    # Set a fixed value for the hash seed
-    os.environ["PYTHONHASHSEED"] = str(seed)
+class MSLE10Loss(torch.nn.Module):
+    def __init__(self):
+        super(MSLE10Loss, self).__init__()
+
+    def forward(self, y_pred, y_true):
+        # Calculate MSLE
+        msle_loss = torch.nn.functional.mse_loss(torch.log10(y_pred + 1), torch.log10(y_true + 1))
+        return msle_loss
 
 
 def train(
@@ -54,33 +53,21 @@ def train(
 ):
     logger.info("Starting training for {} epochs".format(epochs))
 
-    train_metrics_dict = {
-        "MeanAbsoluteError": [],
-        "MeanSquaredError": [],
-        "R2Score": [],
-        "Loss": [],
-    }
-    val_metrics_dict = {
-        "MeanAbsoluteError": [],
-        "MeanSquaredError": [],
-        "R2Score": [],
-        "Loss": [],
-    }
-
-    # criterion = torch.nn.MSELoss()
-    criterion = torch.nn.HuberLoss()
+    criterion = MSLE10Loss()
 
     train_metrics = [
-        MeanAbsoluteError().to(device),
-        MeanSquaredError().to(device),
-        R2Score().to(device),
+        ("MeanAbsoluteError", MeanAbsoluteError().to(device)),
+        ("MeanSquaredError", MeanSquaredError().to(device)),
+        ("R2Score", R2Score().to(device)),
     ]
+    train_history = defaultdict(lambda: [])
 
     val_metrics = [
-        MeanAbsoluteError().to(device),
-        MeanSquaredError().to(device),
-        R2Score().to(device),
+        ("MeanAbsoluteError", MeanAbsoluteError().to(device)),
+        ("MeanSquaredError", MeanSquaredError().to(device)),
+        ("R2Score", R2Score().to(device)),
     ]
+    val_history = defaultdict(lambda: [])
 
     logger.info("Optimizer={}".format(optimizer))
     logger.info("LR scheduler={}".format(scheduler))
@@ -120,9 +107,11 @@ def train(
                 batch,
             )
 
-            y = torch.log10(1 + y)
-
+            preds = torch.relu(preds)
             train_loss = criterion(preds, y.float())
+
+            # Perform gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             optimizer.zero_grad()
             train_loss.backward()
@@ -131,9 +120,10 @@ def train(
             if torch.any(torch.isnan(preds)):
                 logger.warning("Nan value found in prediction!")
 
-            # logger.info("preds = {}".format(preds))
-            # logger.info("y = {}".format(y.float()))
-            for metric in train_metrics:
+            if i == 0:
+                logger.info("preds = {}, y = {}".format(preds, y.float()))
+
+            for _, metric in train_metrics:
                 metric.update(preds, y)
 
             preds_cpu = preds.cpu()
@@ -173,12 +163,9 @@ def train(
                     None,
                     batch,
                 )
+                preds = torch.relu(preds)
 
-                y = torch.log10(1 + y)
-
-                # logger.info("preds = {}".format(preds))
-                # logger.info("y = {}".format(y.float()))
-                for metric in val_metrics:
+                for _, metric in val_metrics:
                     metric.update(preds, y)
 
                 preds_cpu = preds.cpu()
@@ -192,19 +179,21 @@ def train(
         val_loss = criterion(torch.cat(val_predictions), torch.cat(val_labels))
 
         logger.info("| Train Loss: {:.4f}".format(train_loss))
+        train_history["Loss"].append(train_loss.cpu().detach().numpy())
 
-        for metric, key in zip(train_metrics, train_metrics_dict.keys()):
-            temp = metric.compute()
-            logger.info("| Train " + key + ": {}".format(temp))
-            train_metrics_dict[key].append(temp.cpu().detach().numpy())
+        for metric_name, metric in train_metrics:
+            metric_value = metric.compute()
+            train_history[metric_name].append(metric_value.cpu().detach().numpy())
+            logger.info("| Train {}: {}".format(metric_name, metric_value))
             metric.reset()
 
         logger.info("| Val Loss: {:.4f}".format(val_loss))
+        val_history["Loss"].append(val_loss.cpu().detach().numpy())        
 
-        for metric, key in zip(val_metrics, val_metrics_dict.keys()):
-            temp = metric.compute()
-            logger.info("| Val " + key + ": {}".format(temp))
-            val_metrics_dict[key].append(temp.cpu().detach().numpy())
+        for metric_name, metric in val_metrics:
+            metric_value = metric.compute()
+            val_history[metric_name].append(metric_value.cpu().detach().numpy())
+            logger.info("| Val {}: {}".format(metric_name, metric_value))
             metric.reset()
 
         save_checkpoint(
@@ -214,14 +203,11 @@ def train(
 
         if epoch > 10 and (
             best_so_far is None
-            or val_metrics_dict["MeanSquaredError"][-1] < best_so_far
+            or val_history["MeanSquaredError"][-1] < best_so_far
         ):
-            best_so_far = val_metrics_dict["MeanSquaredError"][-1]
+            best_so_far = val_history["MeanSquaredError"][-1]
             logger.info("Found new best model in epoch {}".format(epoch))
             save_model(model, "best", model_name, out_dir)
-
-        train_metrics_dict["Loss"].append(train_loss.cpu().detach().numpy())
-        val_metrics_dict["Loss"].append(val_loss.cpu().detach().numpy())
 
         scheduler.step(val_loss)
 
@@ -539,7 +525,7 @@ if __name__ == "__main__":
         type=float,
         action="store",
         dest="weight_decay",
-        default=0.001,
+        default=0.00001,
         help="Weight decay",
     )
     parser.add_argument(
