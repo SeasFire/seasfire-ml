@@ -2,7 +2,6 @@
 import logging
 import argparse
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import resource
 
 import os
@@ -21,26 +20,26 @@ from utils import (
 
 logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-min_lon = -18
-min_lat = -35
-max_lon = 51
-max_lat = 30
 
-def create_map(cube, model, loader, output_path, timestamp):
+def create_map(cube, model, loader, output_path, timestamp=None):
     logger.info("Starting Inference")
 
     model = model.to(device)
 
     logger.info("{}".format(cube["gwis_ba"]))
 
-    gwis_ba = cube["gwis_ba"].sel(latitude=slice(max_lat, min_lat), longitude=slice(min_lon, max_lon)).isel(time=timestamp)
-    prediction_time = gwis_ba.time.values
+    gwis_ba = cube["gwis_ba"]
     gwis_ba_prediction = xr.full_like(gwis_ba, fill_value=np.nan, dtype=np.float32)
     
     with torch.no_grad():
         model.eval()
 
         for _, data in enumerate(tqdm(loader)):
+
+            center_time = data.center_time[0]
+            if timestamp is not None and timestamp != center_time: 
+                continue
+            
             data = data.to(device)
            
             local_x = data.x
@@ -51,11 +50,7 @@ def create_map(cube, model, loader, output_path, timestamp):
 
             center_lat = data.center_lat[0].cpu()
             center_lon = data.center_lon[0].cpu()
-            center_time = data.center_time[0]
             
-            if center_time != prediction_time:
-                continue
-
             preds = model(
                 local_x,
                 global_x,
@@ -72,20 +67,18 @@ def create_map(cube, model, loader, output_path, timestamp):
             prob_value = probs_cpu[0]
             
             gwis_ba_prediction.loc[
-                dict(latitude=center_lat, longitude=center_lon)
+                dict(latitude=center_lat, longitude=center_lon, time=center_time)
             ] = prob_value
 
     dataset = xr.Dataset(
         {
+            "gwis_ba": gwis_ba,
             "gwis_ba_prediction": gwis_ba_prediction,
         },
         attrs={"description": "A dataset with our gwis_ba prediction"},
     )
 
     dataset.to_netcdf(output_path)
-
-    dataset['gwis_ba_prediction'].plot()
-    plt.savefig('gwis_ba_prediction.png')
 
 
 def find_closest_week(cube, target_date):
@@ -94,6 +87,7 @@ def find_closest_week(cube, target_date):
     # Find the index of the minimum time difference
     closest_index = np.argmin(time_diff)
     return closest_index
+
 
 def main(args):
     level = logging.DEBUG if args.debug else logging.INFO
@@ -174,7 +168,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="output_path",
-        default="gwis_ba_pred_1.nc",
+        default="gwis_ba_pred.nc",
         help="Output path for predictions",
     )    
     parser.add_argument(
@@ -201,9 +195,9 @@ if __name__ == "__main__":
         type=np.datetime64,
         action="store",
         dest="target_date",
-        default="2019-07-17T00:00:00.000000000",
+        default="2020-07-19T00:00:00.000000000",
         help="Date to plot the fire map",
-    )
+    )    
     parser.add_argument(
         "--hidden-channels",
         metavar="KEY",
@@ -228,7 +222,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=2,
+        default=3,
         help="Local radius",
     )
     parser.add_argument(
@@ -264,7 +258,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_timesteps",
-        default=6,
+        default=36,
         help="Time steps in the past for the local part",
     )
     parser.add_argument(
