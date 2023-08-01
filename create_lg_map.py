@@ -86,7 +86,7 @@ def find_closest_week(cube, target_date):
     time_diff = np.abs((cube['time'].values - target_date) / np.timedelta64(1, 'ns'))
     # Find the index of the minimum time difference
     closest_index = np.argmin(time_diff)
-    return closest_index
+    return cube['time'].values[closest_index]
 
 
 def main(args):
