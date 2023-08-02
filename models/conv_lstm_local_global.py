@@ -26,7 +26,7 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
         super(ConvLstmLocalGlobalModel, self).__init__()
 
         if local_hidden_channels[-1] != global_hidden_channels[-1]:
-            raise ValueError("Output embedding of each TGCN (local and global) should be the same")
+            raise ValueError("Output embedding of each ConvLSTM (local and global) should be the same")
         
         self.local_conv_lstm = ConvLSTM(
             local_features,
@@ -38,7 +38,7 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
             False,
             dilation=1
         )
-        output_channels = local_hidden_channels
+        output_channels = local_hidden_channels[-1]
 
         self._include_global = include_global
         if include_global:
@@ -52,7 +52,7 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
                 False,
                 dilation=1
             )
-            output_channels += global_hidden_channels
+            output_channels += global_hidden_channels[-1]
 
         if decoder_hidden_channels is None: 
             self.decoder = torch.nn.Linear(output_channels, 1)
@@ -63,7 +63,6 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
         self,
         local_x: torch.FloatTensor,
         global_x: torch.FloatTensor,
-        readout_batch=None,
     ) -> torch.FloatTensor:
         
         #local_x = local_x[:,:,-self.local_timesteps:]

@@ -91,21 +91,11 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
 
             local_x = data.x
             global_x = data.get("global_x")
-            local_edge_index = data.edge_index
-            global_edge_index = data.get("global_edge_index")
             y = data.y
-            batch = data.batch
 
             preds = model(
                 local_x,
                 global_x,
-                local_edge_index,
-                global_edge_index,
-                None,
-                None,
-                None,
-                None,
-                batch,
             )
             y = y.gt(0.0)
 
@@ -325,12 +315,12 @@ def main(args):
     model = ConvLstmLocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
-        args.local_timesteps,
-        train_dataset.local_nodes,
+        (3,3), # TODO
+        2, # TODO
         len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
-        args.global_timesteps,
-        train_dataset.global_nodes,
+        (3,3), # TODO
+        2, # TODO
         args.decoder_hidden_channels,
         args.include_global,
     )
@@ -406,7 +396,7 @@ if __name__ == "__main__":
         action="store",
         dest="hidden_channels",
         default="64,64",
-        help="Hidden channels for layer 1 and layer 2 of GCN",
+        help="Hidden channels ",
     )
     parser.add_argument(
         "--decoder-hidden-channels",
@@ -445,15 +435,6 @@ if __name__ == "__main__":
         help="Local radius.",
     )
     parser.add_argument(
-        "--local-k",
-        metavar="KEY",
-        type=int,
-        action="store",
-        dest="local_k",
-        default=9,
-        help="Local k for how many nearest neighbors in spatial graph.",
-    )
-    parser.add_argument(
         "--target-week",
         metavar="KEY",
         type=int,
@@ -479,15 +460,6 @@ if __name__ == "__main__":
         dest="global_timesteps",
         default=24,
         help="Time steps in the past for the global part",
-    )
-    parser.add_argument(
-        "--global-k",
-        metavar="KEY",
-        type=int,
-        action="store",
-        dest="global_k",
-        default=9,
-        help="Global k for how many nearest neighbors in spatial graph.",
     )
     parser.add_argument(
         "--learning-rate",
@@ -579,11 +551,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-debug", dest="debug", action="store_false")
     args = parser.parse_args()
 
-    args.hidden_channels = args.hidden_channels.split(",")
-    if len(args.hidden_channels) != 2:
-        raise ValueError("Expected hidden channels to be a list of two elements")
-    args.hidden_channels = (int(args.hidden_channels[0]), int(args.hidden_channels[1]))
-
+    args.hidden_channels = [int(x) for x in args.hidden_channels.split(",")]
     args.decoder_hidden_channels = [
         int(x) for x in args.decoder_hidden_channels.split(",")
     ]
