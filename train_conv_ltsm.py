@@ -2,8 +2,6 @@
 import logging
 import os
 import argparse
-import numpy as np
-import random
 from tqdm import tqdm
 
 import resource 
@@ -13,11 +11,11 @@ import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
 from torch.optim import lr_scheduler
 from models import (
-    LocalGlobalModel,
+    ConvLstmLocalGlobalModel,
 )
 from utils import (
-    LocalGlobalDataset,
-    LocalGlobalTransform,
+    ConvLstmDataset,
+    ConvLstmTransform,
     load_checkpoint, 
     save_checkpoint,
     set_seed,
@@ -50,8 +48,6 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
         "Loss": [],
     }
 
-    # pos_weight = torch.FloatTensor([1.0]).to(device)
-    # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     criterion = torch.nn.BCEWithLogitsLoss()
 
     train_metrics = [
@@ -218,7 +214,7 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
 
 
 def build_model_name(args):
-    model_type = "local-global" if args.include_global else "local"
+    model_type = "conv-lstm-local-global" if args.include_global else "conv-lstm-local"
     target = "target-{}".format(args.target_week)
     local_radius = "radius-{}".format(args.local_radius)
 
@@ -262,16 +258,14 @@ def main(args):
 
     set_seed(42)
 
-    train_dataset = LocalGlobalDataset(
+    train_dataset = ConvLstmDataset(
         root_dir=args.train_path,
         target_week=args.target_week,
         local_radius=args.local_radius,
-        local_k=args.local_k,
-        global_k=args.global_k,
         include_global=args.include_global,
         include_local_oci_variables=args.include_local_oci_variables,
         include_global_oci_variables=args.include_global_oci_variables,
-        transform=LocalGlobalTransform(
+        transform=ConvLstmTransform(
             args.train_path,
             args.include_global,
             args.append_pos_as_features,
@@ -284,16 +278,14 @@ def main(args):
         logger.info("Will sample {} samples".format(num_samples))
     train_balanced_sampler = train_dataset.balanced_sampler(num_samples=num_samples)
 
-    val_dataset = LocalGlobalDataset(
+    val_dataset = ConvLstmDataset(
         root_dir=args.val_path,
         target_week=args.target_week,
         local_radius=args.local_radius,
-        local_k=args.local_k,
-        global_k=args.global_k,
         include_global=args.include_global,
         include_local_oci_variables=args.include_local_oci_variables,
         include_global_oci_variables=args.include_global_oci_variables,
-        transform=LocalGlobalTransform(
+        transform=ConvLstmTransform(
             args.val_path,
             args.include_global,
             args.append_pos_as_features,
@@ -330,7 +322,7 @@ def main(args):
             model_state_dict, optimizer_state_dict, scheduler_state_dict, cur_epoch, best_so_far = checkpoint
             cur_epoch += 1
 
-    model = LocalGlobalModel(
+    model = ConvLstmLocalGlobalModel(
         len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
         args.hidden_channels,
         args.local_timesteps,
