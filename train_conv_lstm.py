@@ -505,7 +505,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-include-global", dest="include_global", action="store_false"
     )
-    parser.set_defaults(include_global=True)
+    parser.set_defaults(include_global=False)
     parser.add_argument(
         "--append-pos-as-features", dest="append_pos_as_features", action="store_true"
     )
