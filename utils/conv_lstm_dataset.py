@@ -14,24 +14,32 @@ class ConvLstmDataset(Dataset):
     def __init__(
         self,
         root_dir,
-        target_week: int,        
+        target_week: int,
         local_radius,
         include_global=True,
         include_local_oci_variables=True,
         include_global_oci_variables=True,
         transform=None,
+        return_metadata_per_sample=False,
     ):
         self.root_dir = root_dir
         self.transform = transform
+        self._return_metadata_per_sample = return_metadata_per_sample
 
         self._metadata = torch.load(os.path.join(self.root_dir, "metadata.pt"))
         logger.info("Metadata={}".format(self._metadata))
 
         self._timeseries_weeks = self._metadata["timeseries_weeks"]
-        logger.info("Dataset supports timeseries up to {} weeks".format(self._timeseries_weeks))
+        logger.info(
+            "Dataset supports timeseries up to {} weeks".format(self._timeseries_weeks)
+        )
         self._target_count = self._metadata["target_count"]
-        logger.info("Dataset supports target up to {} weeks in the future".format(self._target_count))
-        if target_week < 1 or target_week > self._target_count: 
+        logger.info(
+            "Dataset supports target up to {} weeks in the future".format(
+                self._target_count
+            )
+        )
+        if target_week < 1 or target_week > self._target_count:
             raise ValueError("Target week provided not supported by dataset")
         self._target_var = self._metadata["target_var"]
         logger.info("Dataset target var={}".format(self._target_var))
@@ -40,7 +48,9 @@ class ConvLstmDataset(Dataset):
         logger.info("Found input vars={}".format(self._input_vars))
         if include_local_oci_variables:
             self._local_oci_input_vars = self._metadata["oci_input_vars"]
-            logger.info("Found local oci input vars={}".format(self._local_oci_input_vars))
+            logger.info(
+                "Found local oci input vars={}".format(self._local_oci_input_vars)
+            )
         else:
             self._local_oci_input_vars = []
 
@@ -57,19 +67,12 @@ class ConvLstmDataset(Dataset):
             os.path.join(self.root_dir, "le_threshold_samples.pt")
         )
         self._le_threshold_samples_count = len(le_threshold_samples)
-        logger.info(
-            "Samples (<=threshold)={}".format(
-                self._le_threshold_samples_count
-            )
-        )
+        logger.info("Samples (<=threshold)={}".format(self._le_threshold_samples_count))
 
         self._samples = gt_threshold_samples + le_threshold_samples
 
         self._indices = list(
-            range(
-                self._gt_threshold_samples_count
-                + self._le_threshold_samples_count
-            )
+            range(self._gt_threshold_samples_count + self._le_threshold_samples_count)
         )
 
         self._max_radius = self._metadata["max_radius"]
@@ -117,7 +120,9 @@ class ConvLstmDataset(Dataset):
 
             if include_global_oci_variables:
                 self._global_oci_input_vars = self._metadata["oci_input_vars"]
-                logger.info("Found global oci input vars={}".format(self._global_oci_input_vars))
+                logger.info(
+                    "Found global oci input vars={}".format(self._global_oci_input_vars)
+                )
             else:
                 self._global_oci_input_vars = []
 
@@ -168,10 +173,7 @@ class ConvLstmDataset(Dataset):
 
     @property
     def len(self):
-        return (
-            self._gt_threshold_samples_count
-            + self._le_threshold_samples_count
-        )
+        return self._gt_threshold_samples_count + self._le_threshold_samples_count
 
     @property
     def local_features(self):
@@ -183,16 +185,6 @@ class ConvLstmDataset(Dataset):
             return tuple(self._input_vars + self._global_oci_input_vars)
         return []
 
-    @property
-    def local_nodes(self):
-        return self._latlon_shape[0] * self._latlon_shape[1]
-
-    @property
-    def global_nodes(self):
-        if self._include_global:
-            return self._global_latlon_shape[0] * self._global_latlon_shape[1]
-        return 0
-
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
         logger.debug(
@@ -202,9 +194,11 @@ class ConvLstmDataset(Dataset):
         )
 
         # Compute ground truth - target
-        y = self._ground_truth_ds[self._target_var].sel(
-            latitude=lat, longitude=lon, time=time
-        ).fillna(0)
+        y = (
+            self._ground_truth_ds[self._target_var]
+            .sel(latitude=lat, longitude=lon, time=time)
+            .fillna(0)
+        )
         logger.debug("y={}".format(y.values))
 
         # compute local data
@@ -222,7 +216,6 @@ class ConvLstmDataset(Dataset):
             .sel(latitude=lat_slice, longitude=lon_slice)
             .isel(time=time_slice)
         )
-        local_ds = local_ds.transpose("latitude", "longitude", "time")
         local_data = xr.concat(
             [
                 local_ds[var_name]
@@ -230,14 +223,15 @@ class ConvLstmDataset(Dataset):
             ],
             dim="values",
         )
-        local_data = local_data.stack(vertex=("latitude", "longitude"))
-        local_data = local_data.transpose("vertex", "values", "time")
+        local_data = local_data.transpose("time", "values", "latitude", "longitude")
         logger.debug("local_data={}".format(local_data))
 
-        local_pos = np.array(
-            list(map(np.array, local_data["vertex"].values)), dtype=np.float32
-        )
-        logger.debug("local_pos={}".format(local_pos))
+        # TODO
+        local_pos = None
+        # local_pos = np.array(
+        #     list(map(np.array, local_data["vertex"].values)), dtype=np.float32
+        # )
+        # logger.debug("local_pos={}".format(local_pos))
 
         # compute area
         area_data = self._area_ds.sel(latitude=lat, longitude=lon).to_array()
@@ -255,48 +249,56 @@ class ConvLstmDataset(Dataset):
                 ],
                 dim="values",
             )
-            global_data = global_data.stack(vertex=("latitude", "longitude"))
-            global_data = global_data.transpose("vertex", "values", "time")
+            global_data = global_data.transpose("time", "values", "latitude", "longitude")
 
             global_x = global_data.values
             global_pos = self._global_pos
-            global_latlon_shape = self._global_latlon_shape
 
-        return Data(
-            x=local_data.values,
-            pos=local_pos,
-            latlon_shape=self._latlon_shape,
-            center_lat=lat,
-            center_lon=lon,
-            center_time=time,
-            center_vertex_idx=local_data.values.shape[0] // 2,
-            area=area_data.values[0],
-            y=y.values,
-            global_x=global_x if self._include_global else None,
-            global_pos=global_pos if self._include_global else None,
-            global_latlon_shape=global_latlon_shape if self._include_global else None,
-        )
+        data = {
+            "x": local_data.values,
+            # "pos":local_pos,
+            "area": area_data.values[0],
+            "y": y.values,
+        }
 
+        if self._return_metadata_per_sample: 
+            data["center_lat"] = lat
+            data["center_lon"] = lon
+            data["center_time"] = time
 
-    def balanced_sampler(self, num_samples=None, targets=[0.5, 0.5]): 
+        if self._include_global:
+            data["global_x"] = global_x
+            data["global_pos"] = global_pos
+
+        return data
+
+    def balanced_sampler(self, num_samples=None, targets=[0.5, 0.5]):
         logger.info("Creating weighted random sampler")
         gt_threshold_target = targets[0]
         le_threshold_target = targets[1]
-        logger.info("Target proportions (>,<=) = {}, {}".format(gt_threshold_target, le_threshold_target))
+        logger.info(
+            "Target proportions (>,<=) = {}, {}".format(
+                gt_threshold_target, le_threshold_target
+            )
+        )
 
         gt_threshold_weight = gt_threshold_target / self._gt_threshold_samples_count
         le_threshold_weight = le_threshold_target / self._le_threshold_samples_count
-        
+
         gt = np.full(self._gt_threshold_samples_count, gt_threshold_weight)
         le = np.full(self._le_threshold_samples_count, le_threshold_weight)
         samples_weights = np.concatenate((gt, le))
-        samples_weights = torch.as_tensor(samples_weights, dtype=torch.double, device=device)
+        samples_weights = torch.as_tensor(
+            samples_weights, dtype=torch.double, device=device
+        )
         logger.debug("samples_weights = {}".format(samples_weights))
 
-        if num_samples is None: 
-            num_samples=len(samples_weights)
+        if num_samples is None:
+            num_samples = len(samples_weights)
 
-        return WeightedRandomSampler(weights=samples_weights, num_samples=num_samples, replacement=True)
+        return WeightedRandomSampler(
+            weights=samples_weights, num_samples=num_samples, replacement=True
+        )
 
 
 class ConvLstmTransform:
@@ -328,91 +330,96 @@ class ConvLstmTransform:
         self._append_position_as_feature = append_position_as_feature
 
     def __call__(self, data):
-        # local graph features
-        features_count = data.x.shape[1]
+        # local features
+        x = data["x"]
+        features_count = x.shape[1]
         local_mean_std = self._local_mean_std_per_feature[:features_count, :]
         local_mean_std = np.transpose(local_mean_std)
         local_mu = local_mean_std[0]
-        local_mu = np.repeat(local_mu, data.x.shape[2])
-        local_mu = np.reshape(local_mu, (features_count, -1))
+        local_mu = np.repeat(local_mu, x.shape[2] * x.shape[3])
+        local_mu = np.reshape(local_mu, (features_count, x.shape[2], x.shape[3]))
         local_std = local_mean_std[1]
-        local_std = np.repeat(local_std, data.x.shape[2])
-        local_std = np.reshape(local_std, (features_count, -1))
-        for i in range(0, data.x.shape[0]):
-            data.x[i, :, :] = (data.x[i, :, :] - local_mu) / local_std
-        data.x = np.nan_to_num(data.x, nan=-1.0)
+        local_std = np.repeat(local_std, x.shape[2] * x.shape[3])
+        local_std = np.reshape(local_std, (features_count, x.shape[2], x.shape[3]))
+        for i in range(0, x.shape[0]):
+            x[i, :, :, :] = (x[i, :, :, :] - local_mu) / local_std
+        x = np.nan_to_num(x, nan=-1.0)
 
-        if self._append_position_as_feature:
-            latlon = np.transpose(data.pos)
-            lat = latlon[0]
-            lon = latlon[1]
-            cos_lat = np.reshape(
-                np.repeat(np.cos(lat * np.pi / 180), data.x.shape[2]),
-                (-1, data.x.shape[2]),
-            )
-            sin_lat = np.reshape(
-                np.repeat(np.sin(lat * np.pi / 180), data.x.shape[2]),
-                (-1, data.x.shape[2]),
-            )
-            cos_lon = np.reshape(
-                np.repeat(np.cos(lon * np.pi / 180), data.x.shape[2]),
-                (-1, data.x.shape[2]),
-            )
-            sin_lon = np.reshape(
-                np.repeat(np.sin(lon * np.pi / 180), data.x.shape[2]),
-                (-1, data.x.shape[2]),
-            )
-            pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
-            data.x = np.concatenate((data.x, pos), axis=1)
+        # if self._append_position_as_feature:
+        #     latlon = np.transpose(data.pos)
+        #     lat = latlon[0]
+        #     lon = latlon[1]
+        #     cos_lat = np.reshape(
+        #         np.repeat(np.cos(lat * np.pi / 180), data.x.shape[2]),
+        #         (-1, data.x.shape[2]),
+        #     )
+        #     sin_lat = np.reshape(
+        #         np.repeat(np.sin(lat * np.pi / 180), data.x.shape[2]),
+        #         (-1, data.x.shape[2]),
+        #     )
+        #     cos_lon = np.reshape(
+        #         np.repeat(np.cos(lon * np.pi / 180), data.x.shape[2]),
+        #         (-1, data.x.shape[2]),
+        #     )
+        #     sin_lon = np.reshape(
+        #         np.repeat(np.sin(lon * np.pi / 180), data.x.shape[2]),
+        #         (-1, data.x.shape[2]),
+        #     )
+        #     pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
+        #     data.x = np.concatenate((data.x, pos), axis=1)
 
-        data.x = torch.from_numpy(data.x)
+        data["x"] = torch.from_numpy(x)
 
         if self._include_global:
-            # global graph features
-            global_features_count = data.global_x.shape[1]
+            # global features
+            global_x = data["global_x"]
+            global_features_count = global_x.shape[1]
             global_mean_std = self._global_mean_std_per_feature[
                 :global_features_count, :
             ]
             global_mean_std = np.transpose(global_mean_std)
             global_mu = global_mean_std[0]
-            global_mu = np.repeat(global_mu, data.global_x.shape[2])
-            global_mu = np.reshape(global_mu, (global_features_count, -1))
+            global_mu = np.repeat(global_mu, global_x.shape[2] * global_x.shape[3])
+            global_mu = np.reshape(global_mu, (global_features_count, global_x.shape[2], global_x.shape[3]))
             global_std = global_mean_std[1]
-            global_std = np.repeat(global_std, data.global_x.shape[2])
-            global_std = np.reshape(global_std, (global_features_count, -1))
-            for i in range(0, data.global_x.shape[0]):
-                data.global_x[i, :, :] = (
-                    data.global_x[i, :, :] - global_mu
+            global_std = np.repeat(global_std, global_x.shape[2] * global_x.shape[3])
+            global_std = np.reshape(global_std, (global_features_count, global_x.shape[2], global_x.shape[3]))
+            for i in range(0, global_x.shape[0]):
+                global_x[i, :, :, :] = (
+                    global_x[i, :, :, :] - global_mu
                 ) / global_std
-            data.global_x = np.nan_to_num(data.global_x, nan=-1.0)
+            global_x = np.nan_to_num(global_x, nan=-1.0)
 
-            if self._append_position_as_feature:
-                latlon = np.transpose(data.global_pos)
-                lat = latlon[0]
-                lon = latlon[1]
-                cos_lat = np.reshape(
-                    np.repeat(np.cos(lat * np.pi / 180), data.global_x.shape[2]),
-                    (-1, data.global_x.shape[2]),
-                )
-                sin_lat = np.reshape(
-                    np.repeat(np.sin(lat * np.pi / 180), data.global_x.shape[2]),
-                    (-1, data.global_x.shape[2]),
-                )
-                cos_lon = np.reshape(
-                    np.repeat(np.cos(lon * np.pi / 180), data.global_x.shape[2]),
-                    (-1, data.global_x.shape[2]),
-                )
-                sin_lon = np.reshape(
-                    np.repeat(np.sin(lon * np.pi / 180), data.global_x.shape[2]),
-                    (-1, data.global_x.shape[2]),
-                )
-                pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
-                data.global_x = np.concatenate((data.global_x, pos), axis=1)
+            # if self._append_position_as_feature:
+            #     latlon = np.transpose(data.global_pos)
+            #     lat = latlon[0]
+            #     lon = latlon[1]
+            #     cos_lat = np.reshape(
+            #         np.repeat(np.cos(lat * np.pi / 180), data.global_x.shape[2]),
+            #         (-1, data.global_x.shape[2]),
+            #     )
+            #     sin_lat = np.reshape(
+            #         np.repeat(np.sin(lat * np.pi / 180), data.global_x.shape[2]),
+            #         (-1, data.global_x.shape[2]),
+            #     )
+            #     cos_lon = np.reshape(
+            #         np.repeat(np.cos(lon * np.pi / 180), data.global_x.shape[2]),
+            #         (-1, data.global_x.shape[2]),
+            #     )
+            #     sin_lon = np.reshape(
+            #         np.repeat(np.sin(lon * np.pi / 180), data.global_x.shape[2]),
+            #         (-1, data.global_x.shape[2]),
+            #     )
+            #     pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
+            #     data.global_x = np.concatenate((data.global_x, pos), axis=1)
 
-            data.global_x = torch.from_numpy(data.global_x)
+            data["global_x"] = torch.from_numpy(global_x)
 
         # label
-        y = torch.tensor(data.y)
-        data.y = torch.unsqueeze(y, dim=0)
+        y = torch.tensor(data["y"])
+        #data["y"] = torch.unsqueeze(y, dim=0)
+        data["y"] = y
+
+        # logger.info("data={}".format(data))
 
         return data

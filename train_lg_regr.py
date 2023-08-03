@@ -335,11 +335,11 @@ def main(args):
         model_state_dict = torch.load(args.pretrained_model_path, map_location=device)
 
     model = LocalGlobalModel(
-        len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
+        len(train_dataset.local_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
         args.local_timesteps,
         train_dataset.local_nodes,
-        len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
+        len(train_dataset.global_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
         args.global_timesteps,
         train_dataset.global_nodes,

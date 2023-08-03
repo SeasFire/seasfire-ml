@@ -7,7 +7,6 @@ from tqdm import tqdm
 import resource 
 
 import torch
-import torch_geometric
 from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
 from torch.optim import lr_scheduler
 from models import (
@@ -87,11 +86,11 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
 
         for i, data in enumerate(tqdm(train_loader)):
 
-            data = data.to(device)
-
-            local_x = data.x
+            local_x = data["x"].to(device)
             global_x = data.get("global_x")
-            y = data.y
+            if global_x is not None: 
+                global_x = global_x.to(device)
+            y = data["y"].to(device)
 
             preds = model(
                 local_x,
@@ -133,24 +132,16 @@ def train(model, optimizer, scheduler, train_loader, epochs, val_loader, model_n
             model.eval()
 
             for _, data in enumerate(tqdm(val_loader)):
-                data = data.to(device)
-                local_x = data.x
+
+                local_x = data["x"].to(device)
                 global_x = data.get("global_x")
-                local_edge_index = data.edge_index
-                global_edge_index = data.get("global_edge_index")
-                y = data.y
-                batch = data.batch
+                if global_x is not None: 
+                    global_x = global_x.to(device)
+                y = data["y"].to(device)
 
                 preds = model(
                     local_x,
                     global_x,
-                    local_edge_index,
-                    global_edge_index,
-                    None,
-                    None,
-                    None,
-                    None,
-                    batch,
                 )
                 y = y.gt(0.0)
 
@@ -285,7 +276,7 @@ def main(args):
     logger.info("Train dataset length: {}".format(len(train_dataset)))
     logger.info("Using batch size={}".format(args.batch_size))
 
-    train_loader = torch_geometric.loader.DataLoader(
+    train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         sampler=train_balanced_sampler,
@@ -293,7 +284,7 @@ def main(args):
         pin_memory=True,
         persistent_workers=True,
     )
-    val_loader = torch_geometric.loader.DataLoader(
+    val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
@@ -313,14 +304,14 @@ def main(args):
             cur_epoch += 1
 
     model = ConvLstmLocalGlobalModel(
-        len(train_dataset.local_features) + 4 if args.append_pos_as_features else 0,
+        len(train_dataset.local_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
-        (3,3), # TODO
-        2, # TODO
-        len(train_dataset.global_features) + 4 if args.append_pos_as_features else 0,
+        [(3,3),(3,3)], # TODO
+        len(args.hidden_channels),
+        len(train_dataset.global_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
-        (3,3), # TODO
-        2, # TODO
+        [(3,3),(3,3)], # TODO
+        len(args.hidden_channels),
         args.decoder_hidden_channels,
         args.include_global,
     )
@@ -404,7 +395,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="decoder_hidden_channels",
-        default="256,64",
+        default="64,64",
         help="Hidden channels for decoder layers",
     )
     parser.add_argument(

@@ -141,11 +141,11 @@ def main(args):
     logger.info("Using batch size={}".format(args.batch_size))
 
     model = LocalGlobalModel(
-        len(dataset.local_features) + 4 if args.append_pos_as_features else 0,
+        len(dataset.local_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
         args.local_timesteps,
         dataset.local_nodes,
-        len(dataset.global_features) + 4 if args.append_pos_as_features else 0,
+        len(dataset.global_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
         args.global_timesteps,
         dataset.global_nodes,
