@@ -399,7 +399,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="decoder_hidden_channels",
-        default="128,64",
+        default="256,64",
         help="Hidden channels for decoder layers",
     )
     parser.add_argument(
