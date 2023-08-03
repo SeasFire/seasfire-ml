@@ -158,18 +158,14 @@ class ConvLstmDataset(Dataset):
                 )
 
             logger.info("Precomputing global positions")
-            self._global_pos = np.array(
-                list(
-                    map(
-                        np.array,
-                        self._global_ds.stack(vertex=("latitude", "longitude"))[
-                            "vertex"
-                        ].values,
-                    )
-                ),
-                dtype=np.float32,
+            self._global_lat_pos = np.array(
+                list(map(np.array, self._global_ds["latitude"].values)), dtype=np.float32
             )
-            logger.debug("global_pos={}".format(self._global_pos))
+            logger.debug("global_lat_pos={}".format(self._global_lat_pos))
+            self._global_lon_pos = np.array(
+                list(map(np.array, self._global_ds["longitude"].values)), dtype=np.float32
+            )                    
+            logger.debug("global_lon_pos={}".format(self._global_lon_pos))
 
     @property
     def len(self):
@@ -226,12 +222,12 @@ class ConvLstmDataset(Dataset):
         local_data = local_data.transpose("time", "values", "latitude", "longitude")
         logger.debug("local_data={}".format(local_data))
 
-        # TODO
-        local_pos = None
-        # local_pos = np.array(
-        #     list(map(np.array, local_data["vertex"].values)), dtype=np.float32
-        # )
-        # logger.debug("local_pos={}".format(local_pos))
+        local_lat_pos = np.array(
+            list(map(np.array, local_data["latitude"].values)), dtype=np.float32
+        )
+        local_lon_pos = np.array(
+            list(map(np.array, local_data["longitude"].values)), dtype=np.float32
+        )        
 
         # compute area
         area_data = self._area_ds.sel(latitude=lat, longitude=lon).to_array()
@@ -252,11 +248,13 @@ class ConvLstmDataset(Dataset):
             global_data = global_data.transpose("time", "values", "latitude", "longitude")
 
             global_x = global_data.values
-            global_pos = self._global_pos
+            global_lat_pos = self._global_lat_pos
+            global_lon_pos = self._global_lon_pos
 
         data = {
             "x": local_data.values,
-            # "pos":local_pos,
+            "lat_pos":local_lat_pos,
+            "lon_pos":local_lon_pos,
             "area": area_data.values[0],
             "y": y.values,
         }
@@ -268,7 +266,8 @@ class ConvLstmDataset(Dataset):
 
         if self._include_global:
             data["global_x"] = global_x
-            data["global_pos"] = global_pos
+            data["global_lat_pos"] = global_lat_pos
+            data["global_lon_pos"] = global_lon_pos
 
         return data
 
@@ -345,28 +344,26 @@ class ConvLstmTransform:
             x[i, :, :, :] = (x[i, :, :, :] - local_mu) / local_std
         x = np.nan_to_num(x, nan=-1.0)
 
-        # if self._append_position_as_feature:
-        #     latlon = np.transpose(data.pos)
-        #     lat = latlon[0]
-        #     lon = latlon[1]
-        #     cos_lat = np.reshape(
-        #         np.repeat(np.cos(lat * np.pi / 180), data.x.shape[2]),
-        #         (-1, data.x.shape[2]),
-        #     )
-        #     sin_lat = np.reshape(
-        #         np.repeat(np.sin(lat * np.pi / 180), data.x.shape[2]),
-        #         (-1, data.x.shape[2]),
-        #     )
-        #     cos_lon = np.reshape(
-        #         np.repeat(np.cos(lon * np.pi / 180), data.x.shape[2]),
-        #         (-1, data.x.shape[2]),
-        #     )
-        #     sin_lon = np.reshape(
-        #         np.repeat(np.sin(lon * np.pi / 180), data.x.shape[2]),
-        #         (-1, data.x.shape[2]),
-        #     )
-        #     pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
-        #     data.x = np.concatenate((data.x, pos), axis=1)
+        if self._append_position_as_feature:
+            lat = data["lat_pos"]
+            lon = data["lon_pos"]
+            cos_lat = np.reshape(
+                np.repeat(np.cos(lat * np.pi / 180), x.shape[3]), (-1, x.shape[3]),
+            )
+            sin_lat = np.reshape(
+                np.repeat(np.sin(lat * np.pi / 180), x.shape[3]), (-1, x.shape[3]),
+            )
+            cos_lon = np.transpose(np.reshape(
+                np.repeat(np.cos(lon * np.pi / 180), x.shape[2]),
+                (-1, x.shape[2]),
+            ))
+            sin_lon = np.transpose(np.reshape(
+                np.repeat(np.sin(lon * np.pi / 180), x.shape[2]),
+                (-1, x.shape[2]),
+            ))
+            pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=0)
+            pos = np.repeat(pos[np.newaxis, ...], x.shape[0], axis=0)
+            x = np.concatenate((x, pos), axis=1)
 
         data["x"] = torch.from_numpy(x)
 
@@ -390,28 +387,26 @@ class ConvLstmTransform:
                 ) / global_std
             global_x = np.nan_to_num(global_x, nan=-1.0)
 
-            # if self._append_position_as_feature:
-            #     latlon = np.transpose(data.global_pos)
-            #     lat = latlon[0]
-            #     lon = latlon[1]
-            #     cos_lat = np.reshape(
-            #         np.repeat(np.cos(lat * np.pi / 180), data.global_x.shape[2]),
-            #         (-1, data.global_x.shape[2]),
-            #     )
-            #     sin_lat = np.reshape(
-            #         np.repeat(np.sin(lat * np.pi / 180), data.global_x.shape[2]),
-            #         (-1, data.global_x.shape[2]),
-            #     )
-            #     cos_lon = np.reshape(
-            #         np.repeat(np.cos(lon * np.pi / 180), data.global_x.shape[2]),
-            #         (-1, data.global_x.shape[2]),
-            #     )
-            #     sin_lon = np.reshape(
-            #         np.repeat(np.sin(lon * np.pi / 180), data.global_x.shape[2]),
-            #         (-1, data.global_x.shape[2]),
-            #     )
-            #     pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=1)
-            #     data.global_x = np.concatenate((data.global_x, pos), axis=1)
+            if self._append_position_as_feature:
+                lat = data["global_lat_pos"]
+                lon = data["global_lon_pos"]
+                cos_lat = np.reshape(
+                    np.repeat(np.cos(lat * np.pi / 180), global_x.shape[3]), (-1, global_x.shape[3]),
+                )                
+                sin_lat = np.reshape(
+                    np.repeat(np.sin(lat * np.pi / 180), global_x.shape[3]), (-1, global_x.shape[3]),
+                )
+                cos_lon = np.transpose(np.reshape(
+                    np.repeat(np.cos(lon * np.pi / 180), global_x.shape[2]),
+                    (-1, global_x.shape[2]),
+                ))
+                sin_lon = np.transpose(np.reshape(
+                    np.repeat(np.sin(lon * np.pi / 180), global_x.shape[2]),
+                    (-1, global_x.shape[2]),
+                ))
+                pos = np.stack((cos_lat, sin_lat, cos_lon, sin_lon), axis=0)
+                pos = np.repeat(pos[np.newaxis, ...], global_x.shape[0], axis=0)
+                global_x = np.concatenate((global_x, pos), axis=1)
 
             data["global_x"] = torch.from_numpy(global_x)
 

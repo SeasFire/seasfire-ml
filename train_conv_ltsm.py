@@ -306,11 +306,11 @@ def main(args):
     model = ConvLstmLocalGlobalModel(
         len(train_dataset.local_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
-        [(3,3),(3,3)], # TODO
+        [(3,3),(3,3)],
         len(args.hidden_channels),
         len(train_dataset.global_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
-        [(3,3),(3,3)], # TODO
+        [(3,3),(3,3)],
         len(args.hidden_channels),
         args.decoder_hidden_channels,
         args.include_global,
@@ -395,7 +395,7 @@ if __name__ == "__main__":
         type=str,
         action="store",
         dest="decoder_hidden_channels",
-        default="64,64",
+        default="128,64",
         help="Hidden channels for decoder layers",
     )
     parser.add_argument(
@@ -440,7 +440,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_timesteps",
-        default=24,
+        default=36,
         help="Time steps in the past for the local part",
     )
     parser.add_argument(

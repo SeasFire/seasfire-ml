@@ -128,10 +128,10 @@ class ConvLSTM(nn.Module):
 
         Parameters
         ----------
-        input_tensor: todo
+        input_tensor: 
             5-D Tensor either of shape (t, b, c, h, w) or (b, t, c, h, w)
-        hidden_state: todo
-            None. todo implement stateful
+        hidden_state: 
+            None.
 
         Returns
         -------

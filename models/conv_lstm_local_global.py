@@ -71,13 +71,14 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
             )            
             output_channels += global_hidden_channels[-1]
 
-        # if decoder_hidden_channels is None:
-        #     self.decoder = torch.nn.Linear(output_channels, 1)
-        # else:
-        #    self.decoder = MLP([output_channels] + decoder_hidden_channels + [1])\
-        # TODO
-        #self.decoder = MLP([5184+576] + decoder_hidden_channels + [1])
-        self.decoder = MLP([576] + decoder_hidden_channels + [1])
+        # TODO: fix me
+        #output_channels = 576 #(5184+576)
+        output_channels = 5184+576
+
+        if decoder_hidden_channels is None:
+            self.decoder = torch.nn.Linear(output_channels, 1)
+        else:
+            self.decoder = MLP([output_channels] + decoder_hidden_channels + [1])
 
     def forward(
         self,
