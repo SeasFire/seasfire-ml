@@ -304,10 +304,14 @@ def main(args):
             cur_epoch += 1
 
     model = ConvLstmLocalGlobalModel(
+        train_dataset.latlon_shape[0],
+        train_dataset.latlon_shape[1],
         len(train_dataset.local_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
         [(3,3),(3,3)],
         len(args.hidden_channels),
+        train_dataset.global_latlon_shape[0],
+        train_dataset.global_latlon_shape[1],
         len(train_dataset.global_features) + (4 if args.append_pos_as_features else 0),
         args.hidden_channels,
         [(3,3),(3,3)],
@@ -422,7 +426,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="local_radius",
-        default=2,
+        default=3,
         help="Local radius.",
     )
     parser.add_argument(

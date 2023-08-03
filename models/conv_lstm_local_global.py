@@ -13,10 +13,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class ConvLstmLocalGlobalModel(torch.nn.Module):
     def __init__(
         self,
+        local_height,
+        local_width,
         local_features,
         local_hidden_channels,
         local_kernel_size,
         local_layers,
+        global_height,        
+        global_width,
         global_features,
         global_hidden_channels,
         global_kernel_size,
@@ -41,14 +45,7 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
             False,
             dilation=1,
         )
-        self.local_conv1 = torch.nn.Conv2d(
-            local_hidden_channels[-1],
-            local_hidden_channels[-1],
-            kernel_size=local_kernel_size[-1],
-            stride=(1, 1),
-            padding=(1, 1),
-        )
-        output_channels = local_hidden_channels[-1]
+        flattened_channels = local_hidden_channels[-1] * local_height * local_width
 
         self._include_global = include_global
         if include_global:
@@ -62,23 +59,12 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
                 False,
                 dilation=1,
             )
-            self.global_conv1 = torch.nn.Conv2d(
-                global_hidden_channels[-1],
-                global_hidden_channels[-1],
-                kernel_size=global_kernel_size[-1],
-                stride=(1, 1),
-                padding=(1, 1),
-            )            
-            output_channels += global_hidden_channels[-1]
-
-        # TODO: fix me
-        #output_channels = 576 #(5184+576)
-        output_channels = 5184+576
+            flattened_channels += global_hidden_channels[-1] * global_height * global_width
 
         if decoder_hidden_channels is None:
-            self.decoder = torch.nn.Linear(output_channels, 1)
+            self.decoder = torch.nn.Linear(flattened_channels, 1)
         else:
-            self.decoder = MLP([output_channels] + decoder_hidden_channels + [1])
+            self.decoder = MLP([flattened_channels] + decoder_hidden_channels + [1])
 
     def forward(
         self,
@@ -90,7 +76,6 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
             local_x,
         )
         local_H = local_H[0][0]
-        local_H = F.max_pool2d(F.relu(self.local_conv1(local_H)), 2)
         local_H = local_H.view(batch_size, -1)
 
         if self._include_global:
@@ -98,7 +83,6 @@ class ConvLstmLocalGlobalModel(torch.nn.Module):
                 global_x,
             )
             global_H = global_H[0][0]
-            global_H = F.max_pool2d(F.relu(self.global_conv1(global_H)), 2)
             global_H = global_H.view(batch_size, -1)
 
         # logger.info("local_H={}".format(local_H.shape))

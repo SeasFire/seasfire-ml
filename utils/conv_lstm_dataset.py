@@ -133,8 +133,8 @@ class ConvLstmDataset(Dataset):
                 )
             )
 
-            logger.info("Precomputing global graph")
             self._global_latlon_shape = self._metadata["global_latlon_shape"]
+            logger.info("Global lat-lon shape={}".format(self._global_latlon_shape))
 
             logger.info("Loading global dataset")
             with xr.open_dataset(os.path.join(self.root_dir, "global.h5")) as ds:
@@ -180,6 +180,17 @@ class ConvLstmDataset(Dataset):
         if self._include_global:
             return tuple(self._input_vars + self._global_oci_input_vars)
         return []
+
+    @property
+    def latlon_shape(self):
+        return (self._latlon_shape[0], self._latlon_shape[1])
+
+    @property
+    def global_latlon_shape(self):
+        if self._include_global:
+            return (self._global_latlon_shape[0], self._global_latlon_shape[1])
+        else: 
+            return (0,0)
 
     def get(self, idx: int) -> Data:
         lat, lon, time = self._samples[idx]
@@ -412,9 +423,6 @@ class ConvLstmTransform:
 
         # label
         y = torch.tensor(data["y"])
-        #data["y"] = torch.unsqueeze(y, dim=0)
         data["y"] = y
-
-        # logger.info("data={}".format(data))
 
         return data
