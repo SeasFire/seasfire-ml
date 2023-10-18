@@ -67,6 +67,7 @@ class BaselineModel:
             )
             .fillna(0)
         )
+
         previous = target[time_idx-self._year_in_weeks::-self._year_in_weeks]
 
         if self._method == "mean":
@@ -74,10 +75,9 @@ class BaselineModel:
             logger.debug("mean={}".format(mean.values))
             return torch.as_tensor(mean.values)
         elif self._method == "majority":
-            zero_count = (previous == 0).sum().values
             non_zero_count = (previous != 0).sum().values
-            majority = 1.0 if non_zero_count >= zero_count else 0.0
-            logger.debug("majority={} since {} (non-zeros) >= {} (zeros)".format(majority, non_zero_count, zero_count))
+            majority = non_zero_count / previous.size
+            logger.debug("majority={} since {} (non-zeros) in total {}".format(majority, non_zero_count, previous.size))
             return torch.as_tensor(majority)
         else: 
             raise ValueError("Invalid method")

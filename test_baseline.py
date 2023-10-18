@@ -7,7 +7,7 @@ from tqdm import tqdm
 import os
 import torch
 import torch_geometric
-from torchmetrics import AUROC, Accuracy, AveragePrecision, F1Score, StatScores, Recall
+from sklearn.metrics import average_precision_score
 from utils import (
     LocalGlobalDataset,
     LocalGlobalTransform
@@ -22,37 +22,28 @@ def test(model, loader, model_name):
     logger.info("Starting Test")
 
     with torch.no_grad():
-        metrics = [
-            ("Accuracy", Accuracy(task="binary").to(device)),
-            ("Recall", Recall(task="binary").to(device)),
-            ("F1Score", F1Score(task="binary").to(device)),
-            ("AveragePrecision (AUPRC)", AveragePrecision(task="binary").to(device)),
-            ("AUROC", AUROC(task="binary").to(device)),
-            ("StatScores", StatScores(task="binary").to(device))
-        ]
+        all_y_true = []
+        all_y_score = []
 
         for _, data in enumerate(tqdm(loader)):
             lat = data.center_lat
             lon = data.center_lon
             time = data.center_time
 
-            y = data.y
-            preds = model((lat, lon, time))
+            y_true = data.y
+            y_score = model((lat, lon, time))
 
-            preds = preds.gt(0.0).float()
-            y = y.gt(0.0)
-
-            for _, metric in metrics:
-                metric.update(preds, y)
-
-        result = "{}".format(model_name)
-        for metric_name, metric in metrics:
-            metric_value = metric.compute()
-            logger.info("| Test {}: {}".format(metric_name, metric_value))
-            result += ",{}".format(metric_value)
-            metric.reset()
-
-        logger.info(result)
+            y_true = y_true.gt(0.0).detach().cpu().numpy()
+            y_true = 1*y_true
+            logger.debug("y_true={}".format(y_true))
+            all_y_true.extend(y_true)
+            
+            y_score = y_score.detach().cpu().numpy()
+            logger.debug("y_score={}".format(y_score))
+            all_y_score.extend(y_score)
+ 
+        avg_precision = average_precision_score(all_y_true, all_y_score)
+        logger.info("{} Test AveragePrecision (AUPRC): {}".format(model_name, avg_precision))
 
 
 def main(args):
